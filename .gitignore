@@ -1,0 +1,26 @@
+venv/
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.next/
+dist/
+build/
+*.log
+backend/seed/generated_orders.json
+api_keys_backup.md
+.codegraph/
+
+# Build artifacts / local env
+tsconfig.tsbuildinfo
+.env.local
+*.db
+*.sqlite
+scratch/
+
+
+.vercel
+.env*
+graphify-out/cache/
