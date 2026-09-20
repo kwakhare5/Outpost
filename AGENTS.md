@@ -6,7 +6,7 @@
 - **Name:** Outpost
 - **Goal:** Autonomous quick-commerce inventory decision and replenishment execution platform for multi-node dark store networks (5 Mumbai hubs: Bandra West, Andheri East, Powai Galleria, Lower Parel, Thane West).
 - **Status:** Complete, standalone Next.js + FastAPI + LangGraph operations platform.
-- **Repo:** https://github.com/kwakhare5/Dark-store-operator
+- **Repo:** https://github.com/kwakhare5/Outpost
 
 ---
 

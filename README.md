@@ -29,7 +29,7 @@ The platform is designed around **Level-2 Autonomy**:
 ---
 
 ## 3. Demo Video
-📹 **60–90 Second Video Walkthrough:** [Watch Demo Video (IPL Demand Spike Flow)](https://github.com/kwakhare5/Dark-store-operator#demo-video) *(Coming in release assets)*
+📹 **60–90 Second Video Walkthrough:** [Watch Demo Video (IPL Demand Spike Flow)](https://github.com/kwakhare5/Outpost#demo-video) *(Coming in release assets)*
 
 ### Suggested 60–90s Demo Flow:
 1. **0–10s:** State the tension: An IPL evening rush drains dairy and snacks in Bandra while excess stock sits in Andheri.

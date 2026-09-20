@@ -1,6 +1,6 @@
 # Dark Store Operator - Internship Case Study Specification
 
-**Repository:** <https://github.com/kwakhare5/Dark-store-operator>  
+**Repository:** <https://github.com/kwakhare5/Outpost>  
 **Primary goal:** Turn this repository into a credible quick-commerce engineering case study that earns internship replies and interviews.
 
 ---
@@ -528,7 +528,7 @@ No DM targets are included.
 # PASTE-IN SUMMARY FOR ANTIGRAVITY/CODEX
 
 ```text
-Turn github.com/kwakhare5/Dark-store-operator into an internship case study for quick-commerce engineering roles. It is not a SaaS product. Do not add features, ML, paid APIs, catalog work, dashboard polish, multi-store support, or warehouse-network simulation.
+Turn github.com/kwakhare5/Outpost into an internship case study for quick-commerce engineering roles. It is not a SaaS product. Do not add features, ML, paid APIs, catalog work, dashboard polish, multi-store support, or warehouse-network simulation.
 
 Positioning:
 “Quick-commerce dark stores lose money to stockouts and expired stock. I built a deterministic decision engine that watches a dark store, predicts demand, and proposes orders/transfers, with a human approving every action before it runs. The environment is simulated and stated upfront. The repo explains what would change with real data.”
