@@ -1,4 +1,4 @@
-# Dark Store Operator — Quick-Commerce Inventory Replenishment Decision Engine
+# Outpost — Quick-Commerce Inventory Replenishment Decision Engine
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.2.6-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -17,7 +17,7 @@
 
 ## 2. 30-Second "What It Does" Explanation
 
-Quick-commerce dark stores lose money to stockouts and expired stock. **Dark Store Operator** is a deterministic decision engine that monitors a multi-node dark store network in real time, forecasts localized demand, and proposes inventory transfers and purchase orders—**with a human operator approving every high-consequence action before execution**.
+Quick-commerce dark stores lose money to stockouts and expired stock. **Outpost** is a deterministic decision engine that monitors a multi-node dark store network in real time, forecasts localized demand, and proposes inventory transfers and purchase orders—**with a human operator approving every high-consequence action before execution**.
 
 The platform is designed around **Level-2 Autonomy**:
 - **Proactive Proposal, Never Silent Action:** The engine identifies risks (e.g. stockout in 3.4 hours) and prepares candidates (`TRANSFER` from adjacent hub, `REORDER` from Regional Fulfilment Centre).

@@ -27,7 +27,7 @@ export function AppGlobalHeader({
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-zinc-950 tracking-tight text-base font-sans leading-tight">
-                Dark Store Operator
+                Outpost
               </span>
               <span className="text-[10px] font-mono text-zinc-500 font-medium uppercase tracking-wider">
                 Autonomous Mumbai Fleet Deck

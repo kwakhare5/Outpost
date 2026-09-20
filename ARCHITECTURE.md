@@ -1,4 +1,4 @@
-﻿# ARCHITECTURE.md — Dark Store Operator
+# ARCHITECTURE.md — Outpost
 
 ---
 

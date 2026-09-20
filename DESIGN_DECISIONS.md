@@ -1,6 +1,6 @@
-# Dark Store Operator — Engineering Design Decisions & Architecture Document
+# Outpost — Engineering Design Decisions & Architecture Document
 
-This document records the architectural decisions, trade-offs, and operational boundaries of the **Dark Store Operator** decision engine.
+This document records the architectural decisions, trade-offs, and operational boundaries of the **Outpost** decision engine.
 
 ---
 

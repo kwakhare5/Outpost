@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dark Store Operator — Autonomous Quick-Commerce Inventory Deck",
+  title: "Outpost — Autonomous Quick-Commerce Inventory Deck",
   description:
     "Deterministic decision engine for multi-node dark store inventory balancing and human-in-the-loop replenishment execution.",
   icons: {

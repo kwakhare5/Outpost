@@ -1,4 +1,4 @@
-# Engineering Journal — Dark Store Operator
+# Engineering Journal — Outpost
 
 ## 2026-09-20: Quick-Commerce Case Study Hardening & Deterministic Execution
 

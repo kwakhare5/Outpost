@@ -47,10 +47,10 @@ function defaultScenarioState(): ScenarioState {
 }
 
 // ---------------------------------------------------------------------------
-// Main Dark Store Operator Application
+// Main Outpost Application
 // ---------------------------------------------------------------------------
 
-function DarkStoreOperatorApp() {
+function OutpostApp() {
   const [stores, setStores] = useState<DarkStore[]>(INITIAL_STORES);
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>(
     INITIAL_RECOMMENDATIONS
@@ -602,11 +602,11 @@ export default function Home() {
     <Suspense
       fallback={
         <div className="flex h-screen w-screen items-center justify-center bg-[#FAFAFA] text-xs font-mono text-zinc-400">
-          INITIALIZING DARK STORE OPERATOR COCKPIT...
+          INITIALIZING OUTPOST COCKPIT...
         </div>
       }
     >
-      <DarkStoreOperatorApp />
+      <OutpostApp />
     </Suspense>
   );
 }
