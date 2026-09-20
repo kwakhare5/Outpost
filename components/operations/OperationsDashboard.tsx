@@ -6,7 +6,6 @@ import { RecommendationStream } from "./RecommendationStream";
 import { SkuInventoryTable } from "./SkuInventoryTable";
 import { WhyInspectorPanel } from "./WhyInspectorPanel";
 import { StoreDetailModal } from "./StoreDetailModal";
-import { MetricsComparisonPanel } from "./MetricsComparisonPanel";
 import { AgentRunInspector } from "./AgentRunInspector";
 import { Table2, ArrowRightLeft, MapPin, Terminal, CheckCircle2, AlertTriangle, Layers } from "lucide-react";
 import { toast } from "sonner";
@@ -20,8 +19,6 @@ interface OperationsDashboardProps {
   onApproveRecommendation: (recId: string) => void;
   onRejectRecommendation: (recId: string) => void;
   scenario: ScenarioState;
-  showMetrics: boolean;
-  onDismissMetrics: () => void;
 }
 
 export function OperationsDashboard({
@@ -32,8 +29,6 @@ export function OperationsDashboard({
   onApproveRecommendation,
   onRejectRecommendation,
   scenario,
-  showMetrics,
-  onDismissMetrics,
 }: OperationsDashboardProps) {
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
@@ -316,15 +311,7 @@ export function OperationsDashboard({
         )}
       </div>
 
-      {/* Baseline vs GROCER Metrics Panel */}
-      {showMetrics && scenario.activeScenarioId && (
-        <div className="mt-4">
-          <MetricsComparisonPanel
-            scenario={scenario}
-            onClose={onDismissMetrics}
-          />
-        </div>
-      )}
+
 
       {/* Deep-Dive Store Inventory Modal */}
       {isStoreModalOpen && selectedStore && (

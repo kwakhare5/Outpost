@@ -217,96 +217,24 @@ async def create_transfer(
         action.status = ActionStatus.EXECUTING
         await db.flush()
 
-    # Load source and destination inventory
-    src_result = await db.execute(
-        select(Inventory).where(
-            Inventory.store_id == rec.source_store_id,
-            Inventory.product_id == product_id,
-        )
-    )
-    src_inv = src_result.scalar_one_or_none()
-
-    dest_result = await db.execute(
-        select(Inventory).where(
-            Inventory.store_id == rec.destination_store_id,
-            Inventory.product_id == product_id,
-        )
-    )
-    dest_inv = dest_result.scalar_one_or_none()
-
-    if src_inv is None:
-        return {"success": False, "error": "source_inventory_not_found"}
-
-    if src_inv.quantity < transfer_qty:
-        return {
-            "success": False,
-            "error": f"stale_inventory: source has {src_inv.quantity}, needed {transfer_qty}",
-            "stale": True,
-        }
-
-    # FIFO Batch deduction and validation
-    batch_res = await db.execute(
-        select(Batch)
-        .where(
-            Batch.store_id == rec.source_store_id,
-            Batch.product_id == product_id,
-            Batch.quantity > 0,
-        )
-        .order_by(Batch.expires_at.asc(), Batch.received_at.asc())
-    )
-    all_source_batches = batch_res.scalars().all()
-
-    if all_source_batches:
-        unexpired_batches = [b for b in all_source_batches if b.expires_at > now]
-        available_batch_qty = sum(b.quantity for b in unexpired_batches)
-
-        if not unexpired_batches or available_batch_qty == 0:
-            return {
-                "success": False,
-                "error": "expired_batch: source inventory has expired and cannot be transferred",
-                "stale": True,
-            }
-
-        if available_batch_qty < transfer_qty:
-            return {
-                "success": False,
-                "error": f"insufficient_source_inventory: have {available_batch_qty} non-expired units, needed {transfer_qty}",
-                "stale": True,
-            }
-
-        # Deduct from source batches using FIFO and create matching destination batches
-        rem = transfer_qty
-        for b in unexpired_batches:
-            if rem <= 0:
-                break
-            take = min(b.quantity, rem)
-            b.quantity -= take
-            rem -= take
-
-            # Add destination batch with identical shelf life expiry
-            dest_batch = Batch(
-                batch_id=uuid.uuid4(),
-                store_id=rec.destination_store_id,
-                product_id=product_id,
-                quantity=take,
-                received_at=now,
-                expires_at=b.expires_at,
-            )
-            db.add(dest_batch)
-
-    # Apply aggregate inventory changes
-    src_inv.quantity -= transfer_qty
-    if dest_inv is not None:
-        dest_inv.quantity += transfer_qty
-    else:
-        new_inv = Inventory(
-            store_id=rec.destination_store_id,
+    # Route transfer through dispatch_transfer service (Spec §4.B)
+    from backend.services.simulation.transfer import dispatch_transfer
+    try:
+        transfer = await dispatch_transfer(
+            db=db,
+            source_store_id=rec.source_store_id,
+            destination_store_id=rec.destination_store_id,
             product_id=product_id,
             quantity=transfer_qty,
+            current_time=now,
         )
-        db.add(new_inv)
-
-    await db.flush()
+    except ValueError as exc:
+        err_msg = str(exc)
+        return {
+            "success": False,
+            "error": err_msg,
+            "stale": "insufficient" in err_msg.lower() or "expired" in err_msg.lower(),
+        }
 
     # Emit event
     await bus.publish(
@@ -316,10 +244,12 @@ async def create_transfer(
         recommendation_id,
         {
             "recommendation_id": str(recommendation_id),
+            "transfer_id":       str(transfer.transfer_id),
             "source_store_id":   str(rec.source_store_id),
             "destination_store_id": str(rec.destination_store_id),
             "product_id":        str(product_id),
             "quantity":          transfer_qty,
+            "arrival_eta":       transfer.arrival_eta.isoformat(),
         },
         persist=True,
     )
@@ -327,9 +257,12 @@ async def create_transfer(
     return {
         "success": True,
         "transferred_quantity": transfer_qty,
+        "transfer_id": str(transfer.transfer_id),
         "source_store_id": str(rec.source_store_id),
         "destination_store_id": str(rec.destination_store_id),
         "product_id": str(product_id),
+        "arrival_eta": transfer.arrival_eta.isoformat(),
+        "status": transfer.status,
     }
 
 
@@ -365,36 +298,25 @@ async def create_reorder(
         action.status = ActionStatus.EXECUTING
         await db.flush()
 
-    # Load product to determine shelf life
+    # Route reorder through create_purchase_order (Regional Fulfilment Centre PO)
+    from backend.services.simulation.supplier import create_purchase_order
     product = await db.get(Product, product_id)
-    shelf_life = product.shelf_life_hours if product and product.shelf_life_hours else 72
+    if not product:
+        return {"success": False, "error": "product_not_found"}
 
-    # Create newly delivered batch
-    new_batch = Batch(
-        batch_id=uuid.uuid4(),
-        store_id=store_id,
-        product_id=product_id,
-        quantity=reorder_qty,
-        received_at=now,
-        expires_at=now + timedelta(hours=shelf_life),
-    )
-    db.add(new_batch)
-
-    inv_result = await db.execute(
-        select(Inventory).where(
-            Inventory.store_id == store_id,
-            Inventory.product_id == product_id,
+    try:
+        po = await create_purchase_order(
+            db=db,
+            supplier_id=product.supplier_id,
+            store_id=store_id,
+            product_id=product_id,
+            quantity=reorder_qty,
+            current_time=now,
         )
-    )
-    inv = inv_result.scalar_one_or_none()
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
 
-    if inv is not None:
-        inv.quantity += reorder_qty
-    else:
-        db.add(Inventory(store_id=store_id, product_id=product_id, quantity=reorder_qty))
-
-    await db.flush()
-
+    # Inventory is NOT increased now; it increases upon arrival after lead time (Spec §4.B)
     await bus.publish(
         db,
         "REORDER_EXECUTED",
@@ -402,14 +324,26 @@ async def create_reorder(
         recommendation_id,
         {
             "recommendation_id": str(recommendation_id),
+            "po_id":      str(po.po_id),
             "store_id":   str(store_id),
+            "supplier_id": str(product.supplier_id),
             "product_id": str(product_id),
             "quantity":   reorder_qty,
+            "expected_arrival": po.expected_arrival.isoformat(),
         },
         persist=True,
     )
 
-    return {"success": True, "reordered_quantity": reorder_qty, "store_id": str(store_id)}
+    return {
+        "success": True,
+        "reordered_quantity": reorder_qty,
+        "po_id": str(po.po_id),
+        "store_id": str(store_id),
+        "product_id": str(product_id),
+        "supplier_id": str(product.supplier_id),
+        "expected_arrival": po.expected_arrival.isoformat(),
+        "status": po.status,
+    }
 
 
 async def apply_discount(

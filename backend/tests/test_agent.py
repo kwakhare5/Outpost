@@ -56,7 +56,7 @@ from backend.agents.execution.nodes import (
 )
 from backend.agents.execution.runner import ExecutionRunner
 from backend.models.core import (
-    Recommendation, Inventory, Risk, Store, Supplier, Product,
+    Recommendation, Inventory, Risk, Store, Supplier, Product, Batch,
 )
 from backend.models.enums import (
     RecommendationStatus, ActionType, ActionStatus, RiskType, RiskSeverity,
@@ -122,11 +122,18 @@ async def _seed_transfer_scenario(db_session):
     )
     db_session.add(risk)
 
-    # Source has 100 units, destination has 0
+    # Source has 100 units (backed by physical batch), destination has 0
+    src_batch = Batch(
+        batch_id=uuid.uuid4(),
+        store_id=src_store.store_id,
+        product_id=product.product_id,
+        quantity=100,
+        received_at=now - timedelta(hours=10),
+        expires_at=now + timedelta(hours=38),
+    )
     src_inv = Inventory(store_id=src_store.store_id, product_id=product.product_id, quantity=100)
     dst_inv = Inventory(store_id=dst_store.store_id, product_id=product.product_id, quantity=0)
-    db_session.add(src_inv)
-    db_session.add(dst_inv)
+    db_session.add_all([src_batch, src_inv, dst_inv])
 
     rec = Recommendation(
         recommendation_id=uuid.uuid4(),

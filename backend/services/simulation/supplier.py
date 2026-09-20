@@ -17,6 +17,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Supplier, Store, Product, Inventory, Batch, Event
+from backend.services.simulation.scenarios import get_current_scenario_config
+
 
 
 @dataclass
@@ -64,7 +66,9 @@ async def create_purchase_order(
     if not supplier:
         raise ValueError(f"Supplier {supplier_id} not found")
 
-    total_lead_time = supplier.lead_time_hours + delay_hours
+    scenario_delay = get_current_scenario_config().supplier_lead_time_delay_hours
+    effective_delay = delay_hours if delay_hours > 0 else scenario_delay
+    total_lead_time = supplier.lead_time_hours + effective_delay
     expected_arrival = current_time + timedelta(hours=total_lead_time)
 
     po = PurchaseOrder(
@@ -75,8 +79,8 @@ async def create_purchase_order(
         quantity=quantity,
         ordered_at=current_time,
         expected_arrival=expected_arrival,
-        status='delayed' if delay_hours > 0 else 'in_transit',
-        delay_hours=delay_hours,
+        status='delayed' if effective_delay > 0 else 'in_transit',
+        delay_hours=effective_delay,
     )
     _active_pos.append(po)
 

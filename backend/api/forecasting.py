@@ -72,19 +72,25 @@ async def generate_forecasts(
 async def evaluate_models(
     db: AsyncSession = Depends(get_db),
 ) -> list[ForecastEvaluationResponse]:
-    """Compare baseline vs exp_smoothing model accuracy against simulator ground truth orders."""
+    """Compare 14-day moving average vs holt_linear model accuracy against simulator ground truth orders."""
     engine = ForecastingEngine()
     eval_dict = await engine.evaluate_on_history(db, holdout_days=3)
 
     evaluations: list[ForecastEvaluationResponse] = []
-    for model_name, res in eval_dict.items():
-        evaluations.append(
-            ForecastEvaluationResponse(
-                model_name=model_name,
-                mae=res.mae,
-                rmse=res.rmse,
-                mape=res.mape,
-                n_samples=res.n,
+    # Primary models: 14_day_moving_average and holt_linear
+    primary_models = ["14_day_moving_average", "holt_linear"]
+    for model_name in primary_models:
+        if model_name in eval_dict:
+            res = eval_dict[model_name]
+            evaluations.append(
+                ForecastEvaluationResponse(
+                    model_name=model_name,
+                    mae=res.mae,
+                    rmse=res.rmse,
+                    mape=res.mape,
+                    wape=res.wape,
+                    n_samples=res.n,
+                )
             )
-        )
     return sorted(evaluations, key=lambda e: e.mae)
+

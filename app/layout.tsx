@@ -17,9 +17,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Grocer — Quick-Commerce Inventory Balancing & Proactive Restocking",
+  title: "Dark Store Operator — Autonomous Quick-Commerce Inventory Deck",
   description:
-    "An end-to-end prototype exploring time-series consumption forecasting, inter-store spatial transfers, and 1-tap WhatsApp pantry restocking.",
+    "Deterministic decision engine for multi-node dark store inventory balancing and human-in-the-loop replenishment execution.",
   icons: {
     icon: '/logo.svg',
     shortcut: '/logo.svg',

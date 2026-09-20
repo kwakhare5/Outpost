@@ -43,10 +43,6 @@ from backend.agents.execution.tools import (
     apply_discount,
     get_inventory,
 )
-from backend.services.customer.service import CustomerService
-from backend.integrations.commerce.mock_adapter import MockCommerceAdapter
-from backend.integrations.commerce.exceptions import UnconfirmedCheckoutError
-from backend.integrations.commerce.models import CartItemUpdate
 
 
 def _naive_now() -> datetime:
@@ -280,68 +276,6 @@ async def test_safe_pre_check_failure_and_recovery(db_session: AsyncSession):
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Customer Replenishment to Operations End-to-End Sync (Spec §5.1 & §28)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_customer_replenishment_to_operations_sync(db_session: AsyncSession):
-    """Customer pantry replenishment orders immediately synchronize with dark store inventory."""
-    sim_engine = SimulationEngine(seed=4004, historical_days=3)
-    await sim_engine.initialize(db_session)
-
-    # Setup customer and mock adapter
-    customers = (await db_session.execute(select(Customer))).scalars().all()
-    customer = customers[0]
-    adapter = MockCommerceAdapter()
-    service = CustomerService(commerce_adapter=adapter)
-
-    # Fetch addresses and go-to items
-    addresses = await service.get_customer_addresses(customer.customer_id)
-    assert len(addresses) > 0
-    home_addr = addresses[0]
-
-    go_to_items = await service.get_customer_go_to_items(customer.customer_id, home_addr.id)
-    assert len(go_to_items) > 0
-    item = go_to_items[0]
-    variant = item.variants[0]
-
-    # Add item to cart
-    cart = await service.update_customer_cart(
-        customer_id=customer.customer_id,
-        items=[CartItemUpdate(spin_id=variant.spin_id, quantity=2)],
-        address_id=home_addr.id,
-    )
-    assert cart.grand_total > 0
-    assert len(cart.items) == 1
-
-    # Consequential Action Guard test: Attempt checkout without confirmation must fail
-    with pytest.raises(UnconfirmedCheckoutError):
-        await service.checkout_customer(
-            customer_id=customer.customer_id,
-            cart_id=cart.cart_id,
-            payment_method="UPI",
-            explicit_confirmation=False,
-            db=db_session,
-        )
-
-    # Confirmed checkout succeeds
-    order_result = await service.checkout_customer(
-        customer_id=customer.customer_id,
-        cart_id=cart.cart_id,
-        payment_method="UPI",
-        explicit_confirmation=True,
-        db=db_session,
-    )
-    assert order_result.order_id is not None
-    assert order_result.status == "ORDER_CONFIRMED"
-
-    # Track order progress
-    tracking = await service.track_customer_order(order_result.order_id)
-    assert tracking.eta_minutes <= 15
-    assert tracking.driver_name is not None
-
-
-# ---------------------------------------------------------------------------
 # Test 5: Spec Section 21 Invariants Verification
 # ---------------------------------------------------------------------------
 
@@ -360,7 +294,7 @@ async def test_spec_section_21_invariants(db_session: AsyncSession):
     # Clean pre-existing batches for isolated FIFO batch assertion
     await db_session.execute(
         delete(Batch).where(
-            Batch.store_id == src_store.store_id,
+            Batch.store_id.in_([src_store.store_id, dst_store.store_id]),
             Batch.product_id == prod.product_id,
         )
     )
@@ -454,7 +388,21 @@ async def test_spec_section_21_invariants(db_session: AsyncSession):
     res = await create_transfer(db_session, rec.recommendation_id)
     assert res.get("success") is True
 
-    # Invariant 1: Total inventory conserved
+    # In-transit phase: 15 units at source + 15 in transit = 30 total conserved
+    src_mid = (await get_inventory(db_session, src_store.store_id, prod.product_id))["quantity"]
+    dst_mid = (await get_inventory(db_session, dst_store.store_id, prod.product_id))["quantity"]
+    assert src_mid == 15
+    assert dst_mid == 0
+
+    # Arrival phase: deliver transfer upon arrival ETA
+    from backend.services.simulation.transfer import get_active_transfers, process_arriving_transfers
+    active_t = get_active_transfers()
+    assert len(active_t) >= 1
+    t = active_t[-1]
+    await process_arriving_transfers(db_session, t.arrival_eta)
+    await db_session.commit()
+
+    # Invariant 1: Total inventory conserved in stores after delivery
     src_final = (await get_inventory(db_session, src_store.store_id, prod.product_id))["quantity"]
     dst_final = (await get_inventory(db_session, dst_store.store_id, prod.product_id))["quantity"]
     assert src_final == 15

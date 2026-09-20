@@ -190,7 +190,8 @@ async def test_supplier_po_lifecycle_and_delivery(db_session):
 
     andheri = next(s for s in (await db_session.execute(select(Store))).scalars().all() if 'Andheri' in s.name)
     milk = next(p for p in (await db_session.execute(select(Product))).scalars().all() if 'Toned Milk' in p.name)
-    amul = next(s for s in (await db_session.execute(select(Supplier))).scalars().all() if 'Amul' in s.name)
+    amul = next(s for s in (await db_session.execute(select(Supplier))).scalars().all() if 'RFC' in s.name or 'Dairy' in s.name or 'Amul' in s.name)
+
 
     inv_before = (await db_session.execute(
         select(Inventory).where(Inventory.store_id == andheri.store_id, Inventory.product_id == milk.product_id)
@@ -245,7 +246,7 @@ async def test_supplier_delay_disruption(db_session):
 
     andheri = next(s for s in (await db_session.execute(select(Store))).scalars().all() if 'Andheri' in s.name)
     milk = next(p for p in (await db_session.execute(select(Product))).scalars().all() if 'Toned Milk' in p.name)
-    amul = next(s for s in (await db_session.execute(select(Supplier))).scalars().all() if 'Amul' in s.name)
+    amul = next(s for s in (await db_session.execute(select(Supplier))).scalars().all() if 'RFC' in s.name or 'Dairy' in s.name or 'Amul' in s.name)
 
     now = engine.clock.now
     po = await create_purchase_order(

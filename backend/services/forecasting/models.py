@@ -38,8 +38,10 @@ class ModelEvaluationResult:
     mae: float    # Mean Absolute Error
     rmse: float   # Root Mean Squared Error
     mape: float   # Mean Absolute Percentage Error (%)
+    wape: float = 0.0  # Weighted Absolute Percentage Error (%) = sum(|a - p|) / sum(a) * 100
     model_name: str = ""
     n: int = 0
+
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +187,7 @@ def _compute_dow_multiplier(
 
 
 # ---------------------------------------------------------------------------
-# Exponential smoothing predictor — Level 2 (§12.1)
+# Holt linear predictor (double exponential smoothing) — Level 2 (§12.1)
 # ---------------------------------------------------------------------------
 
 _MIN_SERIES_FOR_ES = 7  # minimum days to attempt smoothing
@@ -193,12 +195,13 @@ _ALPHA = 0.3   # level smoothing
 _BETA  = 0.1   # trend smoothing
 
 
-def exponential_smoothing_predict(
+def holt_linear_predict(
     series: Sequence[DemandPoint],
     horizon_hours: float,
 ) -> float:
     """Double exponential smoothing (Holt linear) forecast.
 
+    Pure mathematical time-series model (not machine learning).
     Falls back to baseline_predict when there are too few points.
     Returns total predicted demand over *horizon_hours*.
     """
@@ -220,6 +223,10 @@ def exponential_smoothing_predict(
     # Forecast h steps ahead (h = horizon days)
     h = horizon_hours / 24.0
     return max(0.0, (level + h * trend) * h)
+
+
+# Backward compatibility alias
+exponential_smoothing_predict = holt_linear_predict
 
 
 # ---------------------------------------------------------------------------
@@ -278,17 +285,26 @@ def evaluate_forecast(
     predicted: Sequence[float],
     model_name: str = "",
 ) -> ModelEvaluationResult:
-    """Compute MAE, RMSE, and MAPE from parallel actual/predicted sequences."""
+    """Compute MAE, RMSE, MAPE, and WAPE from parallel actual/predicted sequences.
+    
+    WAPE = sum(|actual - predicted|) / sum(actual) * 100
+    Supply chains prefer WAPE over MAPE to avoid division-by-zero or explosion on low-volume actuals.
+    """
     n = len(actual)
     if n == 0:
-        return ModelEvaluationResult(mae=0.0, rmse=0.0, mape=0.0, model_name=model_name, n=0)
+        return ModelEvaluationResult(mae=0.0, rmse=0.0, mape=0.0, wape=0.0, model_name=model_name, n=0)
 
     errors = [abs(a - p) for a, p in zip(actual, predicted)]
     mae = sum(errors) / n
     rmse = math.sqrt(sum(e ** 2 for e in errors) / n)
 
+    # WAPE — Weighted Absolute Percentage Error
+    sum_actual = sum(actual)
+    wape = (sum(errors) / sum_actual * 100.0) if sum_actual > 0 else 0.0
+
     # MAPE — skip zero-actual entries to avoid division by zero
     pct_errors = [abs(a - p) / a * 100 for a, p in zip(actual, predicted) if a != 0]
     mape = sum(pct_errors) / len(pct_errors) if pct_errors else 0.0
 
-    return ModelEvaluationResult(mae=mae, rmse=rmse, mape=mape, model_name=model_name, n=n)
+    return ModelEvaluationResult(mae=mae, rmse=rmse, mape=mape, wape=wape, model_name=model_name, n=n)
+

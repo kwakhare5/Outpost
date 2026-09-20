@@ -73,10 +73,27 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
 }
 
 
+_current_active_scenario: str = 'normal'
+
+
 def get_scenario_config(scenario_name: str) -> ScenarioConfig:
     """Retrieve scenario configuration parameters."""
     if scenario_name not in _SCENARIO_CONFIGS:
         raise ValueError(f"Unknown scenario '{scenario_name}'. Available: {SCENARIO_NAMES}")
+    return _SCENARIO_CONFIGS[scenario_name]
+
+
+def get_current_scenario_config() -> ScenarioConfig:
+    """Retrieve currently active scenario configuration parameters."""
+    return _SCENARIO_CONFIGS.get(_current_active_scenario, _SCENARIO_CONFIGS['normal'])
+
+
+def set_current_scenario(scenario_name: str) -> ScenarioConfig:
+    """Set the currently active scenario and return its config."""
+    global _current_active_scenario
+    if scenario_name not in _SCENARIO_CONFIGS:
+        raise ValueError(f"Unknown scenario '{scenario_name}'. Available: {SCENARIO_NAMES}")
+    _current_active_scenario = scenario_name
     return _SCENARIO_CONFIGS[scenario_name]
 
 
@@ -86,8 +103,12 @@ async def apply_scenario(
     scenario_name: str,
 ) -> dict[str, Any]:
     """Inject scenario conditions into the live simulation database."""
-    config = get_scenario_config(scenario_name)
-    now = engine.clock.now
+    config = set_current_scenario(scenario_name)
+    if engine is not None:
+        setattr(engine, 'active_scenario', scenario_name)
+        setattr(engine, 'active_scenario_config', config)
+
+    now = engine.clock.now if (engine and getattr(engine, 'clock', None)) else datetime.now(timezone.utc)
     now_naive = now.replace(tzinfo=None) if now.tzinfo else now
 
     if scenario_name == 'network_imbalance':
@@ -100,16 +121,23 @@ async def apply_scenario(
         milk = next((p for p in all_prods if 'Toned Milk' in p.name), None)
 
         if bandra and andheri and milk:
-            # Drain Andheri active batches down to 3 units
-            andheri_batches = (await db.execute(
-                select(Batch).where(
-                    Batch.store_id == andheri.store_id,
-                    Batch.product_id == milk.product_id,
-                    Batch.quantity > 0,
-                )
-            )).scalars().all()
-            for idx, b in enumerate(andheri_batches):
-                b.quantity = 3 if idx == 0 else 0
+            # Drain non-Bandra stores down to tight stock (3 units) and inflate Bandra to 85 units
+            other_stores = [s for s in all_stores if s.store_id != bandra.store_id]
+            for st in other_stores:
+                st_batches = (await db.execute(
+                    select(Batch).where(
+                        Batch.store_id == st.store_id,
+                        Batch.product_id == milk.product_id,
+                        Batch.quantity > 0,
+                    )
+                )).scalars().all()
+                for idx, b in enumerate(st_batches):
+                    b.quantity = 3 if idx == 0 else 0
+                st_inv = (await db.execute(
+                    select(Inventory).where(Inventory.store_id == st.store_id, Inventory.product_id == milk.product_id)
+                )).scalar_one_or_none()
+                if st_inv:
+                    st_inv.quantity = 3
 
             # Inflate Bandra active batches up to 85 units
             bandra_batches = (await db.execute(
@@ -130,13 +158,6 @@ async def apply_scenario(
                     received_at=now_naive,
                     expires_at=now_naive + timedelta(hours=72),
                 ))
-
-            # Sync Inventories
-            andheri_inv = (await db.execute(
-                select(Inventory).where(Inventory.store_id == andheri.store_id, Inventory.product_id == milk.product_id)
-            )).scalar_one_or_none()
-            if andheri_inv:
-                andheri_inv.quantity = 3
 
             bandra_inv = (await db.execute(
                 select(Inventory).where(Inventory.store_id == bandra.store_id, Inventory.product_id == milk.product_id)

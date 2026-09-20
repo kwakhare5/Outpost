@@ -1,8 +1,7 @@
-﻿"use client";
+"use client";
 
 import React from "react";
-import { Sparkles, Activity, ShieldCheck } from "lucide-react";
-import { GrocerLogo } from "../ui/GrocerLogo";
+import { Sparkles, Activity, ShieldCheck, Boxes } from "lucide-react";
 
 interface AppGlobalHeaderProps {
   criticalRiskCount?: number;
@@ -22,8 +21,10 @@ export function AppGlobalHeader({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Left: Brand Identity & Telemetry */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-left">
-            <GrocerLogo size="sm" iconOnly />
+          <div className="flex items-center gap-2.5 text-left">
+            <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center shadow-xs">
+              <Boxes className="w-4 h-4 text-emerald-400" />
+            </div>
             <div className="flex flex-col">
               <span className="font-bold text-zinc-950 tracking-tight text-base font-sans leading-tight">
                 Dark Store Operator

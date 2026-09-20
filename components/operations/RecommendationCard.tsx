@@ -142,9 +142,9 @@ export function RecommendationCard({
           <Clock className="w-3.5 h-3.5 text-zinc-400" />
           <span>Stockout: <strong className="text-zinc-900">{formatHours(item.stockoutInHours)}</strong></span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" title="Regional Fulfilment Centre ETA">
           <Truck className="w-3.5 h-3.5 text-zinc-400" />
-          <span>Supplier ETA: <strong className="text-zinc-900">{formatHours(item.supplierEtaHours)}</strong></span>
+          <span>RFC ETA: <strong className="text-zinc-900">{formatHours(item.supplierEtaHours)}</strong></span>
         </div>
       </div>
 

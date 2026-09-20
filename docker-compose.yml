@@ -4,15 +4,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: grocer
-      POSTGRES_PASSWORD: grocer
-      POSTGRES_DB: grocer
+      POSTGRES_USER: operator
+      POSTGRES_PASSWORD: operator
+      POSTGRES_DB: darkstore
     ports:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U grocer']
+      test: ['CMD-SHELL', 'pg_isready -U operator']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,7 +24,7 @@ services:
     ports:
       - '8000:8000'
     environment:
-      DATABASE_URL: postgresql+asyncpg://grocer:grocer@db:5432/grocer
+      DATABASE_URL: postgresql+asyncpg://operator:operator@db:5432/darkstore
     depends_on:
       db:
         condition: service_healthy

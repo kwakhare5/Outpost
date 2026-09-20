@@ -27,6 +27,54 @@ from backend.services.simulation.seed_data import (
 )
 from backend.services.simulation.transfer import process_arriving_transfers, clear_active_transfers
 from backend.services.simulation.supplier import process_supplier_deliveries, clear_active_pos
+from backend.services.simulation.scenarios import (
+    get_scenario_config,
+    set_current_scenario,
+    ScenarioConfig,
+)
+# Demand Rate Table: category x hour block x weekday (Spec §4)
+# Hour blocks:
+# 0 = Night (00:00 - 06:00)
+# 1 = Morning Peak (06:00 - 11:00) - breakfast, milk, bread, produce
+# 2 = Midday Lull (11:00 - 16:00) - staples, packaged snacks
+# 3 = Evening Peak (16:00 - 21:00) - dinner ingredients, dairy, fresh vegetables
+# 4 = Late Night (21:00 - 24:00) - munchies, impulse snacks
+CATEGORY_HOUR_BLOCK_RATES: dict[str, tuple[float, float, float, float, float]] = {
+    # Block:      0(Night) 1(Morn) 2(Aftn) 3(Eve) 4(Late)
+    "dairy":     (0.25,    1.8,    0.8,    1.6,   0.6),
+    "bakery":    (0.20,    1.7,    0.7,    1.4,   0.7),
+    "produce":   (0.10,    1.6,    0.8,    1.7,   0.4),
+    "staples":   (0.20,    0.8,    1.2,    1.4,   0.6),
+    "packaged":  (0.30,    0.7,    1.0,    1.5,   1.8),
+}
+
+def get_demand_rate_multiplier(category: str, hour: int, weekday: int) -> float:
+    """Calculate demand rate multiplier from category x hour block x weekday rate table."""
+    if 0 <= hour < 6:
+        block = 0
+    elif 6 <= hour < 11:
+        block = 1
+    elif 11 <= hour < 16:
+        block = 2
+    elif 16 <= hour < 21:
+        block = 3
+    else:
+        block = 4
+
+    cat_rates = CATEGORY_HOUR_BLOCK_RATES.get(category, (0.5, 1.0, 1.0, 1.0, 1.0))
+    hour_mult = cat_rates[block]
+
+    # Weekday adjustment: Mon-Thu = 1.0, Fri = 1.15, Sat-Sun = 1.35
+    if weekday in (5, 6):
+        day_mult = 1.35
+    elif weekday == 4:
+        day_mult = 1.15
+    else:
+        day_mult = 1.0
+
+    return round(hour_mult * day_mult, 3)
+
+
 
 
 
@@ -76,6 +124,8 @@ class SimulationEngine:
         self._supplier_map: dict[str, uuid.UUID] = {}
         self._store_map: dict[str, uuid.UUID] = {}
         self._product_list: list[SeedProduct] = []
+        self.active_scenario: str = "normal"
+        self.active_scenario_config: ScenarioConfig = get_scenario_config("normal")
 
     async def initialize(self, db: AsyncSession) -> Simulation:
         """Seed all base data and generate historical orders.
@@ -194,9 +244,12 @@ class SimulationEngine:
         clear_active_transfers()
         clear_active_pos()
 
-        # Re-initialize RNG
+        # Re-initialize RNG and scenario state
         self.rng = random.Random(self.seed)
         self.clock = None
+        self.active_scenario = "normal"
+        self.active_scenario_config = get_scenario_config("normal")
+        set_current_scenario("normal")
 
         # Re-seed and regenerate
         simulation = await self.initialize(db)
@@ -321,9 +374,20 @@ class SimulationEngine:
             stores = store_res.scalars().all()
             self._store_map = {s.name: s.store_id for s in stores}
 
+        category_multipliers = (
+            self.active_scenario_config.demand_multiplier_by_category
+            if self.active_scenario_config
+            else {}
+        )
+        avg_demand_mult = (
+            sum(category_multipliers.values()) / len(category_multipliers)
+            if category_multipliers
+            else 1.0
+        )
+
         for cust_seed in CUSTOMERS:
-            # Probability of ordering in this period
-            order_prob = hours_in_period / (cust_seed.order_frequency_days * 24)
+            # Probability of ordering in this period, scaled by scenario demand intensity (Fix A)
+            order_prob = (hours_in_period / (cust_seed.order_frequency_days * 24)) * avg_demand_mult
             if self.rng.random() > order_prob:
                 continue
 
@@ -354,23 +418,46 @@ class SimulationEngine:
             )
             db.add(order)
 
+            items_accounting: list[tuple[int, int, int]] = []
+
             for prod_seed in selected_products:
-                # Quantity: 1-3 with demand characteristics
-                qty = max(1, int(self.rng.gauss(1.5, 0.5)))
-                if is_weekend:
-                    qty = max(1, int(qty * prod_seed.weekend_multiplier))
+                # Quantity driven by category x hour block x weekday rate table + scenario multiplier (Spec §4)
+                rate_mult = get_demand_rate_multiplier(
+                    prod_seed.category, order_time.hour, order_time.weekday()
+                )
+                cat_mult = category_multipliers.get(prod_seed.category, 1.0)
+                combined_mult = rate_mult * cat_mult
+
+                requested_qty = max(1, int(round(self.rng.gauss(1.5, 0.5) * combined_mult)))
+
+                # Deduct from inventory using FIFO batch depletion and reconcile sales accounting
+                fulfilled_qty, lost_qty = await self._deduct_inventory(
+                    db, store_id, prod_seed.product_id, requested_qty
+                )
 
                 item = OrderItem(
                     id=uuid.uuid4(),
                     order_id=order_id,
                     product_id=prod_seed.product_id,
-                    quantity=qty,
+                    quantity=fulfilled_qty,  # Never treat requested demand as completed sales
+                    requested_quantity=requested_qty,
+                    fulfilled_quantity=fulfilled_qty,
+                    lost_quantity=lost_qty,
                     price=prod_seed.base_price,
                 )
                 db.add(item)
+                items_accounting.append((requested_qty, fulfilled_qty, lost_qty))
 
-                # Deduct from inventory using FIFO batch depletion
-                await self._deduct_inventory(db, store_id, prod_seed.product_id, qty)
+            # Reconcile overall order status based on sales accounting
+            total_fulfilled = sum(f for r, f, l in items_accounting)
+            total_lost = sum(l for r, f, l in items_accounting)
+
+            if total_lost == 0:
+                order.status = OrderStatus.DELIVERED
+            elif total_fulfilled > 0:
+                order.status = OrderStatus.PARTIALLY_FULFILLED
+            else:
+                order.status = OrderStatus.CANCELLED
 
             orders_created += 1
 
@@ -380,9 +467,13 @@ class SimulationEngine:
         return orders_created
 
     async def _deduct_inventory(
-        self, db: AsyncSession, store_id: uuid.UUID, product_id: uuid.UUID, qty: int
-    ) -> None:
-        """Deduct quantity from active batches (FIFO) and synchronize inventory. Floor at 0."""
+        self, db: AsyncSession, store_id: uuid.UUID, product_id: uuid.UUID, requested_qty: int
+    ) -> tuple[int, int]:
+        """Deduct quantity from active batches (FIFO) and synchronize inventory. Floor at 0.
+        
+        Returns (fulfilled_quantity, lost_quantity).
+        Guarantees conservation of demand: fulfilled_quantity + lost_quantity == requested_qty.
+        """
         batch_res = await db.execute(
             select(Batch)
             .where(
@@ -394,13 +485,16 @@ class SimulationEngine:
         )
         batches = batch_res.scalars().all()
 
-        rem = qty
+        rem = requested_qty
         for b in batches:
             if rem <= 0:
                 break
             deduct = min(b.quantity, rem)
             b.quantity -= deduct
             rem -= deduct
+
+        fulfilled_qty = requested_qty - rem
+        lost_qty = rem
 
         inv_res = await db.execute(
             select(Inventory).where(
@@ -411,6 +505,11 @@ class SimulationEngine:
         inv = inv_res.scalar_one_or_none()
         if inv:
             inv.quantity = sum(b.quantity for b in batches)
+
+        await db.flush()
+        return fulfilled_qty, lost_qty
+
+
 
     async def _restock_inventory(self, db: AsyncSession, restock_time: datetime) -> None:
         """Restock inventory for all stores/products (simulated supplier delivery)."""

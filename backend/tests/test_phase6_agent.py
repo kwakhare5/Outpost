@@ -109,7 +109,7 @@ async def test_transfer_fifo_batch_deduction_and_destination_batch_creation(db_s
     db_session.add_all([b1, b2])
 
     src_inv = Inventory(store_id=src.store_id, product_id=product.product_id, quantity=40)
-    dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=5)
+    dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=0)
     db_session.add_all([src_inv, dest_inv])
 
     risk = Risk(
@@ -153,6 +153,22 @@ async def test_transfer_fifo_batch_deduction_and_destination_batch_creation(db_s
     assert b1_refreshed.quantity == 0
     assert b2_refreshed.quantity == 20
 
+    # In-transit phase: destination inventory UNCHANGED before ETA
+    dest_inv_mid = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == dest.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one()
+    assert dest_inv_mid.quantity == 0
+
+    # Arrival phase: deliver transfer at arrival ETA
+    from backend.services.simulation.transfer import get_active_transfers, process_arriving_transfers
+    active_t = get_active_transfers()
+    assert len(active_t) >= 1
+    t = active_t[-1]
+    assert t.status == 'in_transit'
+    delivered = await process_arriving_transfers(db_session, t.arrival_eta)
+    await db_session.commit()
+    assert any(d.transfer_id == t.transfer_id for d in delivered)
+
     # Verify destination batches created with matching expiry dates
     dest_batches_res = await db_session.execute(
         select(Batch).where(Batch.store_id == dest.store_id).order_by(Batch.expires_at.asc())
@@ -173,7 +189,7 @@ async def test_transfer_fifo_batch_deduction_and_destination_batch_creation(db_s
     )).scalar_one()
 
     assert src_inv_refreshed.quantity == 20
-    assert dest_inv_refreshed.quantity == 25  # 5 initial + 20 transferred
+    assert dest_inv_refreshed.quantity == 20  # 0 initial + 20 transferred
 
 
 @pytest.mark.asyncio
@@ -241,7 +257,7 @@ async def test_reorder_creates_fresh_batch_with_shelf_life(db_session):
     supplier, product, src, dest = await _setup_stores_and_product(db_session)
     now = _naive_now()
 
-    dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=2)
+    dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=0)
     db_session.add(dest_inv)
 
     risk = Risk(
@@ -278,21 +294,36 @@ async def test_reorder_creates_fresh_batch_with_shelf_life(db_session):
     assert res["success"] is True
     assert res["reordered_quantity"] == 50
 
-    # Destination batch created
+    # In-transit phase: inventory does not increase immediately
+    dest_inv_mid = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == dest.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one()
+    assert dest_inv_mid.quantity == 0
+
+    # Delivery upon ETA arrival
+    from backend.services.simulation.supplier import get_active_pos, process_supplier_deliveries
+    active_p = get_active_pos()
+    assert len(active_p) >= 1
+    po = active_p[-1]
+    delivered = await process_supplier_deliveries(db_session, po.expected_arrival)
+    await db_session.commit()
+    assert any(d.po_id == po.po_id for d in delivered)
+
+    # Destination batch created upon delivery
     new_batches = (await db_session.execute(
         select(Batch).where(Batch.store_id == dest.store_id, Batch.product_id == product.product_id)
     )).scalars().all()
     assert len(new_batches) == 1
     assert new_batches[0].quantity == 50
-    # Expiry is roughly now + 48 hours
-    exp_delta = (new_batches[0].expires_at - now).total_seconds() / 3600.0
+    # Expiry is roughly arrival time + product shelf life (48 hours)
+    exp_delta = (new_batches[0].expires_at - po.expected_arrival).total_seconds() / 3600.0
     assert 47.0 <= exp_delta <= 49.0
 
-    # Aggregate inventory updated
+    # Aggregate inventory updated upon delivery
     dest_inv_refreshed = (await db_session.execute(
         select(Inventory).where(Inventory.store_id == dest.store_id, Inventory.product_id == product.product_id)
     )).scalar_one()
-    assert dest_inv_refreshed.quantity == 52  # 2 initial + 50
+    assert dest_inv_refreshed.quantity == 50  # 0 initial + 50
 
 
 @pytest.mark.asyncio
@@ -355,9 +386,13 @@ async def test_action_lifecycle_transitions_to_completed_on_success(db_session):
     supplier, product, src, dest = await _setup_stores_and_product(db_session)
     now = _naive_now()
 
+    b_src = Batch(
+        batch_id=uuid.uuid4(), store_id=src.store_id, product_id=product.product_id,
+        quantity=50, received_at=now - timedelta(hours=10), expires_at=now + timedelta(hours=38),
+    )
     src_inv = Inventory(store_id=src.store_id, product_id=product.product_id, quantity=50)
     dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=10)
-    db_session.add_all([src_inv, dest_inv])
+    db_session.add_all([b_src, src_inv, dest_inv])
 
     risk = Risk(
         risk_id=uuid.uuid4(),
@@ -516,9 +551,13 @@ async def test_node_verify_passes_and_records_details_for_valid_transfer(db_sess
     supplier, product, src, dest = await _setup_stores_and_product(db_session)
     now = _naive_now()
 
+    b_src = Batch(
+        batch_id=uuid.uuid4(), store_id=src.store_id, product_id=product.product_id,
+        quantity=30, received_at=now - timedelta(hours=10), expires_at=now + timedelta(hours=38),
+    )
     src_inv = Inventory(store_id=src.store_id, product_id=product.product_id, quantity=30)
     dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=10)
-    db_session.add_all([src_inv, dest_inv])
+    db_session.add_all([b_src, src_inv, dest_inv])
 
     risk = Risk(
         risk_id=uuid.uuid4(), store_id=dest.store_id, product_id=product.product_id,
@@ -674,9 +713,13 @@ async def test_api_execute_approved_transfer_and_query_runs(db_session):
     supplier, product, src, dest = await _setup_stores_and_product(db_session)
     now = _naive_now()
 
+    b_src = Batch(
+        batch_id=uuid.uuid4(), store_id=src.store_id, product_id=product.product_id,
+        quantity=40, received_at=now - timedelta(hours=10), expires_at=now + timedelta(hours=38),
+    )
     src_inv = Inventory(store_id=src.store_id, product_id=product.product_id, quantity=40)
     dest_inv = Inventory(store_id=dest.store_id, product_id=product.product_id, quantity=5)
-    db_session.add_all([src_inv, dest_inv])
+    db_session.add_all([b_src, src_inv, dest_inv])
 
     risk = Risk(
         risk_id=uuid.uuid4(), store_id=dest.store_id, product_id=product.product_id,
@@ -850,7 +893,18 @@ async def test_batch_conservation_invariant_across_transfers(db_session):
 
     assert run_res.status == "completed"
 
-    # Sum of all batches after
+    # In-transit phase: units on shelf + in-transit units = total initial units
+    from backend.services.simulation.transfer import get_active_transfers, process_arriving_transfers
+    active_t = get_active_transfers()
+    assert len(active_t) >= 1
+    t = active_t[-1]
+    assert t.quantity == 12
+
+    # Arrival phase: deliver transfer at arrival ETA
+    await process_arriving_transfers(db_session, t.arrival_eta)
+    await db_session.commit()
+
+    # Sum of all batches after delivery
     batches_after = (await db_session.execute(
         select(func.sum(Batch.quantity)).where(Batch.product_id == product.product_id)
     )).scalar()

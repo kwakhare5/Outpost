@@ -6,6 +6,7 @@ from backend.services.forecasting.models import (
     clean_demand_series,
     baseline_predict,
     exponential_smoothing_predict,
+    holt_linear_predict,
     compute_confidence,
     evaluate_forecast,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "clean_demand_series",
     "baseline_predict",
     "exponential_smoothing_predict",
+    "holt_linear_predict",
     "compute_confidence",
     "evaluate_forecast",
 ]

@@ -269,7 +269,7 @@ async def get_simulation_in_transit(
                 'product_id': str(p.product_id),
                 'quantity': p.quantity,
                 'status': p.status,
-                'created_at': p.created_at.isoformat(),
+                'created_at': p.ordered_at.isoformat(),
                 'expected_arrival': p.expected_arrival.isoformat(),
             }
             for p in active_pos

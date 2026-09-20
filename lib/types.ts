@@ -1,68 +1,5 @@
-import type { LucideIcon } from "lucide-react";
-
 // ---------------------------------------------------------------------------
-// 1. Customer & Pantry Types
-// ---------------------------------------------------------------------------
-
-export interface StapleItem {
-  id: string;
-  name: string;
-  days: number;
-  fillPct: number;
-  avg: string;
-  icon: LucideIcon;
-  category: string;
-}
-
-export interface WhatsAppMessage {
-  sender: "bot" | "user";
-  text: string;
-  timestamp: string;
-}
-
-export interface CustomerPersona {
-  id: string;
-  name: string;
-  homeStoreCode: string;
-  homeStoreName: string;
-  address: string;
-  avatar: string;
-  householdSize: number;
-  orderFrequencyDays: number;
-  primaryDepletionItem: string;
-}
-
-export interface CustomerOrderItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  priceINR: number;
-}
-
-export interface CustomerOrderPayload {
-  customerId: string;
-  customerName: string;
-  homeStoreCode: string;
-  homeStoreName: string;
-  items: CustomerOrderItem[];
-  totalINR: number;
-  paymentMethod: "UPI" | "COD";
-  address?: string;
-}
-
-export interface PhoneMockupProps {
-  className?: string;
-  activeScenario?: string;
-  initialViewMode?: "whatsapp";
-  activeCustomer?: CustomerPersona;
-  onCustomerChange?: (customer: CustomerPersona) => void;
-  onPlaceOrder?: (payload: CustomerOrderPayload) => void;
-  onScheduleReminder?: (customerId: string, delayHours: number) => void;
-  onSkipRestock?: (customerId: string, reason?: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// 2. Dark Store Network & Operations Fleet Types
+// 1. Dark Store Network & Operations Fleet Types
 // ---------------------------------------------------------------------------
 
 export type RiskSeverity = "critical" | "warning" | "low";
@@ -180,17 +117,6 @@ export interface SimulationState {
   avgTransferTimeMinutes: number;
 }
 
-export interface SimulationMetrics {
-  stockoutEvents: number;
-  spoiledUnits: number;
-  emergencyReorders: number;
-  serviceLevel: number; // 0-100%
-  excessInventory: number;
-  transferCount: number;
-  estimatedWasteCostINR: number;
-  recommendationAcceptanceRate: number; // 0-100%
-}
-
 export interface ScenarioState {
   activeScenarioId: string | null;
   currentStep: number;
@@ -198,6 +124,4 @@ export interface ScenarioState {
   isAutoPlaying: boolean;
   isComplete: boolean;
   seed: number;
-  grocerMetrics: SimulationMetrics;
-  baselineMetrics: SimulationMetrics;
 }

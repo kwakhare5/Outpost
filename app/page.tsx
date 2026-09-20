@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { AppGlobalHeader } from "../components/navigation/AppGlobalHeader";
@@ -16,7 +16,7 @@ import {
   ScenarioState,
 } from "../lib/types";
 import {
-  grocerApi,
+  operatorApi,
   transformStores,
   transformRecommendation,
   BackendAgentRun,
@@ -28,11 +28,6 @@ import {
   getScenarioInitialStores,
   getScenarioInitialRecommendations,
 } from "../lib/scenarioEngine";
-import {
-  emptyMetrics,
-  computeGrocerMetrics,
-  computeBaselineMetrics,
-} from "../lib/metricsEngine";
 import { toast } from "sonner";
 import { SimulationFloatingIsland } from "../components/operations/SimulationFloatingIsland";
 
@@ -48,8 +43,6 @@ function defaultScenarioState(): ScenarioState {
     isAutoPlaying: false,
     isComplete: false,
     seed: 0,
-    grocerMetrics: emptyMetrics(),
-    baselineMetrics: emptyMetrics(),
   };
 }
 
@@ -76,11 +69,7 @@ function DarkStoreOperatorApp() {
     avgTransferTimeMinutes: 22,
   });
   const [scenario, setScenario] = useState<ScenarioState>(defaultScenarioState());
-  const [metricsDismissed, setMetricsDismissed] = useState(false);
   const [agentRuns, setAgentRuns] = useState<BackendAgentRun[]>([]);
-
-  // Derived: show metrics panel when scenario completes (unless user dismissed)
-  const showMetrics = scenario.isComplete && !!scenario.activeScenarioId && !metricsDismissed;
 
   // Calculate live critical risk count
   const criticalRiskCount = stores.reduce(
@@ -97,7 +86,7 @@ function DarkStoreOperatorApp() {
 
   const syncWithBackend = useCallback(async () => {
     try {
-      const isHealthy = await grocerApi.checkHealth();
+      const isHealthy = await operatorApi.checkHealth();
       if (!isHealthy) {
         setIsLiveApiConnected(false);
         return;
@@ -106,12 +95,12 @@ function DarkStoreOperatorApp() {
       setIsLiveApiConnected(true);
 
       const [backendStores, backendProducts, backendRisks, backendRecs, activeSim, runs] = await Promise.all([
-        grocerApi.getStores(),
-        grocerApi.getProducts(),
-        grocerApi.getRisks(),
-        grocerApi.getRecommendations(),
-        grocerApi.getActiveSimulation(),
-        grocerApi.getAgentRuns(),
+        operatorApi.getStores(),
+        operatorApi.getProducts(),
+        operatorApi.getRisks(),
+        operatorApi.getRecommendations(),
+        operatorApi.getActiveSimulation(),
+        operatorApi.getAgentRuns(),
       ]);
 
       if (runs && runs.length > 0) {
@@ -151,17 +140,17 @@ function DarkStoreOperatorApp() {
     let mounted = true;
     async function probeBackend() {
       try {
-        const isHealthy = await grocerApi.checkHealth();
+        const isHealthy = await operatorApi.checkHealth();
         if (!mounted) return;
         if (isHealthy) {
           setIsLiveApiConnected(true);
           const [backendStores, backendProducts, backendRisks, backendRecs, activeSim, runs] = await Promise.all([
-            grocerApi.getStores(),
-            grocerApi.getProducts(),
-            grocerApi.getRisks(),
-            grocerApi.getRecommendations(),
-            grocerApi.getActiveSimulation(),
-            grocerApi.getAgentRuns(),
+            operatorApi.getStores(),
+            operatorApi.getProducts(),
+            operatorApi.getRisks(),
+            operatorApi.getRecommendations(),
+            operatorApi.getActiveSimulation(),
+            operatorApi.getAgentRuns(),
           ]);
           if (!mounted) return;
 
@@ -211,7 +200,7 @@ function DarkStoreOperatorApp() {
 
     if (isLiveApiConnected && activeSimulationId) {
       try {
-        const advanced = await grocerApi.advanceSimulation(activeSimulationId, hours);
+        const advanced = await operatorApi.advanceSimulation(activeSimulationId, hours);
         if (advanced && advanced.current_time) {
           const simDate = new Date(advanced.current_time);
           setSimulation((prev) => ({
@@ -221,7 +210,7 @@ function DarkStoreOperatorApp() {
             totalOrdersDelivered: prev.totalOrdersDelivered + (hours * 18),
           }));
         }
-        await grocerApi.evaluateRisks();
+        await operatorApi.evaluateRisks();
         await syncWithBackend();
 
         const newEvent: SimulationEvent = {
@@ -309,11 +298,8 @@ function DarkStoreOperatorApp() {
       isAutoPlaying: false,
       isComplete: false,
       seed: def.seed,
-      grocerMetrics: emptyMetrics(),
-      baselineMetrics: emptyMetrics(),
     });
 
-    setMetricsDismissed(false);
     toast.info(`Scenario loaded: ${def.name}`);
   }, []);
 
@@ -349,31 +335,17 @@ function DarkStoreOperatorApp() {
     const def = getScenario(scenario.activeScenarioId);
     const isComplete = def ? nextStep >= def.steps.length : true;
 
-    const updatedGrocerMetrics = isComplete
-      ? computeGrocerMetrics(
-          [...result.newEvents, ...events],
-          result.stores,
-          result.recommendations
-        )
-      : scenario.grocerMetrics;
-
-    const updatedBaselineMetrics = isComplete && def
-      ? computeBaselineMetrics(scenario.activeScenarioId, def.steps.length, result.stores)
-      : scenario.baselineMetrics;
-
     setScenario((prev) => ({
       ...prev,
       currentStep: nextStep,
       isComplete,
       isAutoPlaying: isComplete ? false : prev.isAutoPlaying,
-      grocerMetrics: updatedGrocerMetrics,
-      baselineMetrics: updatedBaselineMetrics,
     }));
 
     toast.success(`Step ${nextStep}/${scenario.totalSteps}: ${result.label}`);
 
     if (isComplete) {
-      toast.info("Scenario complete. Metrics comparison available.");
+      toast.info("Scenario complete.");
     }
   }, [scenario, stores, recommendations, events]);
 
@@ -399,7 +371,7 @@ function DarkStoreOperatorApp() {
   const handleReset = async () => {
     if (isLiveApiConnected && activeSimulationId) {
       try {
-        const res = await grocerApi.resetSimulation(activeSimulationId);
+        const res = await operatorApi.resetSimulation(activeSimulationId);
         if (res && res.simulation_id) {
           setActiveSimulationId(res.simulation_id);
           if (res.current_time) {
@@ -456,8 +428,8 @@ function DarkStoreOperatorApp() {
 
     if (isLiveApiConnected) {
       try {
-        await grocerApi.approveRecommendation(recId);
-        runResult = await grocerApi.executeAgent(recId);
+        await operatorApi.approveRecommendation(recId);
+        runResult = await operatorApi.executeAgent(recId);
         await syncWithBackend();
       } catch (err) {
         console.error("Backend agent execution failed, generating fallback trace:", err);
@@ -564,7 +536,7 @@ function DarkStoreOperatorApp() {
 
     if (isLiveApiConnected) {
       try {
-        await grocerApi.rejectRecommendation(recId);
+        await operatorApi.rejectRecommendation(recId);
         await syncWithBackend();
       } catch {
         // Continue
@@ -605,8 +577,6 @@ function DarkStoreOperatorApp() {
           onApproveRecommendation={handleApproveRecommendation}
           onRejectRecommendation={handleRejectRecommendation}
           scenario={scenario}
-          showMetrics={showMetrics}
-          onDismissMetrics={() => setMetricsDismissed(true)}
         />
       </main>
 

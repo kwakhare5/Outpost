@@ -1,4 +1,4 @@
-﻿# AGENTS.md — Dark Store Operator Project Rules
+# AGENTS.md — Dark Store Operator Project Rules
 
 ---
 
@@ -37,3 +37,10 @@ uvicorn backend.main:app --reload --port 8000
 3. **Conservation of Mass:** Stock transfers must deduct from source and credit to destination with zero phantom creation or loss.
 4. **Zero AI Slop:** Direction 1 Swiss Logistics typography (`TWK Lausanne Pan 800` display, `Geist Sans` body, `Geist Mono` tabular telemetry, and strictly upright `PP Editorial New` accents), crisp Lucide icons, no emojis in buttons.
 5. **Passing Builds:** Always ensure `npm run build` and `pytest backend/tests` pass with zero regressions.
+
+---
+
+## 7. SESSION RESUME
+- **Last Status:** Fix A (Scenarios), Fix B (Replenishment Realism), Fix C (Fake Scoreboard Purged), Fix D (Forecasting Honesty & WAPE), and Sales Accounting are 100% complete and verified.
+- **Passing Suites:** 23 pytest test suites passing with 275+ tests; Next.js 16 production build (`npm run build`) passing; ESLint passing.
+- **Key Artifacts:** `DESIGN_DECISIONS.md` created; `README.md` rewritten as a credible quick-commerce case study.

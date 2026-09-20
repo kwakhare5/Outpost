@@ -16,7 +16,9 @@ class OrderStatus(str, enum.Enum):
     PENDING = 'pending'
     CONFIRMED = 'confirmed'
     DELIVERED = 'delivered'
+    PARTIALLY_FULFILLED = 'partially_fulfilled'
     CANCELLED = 'cancelled'
+
 
 class SupplierStatus(str, enum.Enum):
     ACTIVE = 'active'

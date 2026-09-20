@@ -27,7 +27,7 @@ from sqlalchemy import update
 from backend.main import create_app
 from backend.database import get_db
 from backend.models.core import (
-    Recommendation, Inventory, Risk, Store, Supplier, Product,
+    Recommendation, Inventory, Risk, Store, Supplier, Product, Batch,
 )
 from backend.models.enums import (
     RecommendationStatus, ActionType, RiskType, RiskSeverity,
@@ -96,8 +96,18 @@ async def approved_transfer_rec(seeded_db):
 
     src_inv = Inventory(store_id=src_store.store_id, product_id=product.product_id, quantity=100)
     dst_inv = Inventory(store_id=dst_store.store_id, product_id=product.product_id, quantity=0)
+    src_batch = Batch(
+        batch_id=uuid.uuid4(),
+        store_id=src_store.store_id,
+        product_id=product.product_id,
+        quantity=100,
+        received_at=now - timedelta(hours=2),
+        expires_at=now + timedelta(hours=48),
+    )
     seeded_db.add(src_inv)
     seeded_db.add(dst_inv)
+    seeded_db.add(src_batch)
+
 
     rec = Recommendation(
         recommendation_id=uuid.uuid4(), risk_id=risk.risk_id,

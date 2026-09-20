@@ -96,8 +96,8 @@ export function WhyInspectorPanel({
               {formatHours(item.stockoutInHours)}
             </span>
           </div>
-          <div className="p-2 bg-white rounded-lg border border-zinc-200/70">
-            <span className="text-[10px] text-zinc-500 block">Supplier ETA</span>
+          <div className="p-2 bg-white rounded-lg border border-zinc-200/70" title="Regional Fulfilment Centre ETA">
+            <span className="text-[10px] text-zinc-500 block">RFC ETA</span>
             <span className="text-sm font-bold text-zinc-900 font-mono">
               {formatHours(item.supplierEtaHours)}
             </span>

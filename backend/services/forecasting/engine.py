@@ -27,6 +27,7 @@ from backend.services.forecasting.models import (
     clean_demand_series,
     baseline_predict,
     exponential_smoothing_predict,
+    holt_linear_predict,
     compute_confidence,
     evaluate_forecast,
     ModelEvaluationResult,
@@ -178,29 +179,29 @@ class ForecastingEngine:
         use_timeseries = len(series) >= _MIN_HISTORY_FOR_TIMESERIES
 
         if use_timeseries and len(series) > _HOLDOUT_DAYS + 3:
-            # Hold out the last N days for model selection
+            # Hold out the last N days for model selection (3-day holdout)
             train = cleaned[:-_HOLDOUT_DAYS]
             holdout = cleaned[-_HOLDOUT_DAYS:]
             holdout_actual = [p.quantity for p in holdout]
 
-            # Baseline on training data
+            # 14-day moving average baseline on training data
             bl_preds_holdout = [baseline_predict(train, 24) for _ in holdout]
-            bl_eval = evaluate_forecast(holdout_actual, bl_preds_holdout, "baseline")
+            bl_eval = evaluate_forecast(holdout_actual, bl_preds_holdout, "14_day_moving_average")
 
-            # Exponential smoothing on training data
-            es_preds_holdout = [exponential_smoothing_predict(train, 24) for _ in holdout]
-            es_eval = evaluate_forecast(holdout_actual, es_preds_holdout, "exp_smoothing")
+            # Holt linear on training data
+            hl_preds_holdout = [holt_linear_predict(train, 24) for _ in holdout]
+            hl_eval = evaluate_forecast(holdout_actual, hl_preds_holdout, "holt_linear")
 
             # Select model with lower MAE
-            if es_eval.mae <= bl_eval.mae:
-                prediction = exponential_smoothing_predict(cleaned, horizon_hours)
-                model_name = "exp_smoothing"
+            if hl_eval.mae <= bl_eval.mae:
+                prediction = holt_linear_predict(cleaned, horizon_hours)
+                model_name = "holt_linear"
             else:
                 prediction = baseline_pred
                 model_name = "baseline"
         elif use_timeseries:
-            prediction = exponential_smoothing_predict(cleaned, horizon_hours)
-            model_name = "exp_smoothing"
+            prediction = holt_linear_predict(cleaned, horizon_hours)
+            model_name = "holt_linear"
         else:
             prediction = baseline_pred
             model_name = "baseline"
@@ -215,21 +216,25 @@ class ForecastingEngine:
     ) -> dict[str, ModelEvaluationResult]:
         """Perform empirical rolling-origin backtesting across historical orders.
 
-        Splits demand series into training and holdout test sets, scoring baseline vs
-        exponential smoothing against real simulator ground truth.
+        Splits demand series into training and holdout test sets, scoring 14-day moving
+        average baseline vs Holt linear against real simulator ground truth.
         """
         daily_demand = await self._aggregate_daily_demand(db)
         if not daily_demand:
+            empty_bl = ModelEvaluationResult(0.0, 0.0, 0.0, 0.0, "14_day_moving_average", 0)
+            empty_hl = ModelEvaluationResult(0.0, 0.0, 0.0, 0.0, "holt_linear", 0)
             return {
-                "baseline": ModelEvaluationResult(0.0, 0.0, 0.0, "baseline", 0),
-                "exponential_smoothing": ModelEvaluationResult(0.0, 0.0, 0.0, "exponential_smoothing", 0),
+                "14_day_moving_average": empty_bl,
+                "holt_linear": empty_hl,
+                "baseline": empty_bl,
+                "exponential_smoothing": empty_hl,
             }
 
         bl_actuals: list[float] = []
         bl_preds: list[float] = []
 
-        es_actuals: list[float] = []
-        es_preds: list[float] = []
+        hl_actuals: list[float] = []
+        hl_preds: list[float] = []
 
         for (store_id, product_id), series in daily_demand.items():
             if len(series) <= holdout_days + 2:
@@ -245,15 +250,18 @@ class ForecastingEngine:
                 bl_actuals.append(actual_qty)
                 bl_preds.append(b_pred)
 
-                es_pred = exponential_smoothing_predict(train, horizon_hours=24)
-                es_actuals.append(actual_qty)
-                es_preds.append(es_pred)
+                hl_pred = holt_linear_predict(train, horizon_hours=24)
+                hl_actuals.append(actual_qty)
+                hl_preds.append(hl_pred)
 
-        bl_eval = evaluate_forecast(bl_actuals, bl_preds, "baseline")
-        es_eval = evaluate_forecast(es_actuals, es_preds, "exponential_smoothing")
+        bl_eval = evaluate_forecast(bl_actuals, bl_preds, "14_day_moving_average")
+        hl_eval = evaluate_forecast(hl_actuals, hl_preds, "holt_linear")
 
         return {
+            "14_day_moving_average": bl_eval,
+            "holt_linear": hl_eval,
             "baseline": bl_eval,
-            "exponential_smoothing": es_eval,
+            "exponential_smoothing": hl_eval,
         }
+
 

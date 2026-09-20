@@ -305,9 +305,9 @@ function buildHeroScenario(): ScenarioDefinition {
             },
             {
               action: "reorder",
-              label: "Emergency Supplier Reorder",
+              label: "Emergency RFC Reorder",
               score: 42,
-              reason: "Supplier lead time is 28h, resulting in ~23h of unfulfilled customer orders.",
+              reason: "RFC lead time is 28h, resulting in ~23h of unfulfilled customer orders.",
             },
             {
               action: "hold",

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Any
-from sqlalchemy import Float, Numeric, DateTime, Text, JSON, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Float, Numeric, DateTime, Text, JSON, ForeignKey, func, UniqueConstraint, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -74,10 +74,14 @@ class OrderItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('order.order_id'))
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
-    quantity: Mapped[int]
+    quantity: Mapped[int]  # Fulfilled completed units
+    requested_quantity: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
+    fulfilled_quantity: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
+    lost_quantity: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
     price: Mapped[float] = mapped_column(Numeric(10, 2))
     
     order: Mapped[Order] = relationship(back_populates="items")
+
 
 class Inventory(Base):
     __tablename__ = 'inventory'

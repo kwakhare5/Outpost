@@ -10,7 +10,6 @@ from backend.api.products import router as products_router
 from backend.api.risks import router as risks_router
 from backend.api.recommendations import router as recommendations_router
 from backend.api.agent import router as agent_router
-from backend.api.customers import router as customers_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,7 +40,6 @@ def create_app() -> FastAPI:
     application.include_router(risks_router)
     application.include_router(recommendations_router)
     application.include_router(agent_router)
-    application.include_router(customers_router)
     return application
 
 app = create_app()
