@@ -1,4 +1,4 @@
-"""Stores REST API — spec §32.3.
+"""Stores REST API — spec Section 32.3.
 
 Endpoints:
     GET /api/stores                          — list all dark stores

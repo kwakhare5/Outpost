@@ -31,7 +31,7 @@ export default function RootLayout({
       lang="en"
       className={`${publicSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col selection:bg-zinc-800 selection:text-white relative overflow-x-hidden bg-[#FAFAFA] text-zinc-900 font-sans">
+      <body className="min-h-full flex flex-col selection:bg-[#2563EB] selection:text-white relative overflow-x-hidden bg-[#FAF8F5] text-[#1C1917] font-sans">
         {children}
         <Toaster position="top-right" theme="light" richColors />
         <Analytics />

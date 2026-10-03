@@ -1,4 +1,4 @@
-"""Products REST API — spec §32.4.
+"""Products REST API — spec Section 32.4.
 
 Endpoints:
     GET /api/products              — list all catalog products

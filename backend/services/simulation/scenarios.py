@@ -48,7 +48,7 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
     'demand_spike': ScenarioConfig(
         name='demand_spike',
         description='Morning surge with +250% demand on dairy and bakery perishables.',
-        demand_multiplier_by_category={'dairy': 2.5, 'bakery': 2.0, 'produce': 1.8, 'staples': 1.0, 'packaged': 1.1},
+        demand_multiplier_by_category={'dairy': 3.5, 'bakery': 2.5, 'produce': 2.0, 'staples': 1.0, 'packaged': 1.1},
         supplier_lead_time_delay_hours=0,
     ),
     'supplier_delay': ScenarioConfig(
@@ -118,7 +118,7 @@ async def apply_scenario(
         andheri = next((s for s in all_stores if 'Andheri' in s.name), None)
 
         all_prods = (await db.execute(select(Product))).scalars().all()
-        milk = next((p for p in all_prods if 'Toned Milk' in p.name), None)
+        milk = next((p for p in all_prods if 'Milk' in p.name), None)
 
         if bandra and andheri and milk:
             # Drain non-Bandra stores down to tight stock (3 units) and inflate Bandra to 85 units

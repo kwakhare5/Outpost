@@ -15,6 +15,7 @@ export interface StoreHub {
 
 export interface TransferRecord {
   id: string;
+  sku?: string;
   fromCode: string;
   fromName: string;
   toCode: string;
@@ -25,6 +26,9 @@ export interface TransferRecord {
   status: "In Transit" | "Completed" | "Staged";
   corridor: string;
   batchId?: string;
+  currentStep?: number;
+  etaPassed?: boolean;
+  dispatchedAt?: string;
 }
 
 export interface BatchItem {
@@ -42,15 +46,78 @@ export interface BatchItem {
   vanId?: string;
 }
 
-export interface RFCInboundOrder {
+export interface ShipmentItem {
   id: string;
-  storeCode: string;
-  storeName: string;
-  units: number;
-  status: string;
-  eta: string;
   sku: string;
+  source: string;
+  sourceCode: string;
+  dest: string;
+  destCode: string;
+  units: number;
+  vanId: string;
+  dispatchedAt: string;
+  eta: string;
+  etaPassed: boolean;
+  status: "dispatched" | "in_transit" | "awaiting_confirmation" | "received";
+  currentStep: number; // 1 to 5
+  type: "TRANSFER" | "RFC_PO";
+  corridor: string;
 }
 
-export type DeckTab = "feed" | "stores" | "transfers" | "batches";
+export interface OutcomeRecordItem {
+  id: string;
+  exceptionTitle: string;
+  storeName: string;
+  productName: string;
+  actionTaken: string;
+  outcomeStatus: "Stockout prevented" | "Worse than expected" | "Residual loss" | "Rejected" | "Success";
+  expectedLostUnits: number;
+  actualLostUnits: number;
+  measuredVsExpected: string;
+  wasteUnits: number;
+  wasteValueInr: number;
+  notes: string;
+  evaluatedAt: string;
+}
 
+export interface HistorySummary {
+  totalDecisions: number;
+  stockoutsPrevented: number;
+  moneySavedInr: number;
+  accuracyRatePct: number;
+  spoilageWasteInr: number;
+  records: OutcomeRecordItem[];
+}
+
+export interface LogEvent {
+  time: string;
+  title: string;
+  detail: string;
+  type: "info" | "action" | "arrival";
+}
+
+export interface AlertItem {
+  id: string;
+  productName: string;
+  category: string;
+  storeCode: string;
+  storeName: string;
+  stockOnShelves: number;
+  runsOutInHours: number;
+  runsOutAtTime: string;
+  orderSpeedPerHour: number;
+  urgency: "urgent" | "moderate" | "low";
+  suggestedAction: string;
+  status: "Needs Your Approval" | "Watching" | "Scheduled" | "Van on the Way";
+  sendingStoreCode: string;
+  sendingStoreName: string;
+  transferQuantity: number;
+  senderStartingStock: number;
+  senderLocalDemand: number;
+  moneyAtRisk: number;
+  moneySaved: number;
+  simpleDescription: string;
+  actionCategory?: "TRANSFER" | "DISCOUNT" | "PO_WAIT" | "MONITOR";
+}
+
+export type DeckTab = "alerts" | "deliveries" | "history" | "inventory" | "sandbox";

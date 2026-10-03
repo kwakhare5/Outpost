@@ -217,7 +217,7 @@ async def create_transfer(
         action.status = ActionStatus.EXECUTING
         await db.flush()
 
-    # Route transfer through dispatch_transfer service (Spec §4.B)
+    # Route transfer through dispatch_transfer service (Spec Section 4.B)
     from backend.services.simulation.transfer import dispatch_transfer
     try:
         transfer = await dispatch_transfer(
@@ -316,7 +316,7 @@ async def create_reorder(
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
-    # Inventory is NOT increased now; it increases upon arrival after lead time (Spec §4.B)
+    # Inventory is NOT increased now; it increases upon arrival after lead time (Spec Section 4.B)
     await bus.publish(
         db,
         "REORDER_EXECUTED",

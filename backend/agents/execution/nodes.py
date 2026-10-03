@@ -199,7 +199,7 @@ async def node_execute(state: AgentState) -> dict:
 async def node_verify(state: AgentState) -> dict:
     """Verify that the execution side-effects are reflected in the DB.
 
-    Enforces invariants (spec §20, §21):
+    Enforces invariants (spec Section 20, Section 21):
     1. Source inventory decremented, >= 0 (no negative stock).
     2. Destination inventory incremented, >= 0.
     3. No negative batch quantities.

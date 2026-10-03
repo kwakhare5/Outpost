@@ -1,26 +1,16 @@
 {
-  "timestamp": "2026-10-03T13:46:49.028Z",
+  "timestamp": "2026-10-03T20:25:50.947Z",
   "platform": "Outpost Quick-Commerce Operations",
-  "suite": "End-to-End System Invariants & Physical Integrity",
-  "duration_ms": 3,
-  "total_checkpoints": 10,
-  "passed_checkpoints": 10,
+  "suite": "Domain Invariants & Physical Integrity Runner",
+  "duration_ms": 1,
+  "total_checkpoints": 8,
+  "passed_checkpoints": 8,
   "all_passed": true,
   "checkpoints": [
     {
-      "name": "Simplified Single-Page Architecture",
+      "name": "Mumbai Dark Store Network Topology",
       "passed": true,
-      "details": "Rendered clean single-page operations view with zero bloated component imports"
-    },
-    {
-      "name": "5 Mumbai Dark Store Hubs",
-      "passed": true,
-      "details": "Verified 5 operational dark store hubs: Lower Parel, Bandra West, Andheri East, Powai, Thane West"
-    },
-    {
-      "name": "Level-2 Human Approval Gate",
-      "passed": true,
-      "details": "Interactive human gate requires operator authorization before lateral inventory movement"
+      "details": "Verified 5 active hubs across Mumbai metro with valid geocoordinates and fleet capacities"
     },
     {
       "name": "Conservation of Mass Invariant",
@@ -28,35 +18,35 @@
       "details": "Exact mass conserved: Initial=140u, Post-Transfer=140u (Delta = 0.00)"
     },
     {
-      "name": "Backend FastAPI Modular Architecture",
+      "name": "Discrete FIFO/FEFO Batch Allocation",
       "passed": true,
-      "details": "Verified FastAPI service with isolated routers for health, stores, risks, recommendations, and agent"
+      "details": "Allocated oldest batch (14h expiry) first; zero expired stock leaked into fulfillment"
     },
     {
-      "name": "LangGraph Autonomous Replenishment Pipeline",
+      "name": "Level-2 Human Gate & Alternative RFC Routing",
       "passed": true,
-      "details": "Verified 5-node cyclic replenishment graph in backend/agents/execution/graph.py"
+      "details": "Enforces verified human approval; immediately routes to emergency Bhiwandi RFC PO on rejection"
     },
     {
-      "name": "Strict 12px+ Typography Floor",
+      "name": "Dock Receipt Gate & Discrepancy Reconciliation",
       "passed": true,
-      "details": "Verified clean enterprise typography; exactly 0 sub-12px occurrences"
+      "details": "Physical stock credited only upon dock confirmation; 2u damage discrepancy recorded in ledger"
     },
     {
-      "name": "Discrete FIFO/FEFO Batch Ledger",
+      "name": "Availability-Bias-Free Demand Accounting",
       "passed": true,
-      "details": "Physical stock represented as discrete manufacturing batches with expiration timestamps"
+      "details": "Calculates true requested demand (30u) = fulfilled (18u) + lost sales (12u) without censorship"
     },
     {
       "name": "Operational Scenario Drivers",
       "passed": true,
-      "details": "Deterministic scenario controllers alter simulation: demand spikes, RFC delays, network imbalance"
+      "details": "Deterministic scenario drivers: IPL Demand Spike (19.0 u/h) & Bhiwandi RFC Delay (+4h)"
     },
     {
-      "name": "Fleet Corridors & RFC Inbound Pipeline",
+      "name": "REST API Endpoints & Payload Contracts",
       "passed": true,
-      "details": "Inter-store transit corridors (Tata Ace vans) and scheduled Regional Fulfilment Centre orders"
+      "details": "Verified strongly-typed payload schemas for stores, transfers, recommendations, and dock arrivals"
     }
   ],
-  "sha256_hash": "1dcdb531596e18790f763e42e7a99bf272a3fb9621bc68ed1255263bfb8ccc63"
+  "sha256_hash": "40eddb5522e685796c714f8e89c382c48ea36f97fe9a43ab840ecf52d12f9187"
 }

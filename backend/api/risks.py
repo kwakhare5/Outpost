@@ -1,4 +1,4 @@
-"""Risk REST API — spec §32.
+"""Risk REST API — spec Section 32.
 
 Endpoints:
     GET  /api/risks                  — list risks with optional filters (store_id, product_id, risk_type, severity, status)

@@ -128,7 +128,7 @@ class HoldInput:
 
 @dataclass
 class ExplainabilityFacts:
-    """Structured 5-part explainability container per spec §15, §17."""
+    """Structured 5-part explainability container per spec Section 15, Section 17."""
     what_happened: str
     why_this_action: str
     why_not_alternatives: dict[str, str]
@@ -401,7 +401,7 @@ class PureDecisionEvaluator:
         else:
             confidence = 1.0
 
-        # Build 5-part structured explainability per spec §15, §17
+        # Build 5-part structured explainability per spec Section 15, Section 17
         if hold.stockout_probability >= 0.3:
             what_happened = (
                 f"Projected demand depletes inventory in {hold.hours_to_stockout:.1f}h "

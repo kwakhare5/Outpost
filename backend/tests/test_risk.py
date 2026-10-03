@@ -1,4 +1,4 @@
-"""TDD tests for the Risk Engine (spec §5, §13, §29.10, Phase 4).
+"""TDD tests for the Risk Engine (spec Section 5, Section 13, Section 29.10, Phase 4).
 
 Test seams in order of the red→green loop:
 
@@ -147,7 +147,7 @@ def test_spoilage_probability_in_unit_interval():
 
 
 def test_spoilage_discount_tier_by_hours():
-    """Discount tier matches spec §14.3 policy tiers."""
+    """Discount tier matches spec Section 14.3 policy tiers."""
     calc = SpoilageCalculator()
 
     def tier(hrs):
@@ -160,7 +160,7 @@ def test_spoilage_discount_tier_by_hours():
         )
         return calc.evaluate(inp).discount_tier
 
-    # Spec §14.3: >24h → 0%, 12-24h → 10%, 6-12h → 20%, <6h → 30%
+    # Spec Section 14.3: >24h → 0%, 12-24h → 10%, 6-12h → 20%, <6h → 30%
     assert tier(30.0) == DiscountTier.NONE
     assert tier(18.0) == DiscountTier.TEN_PCT
     assert tier(9.0) == DiscountTier.TWENTY_PCT

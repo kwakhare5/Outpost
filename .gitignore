@@ -17,6 +17,8 @@ api_keys_backup.md
 tsconfig.tsbuildinfo
 .env.local
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 scratch/
 

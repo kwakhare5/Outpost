@@ -1,4 +1,4 @@
-"""Forecast REST API — spec §32.
+"""Forecast REST API — spec Section 32.
 
 Endpoints:
     GET  /api/forecasts              — list forecasts (with filters)

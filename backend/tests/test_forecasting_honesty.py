@@ -1,4 +1,4 @@
-"""Deterministic tests for Forecasting Honesty & Real Metrics (Spec §4.D).
+"""Deterministic tests for Forecasting Honesty & Real Metrics (Spec Section 4.D).
 
 Verifies:
 1. Exact mathematical calculation of MAE and WAPE on known fixtures.

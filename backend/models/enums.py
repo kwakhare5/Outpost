@@ -68,3 +68,19 @@ class RiskStatus(str, enum.Enum):
     MITIGATED = 'mitigated'
     RESOLVED = 'resolved'
     EXPIRED = 'expired'
+
+class ShipmentStatus(str, enum.Enum):
+    APPROVED = 'approved'
+    PICKED = 'picked'
+    DISPATCHED = 'dispatched'
+    IN_TRANSIT = 'in_transit'
+    AWAITING_CONFIRMATION = 'awaiting_confirmation'
+    RECEIVED = 'received'
+    DISCREPANCY = 'discrepancy'
+    CANCELLED = 'cancelled'
+
+class POStatus(str, enum.Enum):
+    STAGED = 'staged'
+    IN_TRANSIT = 'in_transit'
+    RECEIVED = 'received'
+    CANCELLED = 'cancelled'

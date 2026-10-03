@@ -1,6 +1,6 @@
 """In-process event bus for Outpost.
 
-LOCKED (spec §30): async in-process pub/sub — zero Kafka/RabbitMQ.
+LOCKED (spec Section 30): async in-process pub/sub — zero Kafka/RabbitMQ.
 Events are published to registered async handlers and persisted to
 the Event audit table via an optional database session.
 """

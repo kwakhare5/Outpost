@@ -1,11 +1,11 @@
 """Outpost Forecasting — Pure mathematical models.
 
-Implements spec §12:
-  Level 1 — Baseline: moving average + day-of-week seasonality (§12.1)
-  Level 2 — Time-series: exponential smoothing with trend (§12.1)
-  Anomaly detection and cleaning (§12.4)
-  Confidence scoring — composite multi-factor (§12.3)
-  Evaluation metrics: MAE, RMSE, MAPE (§12.2)
+Implements spec Section 12:
+  Level 1 — Baseline: moving average + day-of-week seasonality (Section 12.1)
+  Level 2 — Time-series: exponential smoothing with trend (Section 12.1)
+  Anomaly detection and cleaning (Section 12.4)
+  Confidence scoring — composite multi-factor (Section 12.3)
+  Evaluation metrics: MAE, RMSE, MAPE (Section 12.2)
 
 Zero heavy C-extension deps: pure Python + stdlib math only.
 """
@@ -45,7 +45,7 @@ class ModelEvaluationResult:
 
 
 # ---------------------------------------------------------------------------
-# Anomaly detection and cleaning (§12.4)
+# Anomaly detection and cleaning (Section 12.4)
 # ---------------------------------------------------------------------------
 
 _MIN_POINTS_FOR_ZSCORE = 4  # need at least N points to compute std
@@ -126,7 +126,7 @@ def clean_demand_series(
 
 
 # ---------------------------------------------------------------------------
-# Baseline predictor — Level 1 (§12.1)
+# Baseline predictor — Level 1 (Section 12.1)
 # ---------------------------------------------------------------------------
 
 _MOVING_AVERAGE_WINDOW = 14  # days
@@ -187,7 +187,7 @@ def _compute_dow_multiplier(
 
 
 # ---------------------------------------------------------------------------
-# Holt linear predictor (double exponential smoothing) — Level 2 (§12.1)
+# Holt linear predictor (double exponential smoothing) — Level 2 (Section 12.1)
 # ---------------------------------------------------------------------------
 
 _MIN_SERIES_FOR_ES = 7  # minimum days to attempt smoothing
@@ -230,7 +230,7 @@ exponential_smoothing_predict = holt_linear_predict
 
 
 # ---------------------------------------------------------------------------
-# Confidence scorer (§12.3)
+# Confidence scorer (Section 12.3)
 # ---------------------------------------------------------------------------
 
 _SAMPLE_SIZE_FULL_CONF = 30  # n ≥ this → max sample-size confidence
@@ -276,7 +276,7 @@ def compute_confidence(
 
 
 # ---------------------------------------------------------------------------
-# Evaluation metrics (§12.2)
+# Evaluation metrics (Section 12.2)
 # ---------------------------------------------------------------------------
 
 

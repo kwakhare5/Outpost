@@ -1,4 +1,4 @@
-"""Acceptance tests for FIX B: Make replenishment operationally realistic (OUTPOST_SPEC §4.B).
+"""Acceptance tests for FIX B: Make replenishment operationally realistic (OUTPOST_SPEC Section 4.B).
 
 Verifies:
 1. Approving a reorder creates a purchase order but does not immediately change on-hand inventory.
@@ -81,7 +81,7 @@ async def _setup_rfc_and_stores(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_reorder_creates_purchase_order_without_immediate_inventory_change(db_session: AsyncSession):
-    """Spec §4.B.1: Approving a reorder creates a purchase order but does NOT immediately change on-hand inventory."""
+    """Spec Section 4.B.1: Approving a reorder creates a purchase order but does NOT immediately change on-hand inventory."""
     clear_active_pos()
     rfc, prod, store_a, store_b = await _setup_rfc_and_stores(db_session)
     now = _naive_now()
@@ -128,7 +128,7 @@ async def test_reorder_creates_purchase_order_without_immediate_inventory_change
 
 @pytest.mark.asyncio
 async def test_purchase_order_remains_in_transit_before_eta_and_arrives_at_eta(db_session: AsyncSession):
-    """Spec §4.B.2 & §4.B.3: PO remains in-transit before ETA; arrival updates inventory exactly once."""
+    """Spec Section 4.B.2 & Section 4.B.3: PO remains in-transit before ETA; arrival updates inventory exactly once."""
     clear_active_pos()
     rfc, prod, store_a, store_b = await _setup_rfc_and_stores(db_session)
     now = _naive_now()
@@ -181,7 +181,7 @@ async def test_purchase_order_remains_in_transit_before_eta_and_arrives_at_eta(d
 
 @pytest.mark.asyncio
 async def test_reorder_and_delivery_idempotency_does_not_duplicate_inventory(db_session: AsyncSession):
-    """Spec §4.B.4: Reprocessing the same approval or arrival event does not duplicate inventory."""
+    """Spec Section 4.B.4: Reprocessing the same approval or arrival event does not duplicate inventory."""
     clear_active_pos()
     rfc, prod, store_a, store_b = await _setup_rfc_and_stores(db_session)
     now = _naive_now()
@@ -222,7 +222,7 @@ async def test_reorder_and_delivery_idempotency_does_not_duplicate_inventory(db_
 
 @pytest.mark.asyncio
 async def test_transfer_calls_dispatch_transfer_without_immediate_dest_inventory_change(db_session: AsyncSession):
-    """Spec §4.B.5 & §4.B.6: Approved transfer records ETA; destination inventory changes only after arrival."""
+    """Spec Section 4.B.5 & Section 4.B.6: Approved transfer records ETA; destination inventory changes only after arrival."""
     clear_active_transfers()
     rfc, prod, store_a, store_b = await _setup_rfc_and_stores(db_session)
     now = _naive_now()
@@ -298,7 +298,7 @@ async def test_transfer_calls_dispatch_transfer_without_immediate_dest_inventory
 
 @pytest.mark.asyncio
 async def test_stale_recommendation_rejected_or_diverts_before_dispatch(db_session: AsyncSession):
-    """Spec §4.B.7: A stale recommendation (insufficient source inventory) is rejected before dispatch."""
+    """Spec Section 4.B.7: A stale recommendation (insufficient source inventory) is rejected before dispatch."""
     clear_active_transfers()
     rfc, prod, store_a, store_b = await _setup_rfc_and_stores(db_session)
     now = _naive_now()
@@ -336,7 +336,7 @@ async def test_stale_recommendation_rejected_or_diverts_before_dispatch(db_sessi
 
 
 def test_regional_fulfilment_centre_naming_convention():
-    """Spec §4.B.8: Seed data must name suppliers Regional Fulfilment Centre (RFC) with no legacy labels."""
+    """Spec Section 4.B.8: Seed data must name suppliers Regional Fulfilment Centre (RFC) with no legacy labels."""
     for s in SUPPLIERS:
         assert "RFC" in s.name or "Regional Fulfilment Centre" in s.name, (
             f"Supplier '{s.name}' does not follow the Regional Fulfilment Centre (RFC) naming convention"

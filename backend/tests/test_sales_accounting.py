@@ -1,4 +1,4 @@
-"""Deterministic tests for Sales Accounting & Demand Rate Tables (Spec §4).
+"""Deterministic tests for Sales Accounting & Demand Rate Tables (Spec Section 4).
 
 Verifies:
 1. Category x hour block x weekday demand rate table values.

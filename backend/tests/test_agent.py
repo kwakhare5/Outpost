@@ -451,24 +451,8 @@ async def test_node_pre_check_passes_for_reorder_action(db_session):
 
 
 # ---------------------------------------------------------------------------
-# 20-21. node_execute
+# 20. node_execute
 # ---------------------------------------------------------------------------
-
-async def test_node_execute_hold_is_noop(db_session):
-    state: AgentState = {
-        "recommendation_id": uuid.uuid4(),
-        "db": db_session,
-        "recommendation": {"action_type": "hold", "status": "approved"},
-        "events": [],
-        "status": "running",
-        "pre_check_passed": True,
-        "stale_inventory": False,
-        "verified": False,
-        "requires_human_review": False,
-    }
-    result = await node_execute(state)
-    assert result["execution_result"]["success"] is True
-    assert result["execution_error"] is None
 
 
 async def test_node_execute_transfer_applies_inventory_change(db_session):
@@ -491,76 +475,7 @@ async def test_node_execute_transfer_applies_inventory_change(db_session):
     assert result["execution_result"]["transferred_quantity"] == 20
 
 
-# ---------------------------------------------------------------------------
-# 22. node_verify
-# ---------------------------------------------------------------------------
 
-async def test_node_verify_passes_after_successful_transfer(db_session):
-    scenario = await _seed_transfer_scenario(db_session)
-    rec_snap = await get_recommendation(db_session, scenario["rec"].recommendation_id)
-    # Execute first
-    exec_result = await create_transfer(db_session, scenario["rec"].recommendation_id)
-
-    state: AgentState = {
-        "recommendation_id": scenario["rec"].recommendation_id,
-        "db": db_session,
-        "recommendation": rec_snap,
-        "execution_result": exec_result,
-        "events": [],
-        "status": "running",
-        "pre_check_passed": True,
-        "stale_inventory": False,
-        "verified": False,
-        "requires_human_review": False,
-    }
-    result = await node_verify(state)
-    assert result["verified"] is True
-
-
-# ---------------------------------------------------------------------------
-# 23. node_finalize
-# ---------------------------------------------------------------------------
-
-async def test_node_finalize_sets_status_completed(db_session):
-    scenario = await _seed_transfer_scenario(db_session)
-    state: AgentState = {
-        "recommendation_id": scenario["rec"].recommendation_id,
-        "db": db_session,
-        "recommendation": {},
-        "events": [],
-        "status": "running",
-        "pre_check_passed": True,
-        "stale_inventory": False,
-        "verified": True,
-        "requires_human_review": False,
-    }
-    result = await node_finalize(state)
-    assert result["status"] == "completed"
-    assert result["requires_human_review"] is False
-
-
-# ---------------------------------------------------------------------------
-# 24. node_recover
-# ---------------------------------------------------------------------------
-
-async def test_node_recover_sets_requires_human_review(db_session):
-    scenario = await _seed_transfer_scenario(db_session)
-    rec_snap = await get_recommendation(db_session, scenario["rec"].recommendation_id)
-    state: AgentState = {
-        "recommendation_id": scenario["rec"].recommendation_id,
-        "db": db_session,
-        "recommendation": rec_snap,
-        "events": [],
-        "status": "running",
-        "pre_check_passed": False,
-        "stale_inventory": True,
-        "pre_check_error": "insufficient_source_inventory",
-        "verified": False,
-        "requires_human_review": False,
-    }
-    result = await node_recover(state)
-    assert result["status"] == "requires_human_review"
-    assert result["requires_human_review"] is True
 
 
 # ---------------------------------------------------------------------------

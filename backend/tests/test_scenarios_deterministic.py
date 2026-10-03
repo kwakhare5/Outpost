@@ -1,4 +1,4 @@
-"""Deterministic Outcome Tests for Scenarios (Spec §4.A).
+"""Deterministic Outcome Tests for Scenarios (Spec Section 4.A).
 
 Verifies that each of the 4 non-baseline scenarios produces provable,
 divergent physical outcomes under identical seeds, rather than decorative config values:
@@ -164,7 +164,7 @@ async def test_network_imbalance_drives_transfer_recommendation(db_session: Asyn
     andheri = next(s for s in all_stores if "Andheri" in s.name)
 
     all_prods = (await db_session.execute(select(Product))).scalars().all()
-    milk = next(p for p in all_prods if "Toned Milk" in p.name)
+    milk = next(p for p in all_prods if "Milk" in p.name)
 
     # Verify physical imbalance state
     andheri_inv = (await db_session.execute(

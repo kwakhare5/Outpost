@@ -32,7 +32,7 @@ from backend.services.simulation.scenarios import (
     set_current_scenario,
     ScenarioConfig,
 )
-# Demand Rate Table: category x hour block x weekday (Spec §4)
+# Demand Rate Table: category x hour block x weekday (Spec Section 4)
 # Hour blocks:
 # 0 = Night (00:00 - 06:00)
 # 1 = Morning Peak (06:00 - 11:00) - breakfast, milk, bread, produce
@@ -421,7 +421,7 @@ class SimulationEngine:
             items_accounting: list[tuple[int, int, int]] = []
 
             for prod_seed in selected_products:
-                # Quantity driven by category x hour block x weekday rate table + scenario multiplier (Spec §4)
+                # Quantity driven by category x hour block x weekday rate table + scenario multiplier (Spec Section 4)
                 rate_mult = get_demand_rate_multiplier(
                     prod_seed.category, order_time.hour, order_time.weekday()
                 )

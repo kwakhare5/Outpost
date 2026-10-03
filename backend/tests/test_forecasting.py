@@ -1,4 +1,4 @@
-"""TDD tests for the forecasting engine (spec §12).
+"""TDD tests for the forecasting engine (spec Section 12).
 
 Test seams, in order of the red→green loop:
 

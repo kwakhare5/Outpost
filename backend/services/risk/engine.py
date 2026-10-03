@@ -2,10 +2,10 @@
 
 Orchestrates risk detection across inventory, forecasts, and batch states:
   1. Scan store inventory and compare against 24h/48h demand forecasts.
-  2. Compute stockout risk with StockoutCalculator (spec §5.1).
-  3. Scan perishable batches and compute spoilage risk with SpoilageCalculator (spec §5.2).
-  4. Persist Risk records to DB (spec §29.10).
-  5. Emit RISK_DETECTED events via in-process EventBus (spec §30).
+  2. Compute stockout risk with StockoutCalculator (spec Section 5.1).
+  3. Scan perishable batches and compute spoilage risk with SpoilageCalculator (spec Section 5.2).
+  4. Persist Risk records to DB (spec Section 29.10).
+  5. Emit RISK_DETECTED events via in-process EventBus (spec Section 30).
   6. Support risk resolution and status transitions (ACTIVE -> RESOLVED).
 """
 from __future__ import annotations

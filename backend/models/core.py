@@ -8,7 +8,8 @@ from backend.database import Base
 from backend.models.enums import (
     StoreStatus, ProductCategory, OrderStatus, SupplierStatus,
     RiskType, RiskSeverity, ActionType, ActionStatus,
-    RecommendationStatus, SimulationStatus, RiskStatus
+    RecommendationStatus, SimulationStatus, RiskStatus,
+    ShipmentStatus, POStatus
 )
 
 class Store(Base):
@@ -187,3 +188,65 @@ class Simulation(Base):
     current_time: Mapped[datetime] = mapped_column(DateTime)
     status: Mapped[SimulationStatus]
     configuration: Mapped[Any] = mapped_column(JSON)
+
+class Shipment(Base):
+    __tablename__ = 'shipment'
+    
+    shipment_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    recommendation_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey('recommendation.recommendation_id'), nullable=True)
+    source_store_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('store.store_id'))
+    destination_store_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('store.store_id'))
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
+    quantity: Mapped[int] = mapped_column(Integer)
+    status: Mapped[ShipmentStatus] = mapped_column(default=ShipmentStatus.DISPATCHED)
+    dispatched_at: Mapped[datetime] = mapped_column(DateTime)
+    arrival_eta: Mapped[datetime] = mapped_column(DateTime)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    batch_records: Mapped[Any] = mapped_column(JSON)
+    distance_km: Mapped[float] = mapped_column(Float, default=0.0)
+    traffic_multiplier: Mapped[float] = mapped_column(Float, default=1.0)
+    van_id: Mapped[str] = mapped_column(default="VAN-MUM-01")
+
+class PurchaseOrder(Base):
+    __tablename__ = 'purchase_order'
+    
+    po_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    po_number: Mapped[str] = mapped_column(default="PO-4471")
+    supplier_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('supplier.supplier_id'))
+    destination_store_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('store.store_id'))
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
+    quantity: Mapped[int] = mapped_column(Integer)
+    status: Mapped[POStatus] = mapped_column(default=POStatus.IN_TRANSIT)
+    ordered_at: Mapped[datetime] = mapped_column(DateTime)
+    arrival_eta: Mapped[datetime] = mapped_column(DateTime)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+class ReceiptConfirmation(Base):
+    __tablename__ = 'receipt_confirmation'
+    
+    confirmation_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    shipment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('shipment.shipment_id'))
+    sent_units: Mapped[int] = mapped_column(Integer)
+    received_units: Mapped[int] = mapped_column(Integer)
+    discrepancy_units: Mapped[int] = mapped_column(Integer, default=0)
+    discrepancy_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class OutcomeRecord(Base):
+    __tablename__ = 'outcome_record'
+    
+    outcome_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    recommendation_id: Mapped[Optional[uuid.UUID]] = mapped_column(nullable=True)
+    store_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('store.store_id'))
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
+    exception_title: Mapped[str]
+    action_taken: Mapped[str]
+    outcome_status: Mapped[str]
+    expected_lost_sales_units: Mapped[int] = mapped_column(Integer, default=0)
+    actual_lost_sales_units: Mapped[int] = mapped_column(Integer, default=0)
+    measured_vs_expected: Mapped[str]
+    waste_units: Mapped[int] = mapped_column(Integer, default=0)
+    waste_value_inr: Mapped[float] = mapped_column(Float, default=0.0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

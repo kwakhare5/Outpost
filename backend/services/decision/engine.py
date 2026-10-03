@@ -310,7 +310,7 @@ class DecisionOrchestrator:
         recommendation_id: uuid.UUID,
         approver: str = "operator",
     ) -> Recommendation | None:
-        """Set recommendation status to APPROVED and stage a pending Action (spec §18, §21 Level-2 autonomy)."""
+        """Set recommendation status to APPROVED and stage a pending Action (spec Section 18, Section 21 Level-2 autonomy)."""
         rec: Recommendation | None = await db.get(Recommendation, recommendation_id)
         if rec is None:
             return None

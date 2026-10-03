@@ -1,11 +1,11 @@
 """Outpost Risk Engine — Pure deterministic risk models.
 
-Implements spec §5 (availability + waste loops), §13 (batch-aware inventory),
-§14.3 (discount tiers), §29.10 (Risk ORM schema).
+Implements spec Section 5 (availability + waste loops), Section 13 (batch-aware inventory),
+Section 14.3 (discount tiers), Section 29.10 (Risk ORM schema).
 
 Risk Types:
-  STOCKOUT — expected demand will exhaust inventory before resupply (§5.1)
-  SPOILAGE — perishable batch will expire before it can be sold (§5.2)
+  STOCKOUT — expected demand will exhaust inventory before resupply (Section 5.1)
+  SPOILAGE — perishable batch will expire before it can be sold (Section 5.2)
 
 All logic is pure Python — no async, no DB. Easily unit-tested.
 The RiskEngine (engine.py) orchestrates DB I/O and event emission.
@@ -29,7 +29,7 @@ class RiskSeverityLevel(str, enum.Enum):
 
 
 # ---------------------------------------------------------------------------
-# Discount tiers (spec §14.3)
+# Discount tiers (spec Section 14.3)
 # ---------------------------------------------------------------------------
 
 class DiscountTier(str, enum.Enum):
@@ -40,7 +40,7 @@ class DiscountTier(str, enum.Enum):
 
 
 def discount_tier_for_hours(hours_remaining: float) -> DiscountTier:
-    """Map hours-to-expiry to the correct discount tier per spec §14.3."""
+    """Map hours-to-expiry to the correct discount tier per spec Section 14.3."""
     if hours_remaining > 24:
         return DiscountTier.NONE
     elif hours_remaining > 12:

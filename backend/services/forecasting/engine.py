@@ -2,12 +2,12 @@
 
 Orchestrates forecast generation over simulator historical data:
   1. Aggregate daily demand per (store, product) from Order/OrderItem history.
-  2. Detect and clean anomalies (§12.4).
+  2. Detect and clean anomalies (Section 12.4).
   3. Fit Baseline model and (if enough data) Time-Series model.
   4. Select the model with lower MAE on held-out tail (when possible).
-  5. Compute dynamic confidence score (§12.3).
-  6. Persist Forecast rows to DB (§29.9).
-  7. Emit FORECAST_UPDATED events (§30).
+  5. Compute dynamic confidence score (Section 12.3).
+  6. Persist Forecast rows to DB (Section 29.9).
+  7. Emit FORECAST_UPDATED events (Section 30).
 """
 from __future__ import annotations
 
@@ -137,7 +137,9 @@ class ForecastingEngine:
             order_date = order.created_at.date()
             day_index = (order_date - min_date).days
             key = (order.store_id, item.product_id)
-            acc[key][day_index] += float(item.quantity)
+            # Use unconstrained requested demand to prevent availability bias from stockouts
+            effective_qty = float(item.requested_quantity) if (item.requested_quantity and item.requested_quantity > 0) else float(item.quantity)
+            acc[key][day_index] += effective_qty
 
         # Build continuous dense DemandPoint series
         series_map: dict[tuple[uuid.UUID, uuid.UUID], list[DemandPoint]] = {}
