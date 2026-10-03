@@ -1,4 +1,4 @@
-"""GROCER v2 Simulation Engine.
+"""Outpost Simulation Engine.
 
 Handles deterministic simulation: time control, seeding,
 order generation, inventory/batch lifecycle.
@@ -106,7 +106,7 @@ class SimulationClock:
 
 
 class SimulationEngine:
-    """Core simulation engine for GROCER v2.
+    """Core simulation engine for Outpost.
 
     Handles:
     - Database seeding (stores, suppliers, products, customers)

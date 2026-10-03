@@ -1,4 +1,4 @@
-"""Operational Scenario Driver for GROCER v2 (Phase 2).
+"""Operational Scenario Driver for Outpost (Phase 2).
 
 Encapsulates the 5 canonical benchmark scenarios:
 1. normal: Baseline controlled stochastic Poisson demand across all 5 stores.

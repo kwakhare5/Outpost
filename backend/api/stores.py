@@ -8,10 +8,14 @@ Endpoints:
 """
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -176,4 +180,133 @@ async def get_store_risks(
         )
         for r in risks
     ]
+
+
+class CsvTextPayload(BaseModel):
+    csv_text: str
+
+
+class CsvUploadResponse(BaseModel):
+    success: bool
+    message: str
+    total_stores: int
+    total_stock: int
+    stores: list[dict[str, Any]]
+    recommendation: Optional[dict[str, Any]] = None
+
+
+def _parse_and_evaluate_csv(content: str) -> CsvUploadResponse:
+    reader = csv.DictReader(io.StringIO(content.strip()))
+    stores = []
+
+    for idx, row in enumerate(reader):
+        clean_row = {k.strip().lower().replace(" ", "_"): v.strip() for k, v in row.items() if k}
+        if not clean_row:
+            continue
+
+        code = clean_row.get("store_code") or clean_row.get("code") or f"ST-{idx+1:02d}"
+        name = clean_row.get("store_name") or clean_row.get("name") or f"Store {code}"
+        locality = clean_row.get("locality") or clean_row.get("location") or "Mumbai Metro"
+
+        try:
+            milk_units = max(0, int(float(clean_row.get("milk_units") or clean_row.get("units") or clean_row.get("stock") or 0)))
+        except (ValueError, TypeError):
+            milk_units = 0
+
+        try:
+            capacity = max(1, int(float(clean_row.get("capacity") or clean_row.get("max_capacity") or 50)))
+        except (ValueError, TypeError):
+            capacity = 50
+
+        try:
+            active_orders = max(0, int(float(clean_row.get("active_orders") or clean_row.get("orders") or clean_row.get("demand") or 10)))
+        except (ValueError, TypeError):
+            active_orders = 10
+
+        burn_rate = max(0.5, active_orders / 4.0)
+        stockout_hours = round(milk_units / burn_rate, 1)
+
+        if stockout_hours < 5.0:
+            status_type = "critical"
+            status = f"Critical ({stockout_hours}h buffer)"
+        elif milk_units > 35:
+            status_type = "surplus"
+            status = f"Surplus (+{max(0, milk_units - 25)} units safe)"
+        else:
+            status_type = "normal"
+            status = "Normal"
+
+        stores.append({
+            "id": f"store-{code.lower()}",
+            "code": code.upper(),
+            "name": name,
+            "locality": locality,
+            "milkUnits": milk_units,
+            "capacity": capacity,
+            "status": status,
+            "statusType": status_type,
+            "nextExpiryHours": 40 + (idx * 2),
+            "activeOrders": active_orders,
+            "stockoutHours": stockout_hours,
+        })
+
+    if not stores:
+        raise HTTPException(status_code=400, detail="No valid store rows found in CSV.")
+
+    total_stock = sum(s["milkUnits"] for s in stores)
+
+    # Solve best transfer recommendation
+    critical_stores = [s for s in stores if s["statusType"] == "critical"]
+    surplus_stores = [s for s in stores if s["statusType"] == "surplus" and s["milkUnits"] >= 20]
+
+    recommendation = None
+    if critical_stores and surplus_stores:
+        dest = min(critical_stores, key=lambda s: s["stockoutHours"])
+        source = max(surplus_stores, key=lambda s: s["milkUnits"])
+
+        if source["id"] != dest["id"]:
+            transfer_qty = min(20, source["milkUnits"] - 15)
+            if transfer_qty > 0:
+                recommendation = {
+                    "id": f"REC-CSV-{uuid.uuid4().hex[:6].upper()}",
+                    "sourceStoreId": source["id"],
+                    "sourceStoreCode": source["code"],
+                    "sourceStoreName": source["name"],
+                    "sourcePreUnits": source["milkUnits"],
+                    "sourcePostUnits": source["milkUnits"] - transfer_qty,
+                    "destStoreId": dest["id"],
+                    "destStoreCode": dest["code"],
+                    "destStoreName": dest["name"],
+                    "destPreUnits": dest["milkUnits"],
+                    "destPostUnits": dest["milkUnits"] + transfer_qty,
+                    "transferUnits": transfer_qty,
+                    "corridor": f"{source['locality']} ➔ {dest['locality']} Express Van",
+                    "etaMins": 22,
+                    "vanId": "Van #MH-02",
+                    "savingsInr": 1180,
+                }
+
+    return CsvUploadResponse(
+        success=True,
+        message=f"Successfully loaded {len(stores)} dark stores ({total_stock} total units).",
+        total_stores=len(stores),
+        total_stock=total_stock,
+        stores=stores,
+        recommendation=recommendation,
+    )
+
+
+@router.post("/upload-csv", response_model=CsvUploadResponse)
+async def upload_stores_csv(file: UploadFile = File(...)) -> CsvUploadResponse:
+    """Accept multipart CSV file upload, sanitize rows, and generate dynamic rebalance triage."""
+    content_bytes = await file.read()
+    content = content_bytes.decode("utf-8", errors="replace")
+    return _parse_and_evaluate_csv(content)
+
+
+@router.post("/upload-csv-text", response_model=CsvUploadResponse)
+async def upload_stores_csv_text(payload: CsvTextPayload) -> CsvUploadResponse:
+    """Accept raw CSV text in JSON body, sanitize rows, and generate dynamic rebalance triage."""
+    return _parse_and_evaluate_csv(payload.csv_text)
+
 

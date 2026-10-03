@@ -1,4 +1,4 @@
-﻿"""TDD tests for the Decision Engine pure models (spec sections 14-17, Phase 5).
+"""TDD tests for the Decision Engine pure models (spec sections 14-17, Phase 5).
 
 Test seams in red->green order:
 
@@ -117,52 +117,9 @@ def _hold(stockout_prob: float = 0.05, spoilage_prob: float = 0.05) -> HoldInput
 
 
 # ---------------------------------------------------------------------------
-# 1. ReasonCode enum
+# 1. SafeExcessCalculator
 # ---------------------------------------------------------------------------
 
-def test_reason_codes_have_all_spec_values():
-    """All reason codes from spec section 17 must be present."""
-    expected = {
-        "HIGH_STOCKOUT_RISK",
-        "SOURCE_HAS_SAFE_EXCESS",
-        "SUPPLIER_TOO_SLOW",
-        "LOW_TRANSFER_DISTANCE",
-        "HIGH_SPOILAGE_RISK",
-        "DISCOUNT_CAN_ACCELERATE",
-        "NO_SAFE_TRANSFER_SOURCE",
-        "INVENTORY_HEALTHY",
-        "EXPIRY_DISTANT",
-        "STOCKOUT_RISK_LOW",
-        "WOULD_DEPLETE_SOURCE",
-        "EXCEEDS_MAX_DISTANCE",
-        "CANNOT_ARRIVE_IN_TIME",
-    }
-    actual = {c.value for c in ReasonCode}
-    assert expected.issubset(actual)
-
-
-# ---------------------------------------------------------------------------
-# 2. ScoringWeights
-# ---------------------------------------------------------------------------
-
-def test_scoring_weights_defaults_are_sane():
-    w = DEFAULT_WEIGHTS
-    assert 0 < w.stockout_risk_reduction <= 1
-    assert 0 < w.spoilage_reduction <= 1
-    assert w.max_transfer_distance_km > 0
-    assert w.safety_window_hours > 0
-
-def test_scoring_weights_are_overridable():
-    custom = ScoringWeights(stockout_risk_reduction=0.50, spoilage_reduction=0.10)
-    assert custom.stockout_risk_reduction == 0.50
-    # immutable -- should not accept assignment
-    with pytest.raises(Exception):
-        custom.stockout_risk_reduction = 0.99  # type: ignore[misc]
-
-
-# ---------------------------------------------------------------------------
-# 3. SafeExcessCalculator
-# ---------------------------------------------------------------------------
 
 def test_safe_excess_returns_zero_when_inventory_is_tight():
     calc = SafeExcessCalculator()

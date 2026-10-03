@@ -17,5 +17,5 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> dict:
     return {
         'status': 'healthy',
         'database': db_status,
-        'service': 'GROCER v2',
+        'service': 'Outpost',
     }

@@ -1,4 +1,4 @@
-"""GROCER v2 Decision Engine -- Pure deterministic models.
+"""Outpost Decision Engine -- Pure deterministic models.
 
 Implements spec section 14 (decision pipeline), section 15 (transfer logic /
 safe excess / hard constraints), section 16 (configurable weighted scoring),

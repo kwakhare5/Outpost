@@ -1,4 +1,4 @@
-"""GROCER v2 Forecasting — Pure mathematical models.
+"""Outpost Forecasting — Pure mathematical models.
 
 Implements spec §12:
   Level 1 — Baseline: moving average + day-of-week seasonality (§12.1)

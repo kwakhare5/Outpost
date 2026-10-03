@@ -12,8 +12,24 @@ from backend.main import create_app
 from sqlalchemy import event, text
 from sqlalchemy.pool import NullPool
 
-# Use a test database URL (SQLite async for fast isolated tests)
-TEST_DATABASE_URL = 'sqlite+aiosqlite:///./test.db'
+import os
+import sys
+from pathlib import Path
+
+# Ensure repo root and backend directory are in sys.path regardless of execution root
+_backend_dir = Path(__file__).resolve().parent.parent
+_repo_root = _backend_dir.parent
+
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
+
+import backend.models  # Ensure all model tables are registered on Base.metadata
+
+# Use a test database URL resolved cleanly to the backend directory
+TEST_DB_PATH = (_backend_dir / "test.db").resolve()
+TEST_DATABASE_URL = f"sqlite+aiosqlite:///{TEST_DB_PATH.as_posix()}"
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
 test_session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -41,12 +57,18 @@ async def setup_database():
     """Create all tables before each test, drop after."""
     async with test_engine.begin() as conn:
         await conn.execute(text("PRAGMA foreign_keys = OFF;"))
-        await conn.run_sync(Base.metadata.drop_all)
+        try:
+            await conn.run_sync(lambda sync_conn: Base.metadata.drop_all(sync_conn, checkfirst=True))
+        except Exception:
+            pass
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with test_engine.begin() as conn:
         await conn.execute(text("PRAGMA foreign_keys = OFF;"))
-        await conn.run_sync(Base.metadata.drop_all)
+        try:
+            await conn.run_sync(lambda sync_conn: Base.metadata.drop_all(sync_conn, checkfirst=True))
+        except Exception:
+            pass
 
 
 

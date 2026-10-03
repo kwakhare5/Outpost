@@ -1,4 +1,4 @@
-"""Supplier Order & Lead-Time Simulation Service for GROCER v2.
+"""Supplier Order & Lead-Time Simulation Service for Outpost.
 
 Handles:
 - Purchase order (PO) creation with realistic supplier lead times

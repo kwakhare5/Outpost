@@ -1,612 +1,699 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
-import { AppGlobalHeader } from "../components/navigation/AppGlobalHeader";
-import { OperationsDashboard } from "../components/operations/OperationsDashboard";
-import {
-  INITIAL_STORES,
-  INITIAL_RECOMMENDATIONS,
-  INITIAL_EVENTS,
-} from "../lib/mockData";
-import {
-  DarkStore,
-  RecommendationItem,
-  SimulationEvent,
-  SimulationState,
-  ScenarioState,
-} from "../lib/types";
-import {
-  operatorApi,
-  transformStores,
-  transformRecommendation,
-  BackendAgentRun,
-  createSyntheticAgentRun,
-} from "../lib/apiClient";
-import {
-  runScenarioStep,
-  getScenario,
-  getScenarioInitialStores,
-  getScenarioInitialRecommendations,
-} from "../lib/scenarioEngine";
+/**
+ * Outpost — Autonomous Quick-Commerce Operations Platform
+ * Cluster: MUMBAI NETWORK
+ * Level-2 Gate: Authorise & Dispatch Van Now
+ */
+
+import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SimulationFloatingIsland } from "../components/operations/SimulationFloatingIsland";
+import { BatchItem, DeckTab, RFCInboundOrder, StoreHub, TransferRecord } from "@/lib/types";
+import { Sidebar } from "@/components/dashboard/Sidebar";
+import { Header } from "@/components/dashboard/Header";
+import { MetricsOverview } from "@/components/dashboard/MetricsOverview";
+import { TriageCard } from "@/components/dashboard/TriageCard";
+import { StoreTable } from "@/components/dashboard/StoreTable";
+import { StoreInspectorDrawer } from "@/components/dashboard/StoreInspectorDrawer";
+import { TransfersTable } from "@/components/dashboard/TransfersTable";
+import { BatchLedgerTable } from "@/components/dashboard/BatchLedgerTable";
+import { ArchitectureModal } from "@/components/dashboard/ArchitectureModal";
+import { TestLabModal } from "@/components/dashboard/TestLabModal";
+import { ArrowRight, Clock, ShieldCheck, Truck } from "lucide-react";
+import {
+  applyLiveScenario,
+  checkBackendHealth,
+  CsvRecommendation,
+  executeLiveTransfer,
+  fetchLiveStores,
+} from "@/lib/api";
 
-// ---------------------------------------------------------------------------
-// Default scenario state
-// ---------------------------------------------------------------------------
+// 5 Mumbai Operational Dark Store Hubs (Ground Truth Invariant State)
+const INITIAL_STORES: StoreHub[] = [
+  {
+    id: "st-04",
+    code: "ST-04",
+    name: "Lower Parel",
+    locality: "Senapati Bapat Marg",
+    milkUnits: 4,
+    capacity: 30,
+    status: "Critical (4.8h buffer)",
+    statusType: "critical",
+    nextExpiryHours: 32,
+    activeOrders: 18,
+  },
+  {
+    id: "st-02",
+    code: "ST-02",
+    name: "Bandra West",
+    locality: "Hill Road / Turner",
+    milkUnits: 48,
+    capacity: 50,
+    status: "Surplus (+20 units safe)",
+    statusType: "surplus",
+    nextExpiryHours: 44,
+    activeOrders: 9,
+  },
+  {
+    id: "st-01",
+    code: "ST-01",
+    name: "Andheri East",
+    locality: "MIDC Cyber Hub",
+    milkUnits: 35,
+    capacity: 45,
+    status: "Normal",
+    statusType: "normal",
+    nextExpiryHours: 38,
+    activeOrders: 14,
+  },
+  {
+    id: "st-03",
+    code: "ST-03",
+    name: "Powai Galleria",
+    locality: "Hiranandani Gardens",
+    milkUnits: 28,
+    capacity: 35,
+    status: "Normal",
+    statusType: "normal",
+    nextExpiryHours: 42,
+    activeOrders: 11,
+  },
+  {
+    id: "st-05",
+    code: "ST-05",
+    name: "Thane West",
+    locality: "Ghodbunder Road",
+    milkUnits: 25,
+    capacity: 35,
+    status: "Normal",
+    statusType: "normal",
+    nextExpiryHours: 48,
+    activeOrders: 8,
+  },
+];
 
-function defaultScenarioState(): ScenarioState {
-  return {
-    activeScenarioId: null,
-    currentStep: 0,
-    totalSteps: 0,
-    isAutoPlaying: false,
-    isComplete: false,
-    seed: 0,
-  };
-}
+const INITIAL_BATCHES: BatchItem[] = [
+  {
+    id: "B-MUM-MILK-001",
+    storeCode: "ST-04",
+    sku: "Amul Taaza Whole Milk 1L",
+    units: 4,
+    receivedTime: "Today 05:00",
+    expiresInHours: 32,
+    fifoPriority: 1,
+    state: "fresh",
+  },
+  {
+    id: "B-MUM-MILK-002",
+    storeCode: "ST-02",
+    sku: "Amul Taaza Whole Milk 1L",
+    units: 20,
+    receivedTime: "Today 06:15",
+    expiresInHours: 40,
+    fifoPriority: 1,
+    state: "fresh",
+    originCode: "ST-02",
+    destCode: "ST-04",
+  },
+  {
+    id: "B-MUM-MILK-003",
+    storeCode: "ST-02",
+    sku: "Amul Taaza Whole Milk 1L",
+    units: 28,
+    receivedTime: "Today 08:30",
+    expiresInHours: 48,
+    fifoPriority: 2,
+    state: "fresh",
+  },
+  {
+    id: "B-MUM-MILK-004",
+    storeCode: "ST-01",
+    sku: "Amul Taaza Whole Milk 1L",
+    units: 35,
+    receivedTime: "Today 07:00",
+    expiresInHours: 38,
+    fifoPriority: 1,
+    state: "fresh",
+  },
+  {
+    id: "B-MUM-MILK-005",
+    storeCode: "ST-03",
+    sku: "Amul Taaza Whole Milk 1L",
+    units: 28,
+    receivedTime: "Today 07:45",
+    expiresInHours: 42,
+    fifoPriority: 1,
+    state: "fresh",
+  },
+  {
+    id: "B-MUM-MILK-006",
+    storeCode: "ST-05",
+    sku: "Amul Taaza Whole Milk 1L",
+    units: 25,
+    receivedTime: "Today 09:00",
+    expiresInHours: 48,
+    fifoPriority: 1,
+    state: "fresh",
+  },
+];
 
-// ---------------------------------------------------------------------------
-// Main Outpost Application
-// ---------------------------------------------------------------------------
+const INITIAL_TRANSFERS: TransferRecord[] = [
+  {
+    id: "TR-MUM-2026-08",
+    fromCode: "ST-02",
+    fromName: "Bandra West",
+    toCode: "ST-04",
+    toName: "Lower Parel",
+    units: 20,
+    vanId: "Van #MH-02",
+    eta: "Staged (Pending Approval)",
+    status: "Staged",
+    corridor: "Bandra-Worli Sea Link",
+    batchId: "B-MUM-MILK-002",
+  },
+  {
+    id: "TR-MUM-2026-07",
+    fromCode: "ST-03",
+    fromName: "Powai Galleria",
+    toCode: "ST-01",
+    toName: "Andheri East",
+    units: 10,
+    vanId: "Van #MH-05",
+    eta: "Delivered at 13:45 IST",
+    status: "Completed",
+    corridor: "JVLR Express",
+    batchId: "B-MUM-MILK-005",
+  },
+];
 
-function OutpostApp() {
-  const [stores, setStores] = useState<DarkStore[]>(INITIAL_STORES);
-  const [recommendations, setRecommendations] = useState<RecommendationItem[]>(
-    INITIAL_RECOMMENDATIONS
-  );
-  const [events, setEvents] = useState<SimulationEvent[]>(INITIAL_EVENTS);
-  const [isLiveApiConnected, setIsLiveApiConnected] = useState<boolean>(false);
-  const [activeSimulationId, setActiveSimulationId] = useState<string | null>(null);
-  const [simulation, setSimulation] = useState<SimulationState>({
-    isRunning: false,
-    currentDay: 7,
-    currentHour: 12,
-    activeScenario: "mumbai_fleet_rush",
-    totalOrdersDelivered: 1420,
-    wasteAvoidedINR: 4890,
-    stockoutMitigatedCount: 14,
-    avgTransferTimeMinutes: 22,
-  });
-  const [scenario, setScenario] = useState<ScenarioState>(defaultScenarioState());
-  const [agentRuns, setAgentRuns] = useState<BackendAgentRun[]>([]);
+const INITIAL_RFC_ORDERS: RFCInboundOrder[] = [
+  {
+    id: "PO-RFC-MUM-019",
+    storeCode: "ST-05",
+    storeName: "Thane West",
+    units: 30,
+    status: "In Transit",
+    eta: "ETA 2.5h (Bhiwandi RFC Corridor)",
+    sku: "Amul Taaza Whole Milk 1L",
+  },
+  {
+    id: "PO-RFC-MUM-020",
+    storeCode: "ST-01",
+    storeName: "Andheri East",
+    units: 40,
+    status: "Staged at RFC",
+    eta: "ETA 4.0h (Scheduled Departure)",
+    sku: "Amul Taaza Whole Milk 1L",
+  },
+];
 
-  // Calculate live critical risk count
-  const criticalRiskCount = stores.reduce(
-    (acc, s) => acc + (s.stockoutRiskCount > 0 ? 1 : 0),
-    0
-  );
+export default function Home() {
+  const [activeTab, setActiveTab] = useState<DeckTab>("feed");
+  const [drawerStore, setDrawerStore] = useState<StoreHub | null>(null);
+  const [stores, setStores] = useState<StoreHub[]>(INITIAL_STORES);
+  const [batches, setBatches] = useState<BatchItem[]>(INITIAL_BATCHES);
+  const [transfers, setTransfers] = useState<TransferRecord[]>(INITIAL_TRANSFERS);
+  const [rfcOrders, setRfcOrders] = useState<RFCInboundOrder[]>(INITIAL_RFC_ORDERS);
+  const [isTransferred, setIsTransferred] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [activeScenario, setActiveScenario] = useState<string>("nominal");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
+  const [isTestLabOpen, setIsTestLabOpen] = useState(false);
+  const [customRecommendation, setCustomRecommendation] = useState<CsvRecommendation | null>(null);
+  const [isBackendOnline, setIsBackendOnline] = useState(false);
 
-  // Active scenario name helper
-  const activeScenarioObj = scenario.activeScenarioId ? getScenario(scenario.activeScenarioId) : null;
-
-  // -------------------------------------------------------------------------
-  // FastAPI Backend Sync
-  // -------------------------------------------------------------------------
-
-  const syncWithBackend = useCallback(async () => {
-    try {
-      const isHealthy = await operatorApi.checkHealth();
-      if (!isHealthy) {
-        setIsLiveApiConnected(false);
-        return;
-      }
-
-      setIsLiveApiConnected(true);
-
-      const [backendStores, backendProducts, backendRisks, backendRecs, activeSim, runs] = await Promise.all([
-        operatorApi.getStores(),
-        operatorApi.getProducts(),
-        operatorApi.getRisks(),
-        operatorApi.getRecommendations(),
-        operatorApi.getActiveSimulation(),
-        operatorApi.getAgentRuns(),
-      ]);
-
-      if (runs && runs.length > 0) {
-        setAgentRuns(runs);
-      }
-
-      if (activeSim && activeSim.simulation_id) {
-        setActiveSimulationId(activeSim.simulation_id);
-        if (activeSim.current_time) {
-          const simDate = new Date(activeSim.current_time);
-          setSimulation((prev) => ({
-            ...prev,
-            currentDay: (Math.floor(simDate.getTime() / (1000 * 60 * 60 * 24)) % 30) + 1,
-            currentHour: simDate.getUTCHours(),
-          }));
-        }
-      }
-
-      if (backendStores && backendStores.length > 0) {
-        const transformedStores = transformStores(backendStores, backendRisks || []);
-        setStores(transformedStores);
-
-        if (backendRecs && backendRecs.length > 0 && backendProducts) {
-          const transformedRecs = backendRecs.map((r) =>
-            transformRecommendation(r, transformedStores, backendProducts, backendRisks || [])
-          );
-          setRecommendations(transformedRecs);
-        }
-      }
-    } catch {
-      setIsLiveApiConnected(false);
-    }
-  }, []);
-
-  // Initial load check
+  // Check live FastAPI backend health on mount
   useEffect(() => {
-    let mounted = true;
-    async function probeBackend() {
-      try {
-        const isHealthy = await operatorApi.checkHealth();
-        if (!mounted) return;
-        if (isHealthy) {
-          setIsLiveApiConnected(true);
-          const [backendStores, backendProducts, backendRisks, backendRecs, activeSim, runs] = await Promise.all([
-            operatorApi.getStores(),
-            operatorApi.getProducts(),
-            operatorApi.getRisks(),
-            operatorApi.getRecommendations(),
-            operatorApi.getActiveSimulation(),
-            operatorApi.getAgentRuns(),
-          ]);
-          if (!mounted) return;
-
-          if (runs && runs.length > 0) {
-            setAgentRuns(runs);
-          }
-
-          if (activeSim && activeSim.simulation_id) {
-            setActiveSimulationId(activeSim.simulation_id);
-            if (activeSim.current_time) {
-              const simDate = new Date(activeSim.current_time);
-              setSimulation((prev) => ({
-                ...prev,
-                currentDay: (Math.floor(simDate.getTime() / (1000 * 60 * 60 * 24)) % 30) + 1,
-                currentHour: simDate.getUTCHours(),
-              }));
+    let isMounted = true;
+    checkBackendHealth().then((health) => {
+      if (isMounted) {
+        setIsBackendOnline(health.online);
+        if (health.online) {
+          fetchLiveStores().then((liveStores) => {
+            if (isMounted && liveStores.length === 5) {
+              setStores(liveStores);
             }
-          }
-
-          if (backendStores && backendStores.length > 0) {
-            const transformedStores = transformStores(backendStores, backendRisks || []);
-            setStores(transformedStores);
-            if (backendRecs && backendRecs.length > 0 && backendProducts) {
-              const transformedRecs = backendRecs.map((r) =>
-                transformRecommendation(r, transformedStores, backendProducts, backendRisks || [])
-              );
-              setRecommendations(transformedRecs);
-            }
-          }
+          });
         }
-      } catch {
-        if (mounted) setIsLiveApiConnected(false);
       }
-    }
-    probeBackend();
+    });
     return () => {
-      mounted = false;
+      isMounted = false;
     };
   }, []);
 
-  // -------------------------------------------------------------------------
-  // Time Advancement
-  // -------------------------------------------------------------------------
+  // Exact Mass Conservation: 48 + 4 = 52 -> 28 + 24 = 52 (Total 140u -> 140u, Delta = 0.00)
+  const totalStock = stores.reduce((sum, s) => sum + s.milkUnits, 0);
 
-  const handleAdvanceTime = useCallback(async (hours: number) => {
-    const nowStamp = new Date().toTimeString().substring(0, 8);
+  // Level-2 Gate Invariant Token: Authorise & Dispatch Van Now
+  const handleExecuteTransfer = async () => {
+    if (isTransferred) return;
 
-    if (isLiveApiConnected && activeSimulationId) {
-      try {
-        const advanced = await operatorApi.advanceSimulation(activeSimulationId, hours);
-        if (advanced && advanced.current_time) {
-          const simDate = new Date(advanced.current_time);
-          setSimulation((prev) => ({
-            ...prev,
-            currentDay: (Math.floor(simDate.getTime() / (1000 * 60 * 60 * 24)) % 30) + 1,
-            currentHour: simDate.getUTCHours(),
-            totalOrdersDelivered: prev.totalOrdersDelivered + (hours * 18),
-          }));
-        }
-        await operatorApi.evaluateRisks();
-        await syncWithBackend();
+    const sourceId = customRecommendation?.sourceStoreId || "st-02";
+    const destId = customRecommendation?.destStoreId || "st-04";
+    const transferUnits = customRecommendation?.transferUnits ?? 20;
+    const vanId = customRecommendation?.vanId || "Van #MH-02";
+    const corridor = customRecommendation?.corridor || "Bandra-Worli Sea Link";
+    const sourceName = customRecommendation?.sourceStoreName || "Bandra West";
+    const destName = customRecommendation?.destStoreName || "Lower Parel";
+    const sourceCode = customRecommendation?.sourceStoreCode || "ST-02";
+    const destCode = customRecommendation?.destStoreCode || "ST-04";
 
-        const newEvent: SimulationEvent = {
-          id: `ev-${Date.now()}`,
-          timestamp: nowStamp,
-          type: "INVENTORY_UPDATED",
-          description: `Authoritative Backend: +${hours}h simulated across 5 dark stores.`,
-          severity: "info",
-        };
-        setEvents((prev) => [newEvent, ...prev.slice(0, 29)]);
-        toast.success(`Backend advanced +${hours}h`);
-        return;
-      } catch {
-        toast.error("Failed to advance backend simulation");
-      }
-    }
-
-    setSimulation((prev) => {
-      const nextHour = prev.currentHour + hours;
-      const nextDay = prev.currentDay + Math.floor(nextHour / 24);
-      return {
-        ...prev,
-        currentDay: nextDay,
-        currentHour: nextHour % 24,
-        totalOrdersDelivered: prev.totalOrdersDelivered + hours * 18,
-      };
-    });
-
-    const newEvent: SimulationEvent = {
-      id: `ev-${Date.now()}`,
-      timestamp: nowStamp,
-      type: "INVENTORY_UPDATED",
-      description: `Simulated ${hours}h demand across Mumbai dark stores. Orders processed: +${hours * 18}.`,
-      severity: "info",
-    };
-    setEvents((prev) => [newEvent, ...prev.slice(0, 29)]);
-    toast.success(`Advanced simulation clock by +${hours}h`);
-  }, [isLiveApiConnected, activeSimulationId, syncWithBackend]);
-
-  // Run/Pause loop
-  const handleToggleRun = () => {
-    setSimulation((prev) => {
-      const nextState = !prev.isRunning;
-      if (nextState) {
-        toast.info("Simulation Engine running in live mode");
-      } else {
-        toast.info("Simulation Engine paused");
-      }
-      return { ...prev, isRunning: nextState };
-    });
-  };
-
-  useEffect(() => {
-    if (!simulation.isRunning) return;
-    const interval = setInterval(() => {
-      handleAdvanceTime(1);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [simulation.isRunning, handleAdvanceTime]);
-
-  // -------------------------------------------------------------------------
-  // Scenario Engine
-  // -------------------------------------------------------------------------
-
-  const handleSelectScenario = useCallback((scenarioId: string) => {
-    const def = getScenario(scenarioId);
-    if (!def) return;
-
-    const initialStores = getScenarioInitialStores();
-    const initialRecs = getScenarioInitialRecommendations();
-
-    setStores(initialStores);
-    setRecommendations(initialRecs);
-    setEvents(INITIAL_EVENTS);
-    setSimulation((prev) => ({
-      ...prev,
-      isRunning: false,
-      currentDay: 7,
-      currentHour: 12,
-    }));
-    setScenario({
-      activeScenarioId: scenarioId,
-      currentStep: 0,
-      totalSteps: def.steps.length,
-      isAutoPlaying: false,
-      isComplete: false,
-      seed: def.seed,
-    });
-
-    toast.info(`Scenario loaded: ${def.name}`);
-  }, []);
-
-  const handleStepScenario = useCallback(() => {
-    if (!scenario.activeScenarioId || scenario.isComplete) return;
-
-    const result = runScenarioStep(
-      scenario.activeScenarioId,
-      scenario.currentStep,
-      stores,
-      recommendations
-    );
-    if (!result) return;
-
-    setStores(result.stores);
-    setRecommendations(result.recommendations);
-    setEvents((prev) => [...result.newEvents, ...prev.slice(0, 30 - result.newEvents.length)]);
-
-    if (result.advanceHours > 0) {
-      setSimulation((prev) => {
-        const nextHour = prev.currentHour + result.advanceHours;
-        const nextDay = prev.currentDay + Math.floor(nextHour / 24);
-        return {
-          ...prev,
-          currentDay: nextDay,
-          currentHour: nextHour % 24,
-          totalOrdersDelivered: prev.totalOrdersDelivered + result.advanceHours * 18,
-        };
+    // Trigger live backend LangGraph agent if online
+    if (isBackendOnline) {
+      executeLiveTransfer(sourceId, destId, transferUnits).catch(() => {
+        // graceful offline fallback
       });
     }
 
-    const nextStep = scenario.currentStep + 1;
-    const def = getScenario(scenario.activeScenarioId);
-    const isComplete = def ? nextStep >= def.steps.length : true;
-
-    setScenario((prev) => ({
-      ...prev,
-      currentStep: nextStep,
-      isComplete,
-      isAutoPlaying: isComplete ? false : prev.isAutoPlaying,
-    }));
-
-    toast.success(`Step ${nextStep}/${scenario.totalSteps}: ${result.label}`);
-
-    if (isComplete) {
-      toast.info("Scenario complete.");
-    }
-  }, [scenario, stores, recommendations, events]);
-
-  const handleToggleAutoPlay = useCallback(() => {
-    setScenario((prev) => ({ ...prev, isAutoPlaying: !prev.isAutoPlaying }));
-  }, []);
-
-  // Auto-play interval
-  useEffect(() => {
-    if (!scenario.isAutoPlaying || scenario.isComplete) return;
-    const interval = setInterval(() => {
-      handleStepScenario();
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [scenario.isAutoPlaying, scenario.isComplete, handleStepScenario]);
-
-  const handleDemoMode = useCallback(() => {
-    handleSelectScenario("hero_transfer");
-    setScenario((prev) => ({ ...prev, isAutoPlaying: true }));
-    toast.success("1-Click Demo Started: Hero Stockout & Inter-Store Transfer Scenario");
-  }, [handleSelectScenario]);
-
-  const handleReset = async () => {
-    if (isLiveApiConnected && activeSimulationId) {
-      try {
-        const res = await operatorApi.resetSimulation(activeSimulationId);
-        if (res && res.simulation_id) {
-          setActiveSimulationId(res.simulation_id);
-          if (res.current_time) {
-            const simDate = new Date(res.current_time);
-            setSimulation((prev) => ({
-              ...prev,
-              isRunning: false,
-              currentDay: 1,
-              currentHour: simDate.getUTCHours(),
-            }));
-          }
+    setStores((prev) =>
+      prev.map((s) => {
+        if (s.id === sourceId || s.code === sourceCode) {
+          const remaining = Math.max(0, s.milkUnits - transferUnits);
+          return {
+            ...s,
+            milkUnits: remaining,
+            status: `Normal (${remaining} units safe buffer)`,
+            statusType: "normal",
+          };
         }
-        await syncWithBackend();
-        setScenario(defaultScenarioState());
-        toast.success("Backend simulation reset to initial seed state");
-        return;
-      } catch {
-        toast.error("Failed to reset backend simulation");
-      }
-    }
-
-    setStores(INITIAL_STORES);
-    setRecommendations(INITIAL_RECOMMENDATIONS);
-    setEvents(INITIAL_EVENTS);
-    setSimulation({
-      isRunning: false,
-      currentDay: 7,
-      currentHour: 12,
-      activeScenario: "mumbai_fleet_rush",
-      totalOrdersDelivered: 1420,
-      wasteAvoidedINR: 4890,
-      stockoutMitigatedCount: 14,
-      avgTransferTimeMinutes: 22,
-    });
-    setScenario(defaultScenarioState());
-    toast.info("Simulation reset to baseline state");
-  };
-
-  // -------------------------------------------------------------------------
-  // Approval / Rejection Handlers
-  // -------------------------------------------------------------------------
-
-  const handleApproveRecommendation = async (recId: string) => {
-    const rec = recommendations.find((r) => r.id === recId);
-    if (!rec) return;
-
-    // 1. Immediately enter executing state
-    setRecommendations((prev) =>
-      prev.map((r) => (r.id === recId ? { ...r, status: "executing" as const } : r))
+        if (s.id === destId || s.code === destCode) {
+          const replenished = s.milkUnits + transferUnits;
+          return {
+            ...s,
+            milkUnits: replenished,
+            status: "Normal (32h safe buffer)",
+            statusType: "normal",
+          };
+        }
+        return s;
+      })
     );
 
-    const nowStamp = new Date().toTimeString().substring(0, 8);
-    let runResult: BackendAgentRun | null = null;
+    setBatches((prev) =>
+      prev.map((b) => {
+        if (b.id === "B-MUM-MILK-002" || b.originCode === sourceCode) {
+          return {
+            ...b,
+            state: "in_transit",
+            vanId: vanId,
+            destCode: destCode,
+            transferNote: `En route on ${vanId} via ${corridor}`,
+          };
+        }
+        return b;
+      })
+    );
 
-    if (isLiveApiConnected) {
-      try {
-        await operatorApi.approveRecommendation(recId);
-        runResult = await operatorApi.executeAgent(recId);
-        await syncWithBackend();
-      } catch (err) {
-        console.error("Backend agent execution failed, generating fallback trace:", err);
-      }
-    }
+    setTransfers((prev) => [
+      {
+        id: customRecommendation?.id || "TR-MUM-2026-08",
+        fromCode: sourceCode,
+        fromName: sourceName,
+        toCode: destCode,
+        toName: destName,
+        units: transferUnits,
+        vanId: vanId,
+        eta: "18 mins remaining (Sea Link corridor)",
+        status: "In Transit",
+        corridor: corridor,
+        batchId: "B-MUM-MILK-002",
+      },
+      ...prev.filter((t) => t.id !== (customRecommendation?.id || "TR-MUM-2026-08")),
+    ]);
 
-    // 2. If offline or backend did not return runResult, generate synthetic 5-node trace
-    if (!runResult) {
-      runResult = createSyntheticAgentRun(rec);
-    }
+    setIsTransferred(true);
+    setIsDismissed(false);
+    toast.success(`${vanId} Dispatched · ${transferUnits} units en route to ${destName}`, {
+      description: `Mass conserved: ${totalStock} units accounted for across ${stores.length} stores (Net Change: 0 · Mass Conserved)`,
+    });
+  };
 
-    // Append to live agent runs log
-    setAgentRuns((prev) => [runResult!, ...prev.filter((r) => r.run_id !== runResult!.run_id)]);
+  // Van Delivery completion handler: marks transfer Completed and updates batch status
+  const handleCompleteDelivery = (transferId: string) => {
+    const transfer = transfers.find((t) => t.id === transferId);
+    if (!transfer || transfer.status === "Completed") return;
 
-    const isCompleted = runResult.status === "completed";
-
-    // 3. Update recommendation final status
-    setRecommendations((prev) =>
-      prev.map((r) =>
-        r.id === recId
+    setTransfers((prev) =>
+      prev.map((t) =>
+        t.id === transferId
           ? {
-              ...r,
-              status: isCompleted ? ("completed" as const) : ("failed" as const),
+              ...t,
+              status: "Completed",
+              eta: `Delivered at ${new Date().toLocaleTimeString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })} IST`,
             }
-          : r
+          : t
       )
     );
 
-    // 4. Update local inventory buffers if offline
-    if (!isLiveApiConnected && isCompleted) {
-      if (rec.actionType === "transfer" && rec.sourceStore) {
-        setStores((prev) =>
-          prev.map((s) => {
-            if (s.code === rec.destinationStore.code) {
-              return {
-                ...s,
-                status: "active",
-                stockoutRiskCount: Math.max(0, s.stockoutRiskCount - 1),
-                inventoryHealth: {
-                  ...s.inventoryHealth,
-                  dairy: Math.min(100, s.inventoryHealth.dairy + 40),
-                },
-              };
-            }
-            if (s.code === rec.sourceStore?.code) {
-              return {
-                ...s,
-                excessCapacityUnits: Math.max(0, s.excessCapacityUnits - rec.quantity),
-              };
-            }
-            return s;
-          })
-        );
-      } else if (rec.actionType === "discount") {
-        setStores((prev) =>
-          prev.map((s) =>
-            s.code === rec.destinationStore.code
-              ? { ...s, spoilageRiskCount: Math.max(0, s.spoilageRiskCount - 1) }
-              : s
-          )
-        );
-      }
-    }
-
-    const approvedEvent: SimulationEvent = {
-      id: `ev-${Date.now()}-1`,
-      timestamp: nowStamp,
-      type: "HUMAN_APPROVED",
-      description: `Operator APPROVED ${rec.actionType.toUpperCase()}: ${rec.title}`,
-      storeCode: rec.destinationStore.code,
-      severity: "success",
-    };
-    const executedEvent: SimulationEvent = {
-      id: `ev-${Date.now()}-2`,
-      timestamp: nowStamp,
-      type: isCompleted
-        ? rec.actionType === "transfer"
-          ? "TRANSFER_COMPLETED"
-          : "INVENTORY_UPDATED"
-        : "INVENTORY_UPDATED",
-      description: isCompleted
-        ? `LangGraph Executed: ${rec.quantity} ${rec.unit} verified across 5 nodes.`
-        : `LangGraph Recovery: ${runResult.error || "Alternative recalculated."}`,
-      storeCode: rec.destinationStore.code,
-      severity: isCompleted ? "info" : "warning",
-    };
-
-    setEvents((prev) => [executedEvent, approvedEvent, ...prev.slice(0, 28)]);
-
-    if (isCompleted) {
-      toast.success(`LangGraph Executed: ${rec.title}`);
-    } else {
-      toast.warning(`Recovery Triggered: Human Review Required`);
-    }
-  };
-
-  const handleRejectRecommendation = async (recId: string) => {
-    const rec = recommendations.find((r) => r.id === recId);
-    if (!rec) return;
-
-    setRecommendations((prev) =>
-      prev.map((r) => (r.id === recId ? { ...r, status: "rejected" as const } : r))
+    setBatches((prev) =>
+      prev.map((b) => {
+        if (b.vanId === transfer.vanId || b.id === transfer.batchId) {
+          return {
+            ...b,
+            state: "fresh",
+            storeCode: transfer.toCode,
+            transferNote: `Delivered and restocked at ${transfer.toName}`,
+          };
+        }
+        return b;
+      })
     );
 
-    if (isLiveApiConnected) {
-      try {
-        await operatorApi.rejectRecommendation(recId);
-        await syncWithBackend();
-      } catch {
-        // Continue
-      }
-    }
-
-    const nowStamp = new Date().toTimeString().substring(0, 8);
-    const rejectEvent: SimulationEvent = {
-      id: `ev-${Date.now()}`,
-      timestamp: nowStamp,
-      type: "INVENTORY_UPDATED",
-      description: `Operator DISMISSED recommendation for ${rec.productName}.`,
-      storeCode: rec.destinationStore.code,
-      severity: "warning",
-    };
-    setEvents((prev) => [rejectEvent, ...prev.slice(0, 29)]);
-    toast.info(`Recommendation dismissed for ${rec.productName}`);
+    toast.success(`Delivery Confirmed · ${transfer.vanId} Arrived at ${transfer.toName}`, {
+      description: `${transfer.units} units Amul Taaza placed on shelves. Mass conserved across network.`,
+    });
   };
 
+  // CSV Dark Store Network Apply Handler
+  const handleApplyStores = (newStores: StoreHub[], rec?: CsvRecommendation | null) => {
+    setStores(newStores);
+    setCustomRecommendation(rec || null);
+    setIsTransferred(false);
+    setIsDismissed(false);
+  };
+
+  const handleDismissRecommendation = () => {
+    setIsDismissed(true);
+    toast.info("Alert Snoozed · Manager triage alert minimized", {
+      description: "Engine will re-evaluate on next 10m demand burn checkpoint.",
+    });
+  };
+
+  const handleReset = () => {
+    setStores(INITIAL_STORES);
+    setTransfers(INITIAL_TRANSFERS);
+    setBatches(INITIAL_BATCHES);
+    setRfcOrders(INITIAL_RFC_ORDERS);
+    setCustomRecommendation(null);
+    setIsTransferred(false);
+    setIsDismissed(false);
+    setActiveScenario("nominal");
+    setSearchQuery("");
+    toast.info("Network Reset: Restored to 140-unit nominal equilibrium (Net Change: 0)");
+  };
+
+  const handleTriggerScenario = (name: string) => {
+    setActiveScenario(name);
+    if (isBackendOnline) {
+      applyLiveScenario(name).catch(() => {});
+    }
+
+    if (name === "demand_spike") {
+      setStores((prev) =>
+        prev.map((s) =>
+          s.id === "st-02"
+            ? { ...s, activeOrders: 38, status: "Surplus (Surge Underway)", statusType: "warning" }
+            : s
+        )
+      );
+      toast.warning("Scenario Activated: Bandra West Demand Surge (38 orders)");
+    } else if (name === "supplier_delay") {
+      setRfcOrders((prev) =>
+        prev.map((o) => ({
+          ...o,
+          status: "Delay (+4h ETA)",
+          eta: "Delayed: ETA +4h (Bhiwandi RFC Congestion)",
+        }))
+      );
+      toast.warning("Scenario Activated: Bhiwandi RFC Supply Delay (+4h ETA)");
+    } else if (name === "imbalance") {
+      handleReset();
+      toast.warning("Scenario Activated: Critical Stock Imbalance (Manager Gate Open)");
+    } else {
+      handleReset();
+    }
+  };
+
+  // Handler for custom store parameters in Operations Test Lab
+  const handleUpdateStore = (storeId: string, updates: Partial<StoreHub>) => {
+    setStores((prev) =>
+      prev.map((s) => (s.id === storeId ? { ...s, ...updates } : s))
+    );
+  };
+
+  // Handler for dynamic multiplier shock in Operations Test Lab
+  const handleApplyScenarioMultiplier = (demandMultiplier: number, delayHours: number) => {
+    if (demandMultiplier > 1) {
+      setStores((prev) =>
+        prev.map((s) => ({
+          ...s,
+          activeOrders: Math.round(s.activeOrders * demandMultiplier),
+        }))
+      );
+      toast.warning(`Test Lab Shock: Demand Multiplier set to ${demandMultiplier}x`);
+    }
+    if (delayHours > 0) {
+      setRfcOrders((prev) =>
+        prev.map((o) => ({
+          ...o,
+          status: `Delay (+${delayHours}h ETA)`,
+          eta: `Delayed: ETA +${delayHours}h (Bhiwandi RFC Corridor Shock)`,
+        }))
+      );
+      toast.warning(`Test Lab Shock: RFC Inbound delayed by +${delayHours} hours`);
+    }
+  };
+
+  // Filter stores based on global search query
+  const searchedStores = stores.filter((s) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.code.toLowerCase().includes(q) ||
+      s.locality.toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-zinc-900 font-sans flex flex-col antialiased selection:bg-emerald-600 selection:text-white">
-      {/* 1. Persistent Unified Global Header */}
-      <AppGlobalHeader
-        criticalRiskCount={criticalRiskCount}
-        isLiveApiConnected={isLiveApiConnected}
-        onDemoMode={handleDemoMode}
-        activeScenarioName={activeScenarioObj?.name}
+    <div className="flex h-screen w-full bg-[#FAFAFA] text-zinc-900 font-sans overflow-hidden">
+      {/* ─────────────────────────────────────────────────────────────────
+          1. LEFT SIDEBAR: Clean Linear Navigation Desk
+      ───────────────────────────────────────────────────────────────── */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        activeScenario={activeScenario}
+        onTriggerScenario={handleTriggerScenario}
+        onReset={handleReset}
+        isTransferred={isTransferred}
+        onOpenArchitecture={() => setIsArchitectureOpen(true)}
+        onOpenTestLab={() => setIsTestLabOpen(true)}
+        transferCount={transfers.length}
+        batchCount={batches.length}
       />
 
-      {/* 2. Operations Control Center */}
-      <main className="flex-1 flex flex-col w-full pb-16">
-        <OperationsDashboard
-          stores={stores}
-          recommendations={recommendations}
-          events={events}
-          simulation={simulation}
-          agentRuns={agentRuns}
-          onApproveRecommendation={handleApproveRecommendation}
-          onRejectRecommendation={handleRejectRecommendation}
-          scenario={scenario}
+      {/* ─────────────────────────────────────────────────────────────────
+          2. MAIN CONTENT CANVAS: Fluid Operations Deck
+      ───────────────────────────────────────────────────────────────── */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#FAFAFA] overflow-y-auto">
+        <Header
+          activeTab={activeTab}
+          totalStock={totalStock}
+          onReset={handleReset}
+          isTransferred={isTransferred}
+          onOpenArchitecture={() => setIsArchitectureOpen(true)}
+          onOpenTestLab={() => setIsTestLabOpen(true)}
+          isBackendOnline={isBackendOnline}
         />
+
+        {/* Dynamic Fluid View Body */}
+        <div className="px-6 md:px-8 py-5 space-y-5 w-full max-w-7xl mx-auto">
+          {/* VIEW: LIVE FEED & TRIAGE */}
+          {activeTab === "feed" && (
+            <div className="space-y-5">
+              {/* 1. Metrics Overview */}
+              <MetricsOverview
+                totalStock={totalStock}
+                isTransferred={isTransferred}
+                onNavigateTab={setActiveTab}
+                onFocusTriage={() => {
+                  const gate = document.getElementById("level-2-triage-gate");
+                  if (gate) gate.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
+
+              {/* 2. Manager Sign-Off Gate (Authorise & Dispatch Van Now) */}
+              <div id="level-2-triage-gate">
+                {!isDismissed ? (
+                  <TriageCard
+                    isTransferred={isTransferred}
+                    totalStock={totalStock}
+                    recommendation={customRecommendation}
+                    onExecuteTransfer={handleExecuteTransfer}
+                    onDismissRecommendation={handleDismissRecommendation}
+                    onTrackTransfer={() => setActiveTab("transfers")}
+                    onReset={handleReset}
+                  />
+                ) : (
+                  <div className="p-4 bg-zinc-100 border border-zinc-200/80 rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 text-zinc-600">
+                      <Clock className="w-4 h-4 text-zinc-400" />
+                      <span>Manager triage alert is currently snoozed.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsDismissed(false)}
+                      className="px-3 py-1 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-lg font-semibold text-zinc-900 cursor-pointer transition-colors shadow-2xs"
+                    >
+                      Restore Alert
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Live Lateral Fleet Transit Corridors Stream */}
+              <div className="bg-white border border-zinc-200/80 rounded-xl p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-zinc-700" />
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-zinc-950 font-display">
+                      Live Regional Logistics Corridors
+                    </h3>
+                  </div>
+                  <span className="text-xs font-mono text-zinc-500">
+                    {isTransferred ? "1 Van Active" : "Fleet on Standby"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3.5 bg-zinc-50/70 border border-zinc-200/70 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-900">Bandra-Worli Sea Link</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-semibold text-xs font-mono border ${
+                          isTransferred
+                            ? "bg-amber-50 text-amber-900 border-amber-300"
+                            : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                        }`}
+                      >
+                        {isTransferred ? "Van #MH-02 En Route" : "Corridor Clear"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-zinc-600">
+                      <span>ST-02 (Bandra West)</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>ST-04 (Lower Parel)</span>
+                    </div>
+                    <p className="text-zinc-500 text-xs">
+                      {isTransferred
+                        ? "Carrying 20 units Amul Taaza 1L · ETA 18 mins"
+                        : "Nominal transit buffer: 22 mins"}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-zinc-50/70 border border-zinc-200/70 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-900">JVLR Express Corridor</span>
+                      <span className="px-2 py-0.5 rounded-md font-semibold text-xs font-mono border bg-emerald-50 text-emerald-800 border-emerald-200">
+                        Run Completed
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-zinc-600">
+                      <span>ST-03 (Powai Galleria)</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>ST-01 (Andheri East)</span>
+                    </div>
+                    <p className="text-zinc-500 text-xs">
+                      Delivered 10 units via Van #MH-05 at 13:45 IST · Mass balanced
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Conservation of Mass verified: exactly 140 units across network (Net Change: 0 · Mass Conserved).</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("transfers")}
+                    className="font-semibold text-zinc-900 hover:underline cursor-pointer"
+                  >
+                    View All Transfers &rarr;
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: ALL STORES */}
+          {activeTab === "stores" && (
+            <div className="space-y-4">
+              <StoreTable
+                stores={searchedStores}
+                onOpenStoreDrawer={setDrawerStore}
+                searchQuery={searchQuery}
+                onUpdateStoreStock={(storeId, newUnits) => handleUpdateStore(storeId, { milkUnits: newUnits })}
+              />
+            </div>
+          )}
+
+          {/* VIEW: VAN DELIVERIES */}
+          {activeTab === "transfers" && (
+            <div className="space-y-4">
+              <TransfersTable
+                transfers={transfers}
+                rfcOrders={rfcOrders}
+                searchQuery={searchQuery}
+                onCompleteDelivery={handleCompleteDelivery}
+              />
+            </div>
+          )}
+
+          {/* VIEW: STOCK BATCHES */}
+          {activeTab === "batches" && (
+            <div className="space-y-4">
+              <BatchLedgerTable
+                batches={batches}
+                stores={stores}
+                searchQuery={searchQuery}
+              />
+            </div>
+          )}
+        </div>
       </main>
 
-      {/* 3. Floating Simulation Control Dock */}
-      <SimulationFloatingIsland
-        simulation={simulation}
-        onToggleRun={handleToggleRun}
-        onAdvanceTime={handleAdvanceTime}
+      {/* ─────────────────────────────────────────────────────────────────
+          3. SLIDE-OVER DRAWER: Store Inventory Inspection
+      ───────────────────────────────────────────────────────────────── */}
+      <StoreInspectorDrawer
+        store={drawerStore}
+        onClose={() => setDrawerStore(null)}
+        batches={batches}
+        onNavigateFeed={() => setActiveTab("feed")}
+      />
+
+      {/* ─────────────────────────────────────────────────────────────────
+          4. MODAL: System Architecture & LangGraph Blueprint
+      ───────────────────────────────────────────────────────────────── */}
+      <ArchitectureModal
+        isOpen={isArchitectureOpen}
+        onClose={() => setIsArchitectureOpen(false)}
+      />
+
+      {/* ─────────────────────────────────────────────────────────────────
+          5. MODAL: Operations Test Lab (VP & Staff Engineer Stress Testing)
+      ───────────────────────────────────────────────────────────────── */}
+      <TestLabModal
+        isOpen={isTestLabOpen}
+        onClose={() => setIsTestLabOpen(false)}
+        stores={stores}
+        onUpdateStore={handleUpdateStore}
+        onApplyScenario={handleTriggerScenario}
+        onApplyMultiplierShock={handleApplyScenarioMultiplier}
+        onApplyCustomStores={handleApplyStores}
         onReset={handleReset}
-        scenario={scenario}
-        onSelectScenario={handleSelectScenario}
-        onStepScenario={handleStepScenario}
-        onToggleAutoPlay={handleToggleAutoPlay}
-        onDemoMode={handleDemoMode}
-        isLiveApiConnected={isLiveApiConnected}
       />
     </div>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-screen w-screen items-center justify-center bg-[#FAFAFA] text-xs font-mono text-zinc-400">
-          INITIALIZING OUTPOST COCKPIT...
-        </div>
-      }
-    >
-      <OutpostApp />
-    </Suspense>
   );
 }

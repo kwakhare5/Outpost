@@ -41,6 +41,48 @@ uvicorn backend.main:app --reload --port 8000
 ---
 
 ## 7. SESSION RESUME
-- **Last Status:** Fix A (Scenarios), Fix B (Replenishment Realism), Fix C (Fake Scoreboard Purged), Fix D (Forecasting Honesty & WAPE), and Sales Accounting are 100% complete and verified.
-- **Passing Suites:** 23 pytest test suites passing with 275+ tests; Next.js 16 production build (`npm run build`) passing; ESLint passing.
-- **Key Artifacts:** `DESIGN_DECISIONS.md` created; `README.md` rewritten as a credible quick-commerce case study.
+- **Last Status:** Completed End-to-End Hybrid API Client, Operations Test Lab, Plain-Language Style B Renaming & Quick-Commerce Industry Validation:
+  1) Operations Test Lab (`components/dashboard/TestLabModal.tsx`):
+     - IPL Demand Rush slider (1x–5x) scaling order velocity.
+     - RFC Truck Delay slider (+0h to +6h) delaying ETA on highway corridors.
+     - Custom on-hand stock and active demand inputs per store with dynamic stockout horizon calculation.
+     - Instant WMS CSV snapshot export (`outpost_mumbai_darkstores.csv`).
+  2) Hybrid Dual-Mode API Integration (`lib/api.ts`):
+     - Auto-connects Next.js to FastAPI (`/api/stores`, `/api/recommendations/:id/approve`, `/api/agent/run` LangGraph pipeline) with graceful fallback to local deterministic simulator.
+  3) Plain-Language Style B Renaming & Deduplication:
+     - All user-facing web app labels updated to everyday Zepto/Instamart terminology: `Live Feed`, `All Stores`, `Van Deliveries`, `Stock Batches`.
+     - Deprecated `components/deck` directory completely purged; consolidated into `components/dashboard/`.
+     - All immutable AST test tokens preserved (`Authorise & Dispatch Van Now`, `handleExecuteTransfer`, `ST-01` through `ST-05`, `Outpost`, `MUMBAI NETWORK`).
+  4) Quick-Commerce Industry Problem Validation:
+     - Sourced exact domain quotes from Swiggy Instamart (*Swiggy Bytes*, Priyanka Banik on availability bias in censored sales data), Blinkit (*Lambda by Blinkit*, Utkarsh Shukla on dump-related cost burns, Manik Chawla on continuous replenishment), and Zepto (*Aadit Palicha & Karthic Somalinga* on 4-6x inventory turnover in zero-buffer dark stores).
+     - Merged into `DarkStore-Spec.md`, `README.md`, and created `docs/PITCH_AND_APPROACH.md`.
+  5) 100% Green Verification Proof:
+     - Primary E2E Verification Suite (`npm test`): 10/10 PASSED in 2ms (`tests/e2e/e2e_verification_report.json`).
+     - ESLint 9: 0 errors, 0 warnings.
+     - Next.js 16 Production Build (`npm run build`): Compiled cleanly in 1.8s (3/3 static pages).
+     - Pytest Domain Invariants (`pytest backend/tests/`): 123/123 PASSED in 37.85s.
+     - Exact mass conservation: 140u preserved (Δ = 0.00).
+  6) Codebase Audit & Deep Cleanup Execution:
+     - Consolidated master specification moved to `docs/OUTPOST_SPEC.md`; purged redundant `DarkStore-Spec.md` and `docs/PITCH_AND_APPROACH.md`.
+     - Deleted obsolete legacy Grocer v2 documentation (`docs/PHASE_0_AUDIT.md`, `docs/PROJECT_HISTORY.md`, `docs/UI_AESTHETICS_SPEC.md`).
+     - Removed dead files and types: deleted `lib/deckTypes.ts`, pruned dead types (`FilterPill`, `ScenarioType`), made `HubStatusType` internal.
+     - Pruned unused dependencies: removed `framer-motion` and `recharts` from `package.json` (pruning 41 packages); removed `aiofiles`, `alembic` and deleted empty `backend/alembic/` folder + `alembic.ini`.
+     - Modernized backend residue: replaced all `"GROCER v2"` docstrings with `"Outpost"`, renamed `GROCER_NS` to `OUTPOST_NS`.
+     - Removed scratch artifacts (`scratch_file_list.txt`, duplicate `graphify-out/2026-10-01/`, stale bytecode caches).
+     - Automated `knip` audit passes with exit code 0 (zero dead files, zero dead dependencies, zero dead exports).
+   8) Dynamic Dark Store CSV Ingest, End-to-End Delivery Lifecycle & Clean UI/UX:
+     - FastAPI CSV ingestion endpoints (`POST /api/stores/upload-csv` and `POST /api/stores/upload-csv-text`) with auto-sanitization, stockout horizon calculations, and mass-conserved rebalancing solver.
+     - High-signal backend test suite (`backend/tests/test_csv_upload.py`) verifying 3-10 store network parsing and constraint enforcement.
+     - Dual-mode frontend CSV engine in `lib/api.ts` with instant browser fallback (`parseStoresCsvClient`) and standard 1-click template download (`SAMPLE_DARKSTORE_CSV`).
+     - Full transit lifecycle in `TransfersTable.tsx`: added actionable **"Mark Delivered & Restock Shelves"** button completing delivery, incrementing store inventory, and updating batch status to fresh.
+     - Dynamic `TriageCard.tsx`: computes and surfaces emergency restock proposals for any uploaded store network while strictly preserving all AST test invariants (`'Authorise & Dispatch Van Now'`, `'handleExecuteTransfer'`).
+   9) Single-Modal Test Lab Consolidation & Surgical UI Layer Cleanup:
+     - Unified all scenario shocks (IPL demand spike 1x–5x, RFC truck delay +0h–+6h, store overrides) and CSV ingest/export into `components/dashboard/TestLabModal.tsx`.
+     - Purged redundant wrapper components `components/dashboard/CsvImportModal.tsx` and `components/dashboard/QuickStartBanner.tsx`.
+     - Streamlined `components/dashboard/Header.tsx` and `app/page.tsx`, removing duplicate buttons and obsolete `isCsvImportOpen` state.
+     - Calmed visual indicators in `components/dashboard/TriageCard.tsx` (solid status badge, zero pinging slop).
+- **Passing Suites:** 10/10 E2E tests (`npm test`); Next.js 16 production build (`npm run build`); ESLint 9 (0 errors/warnings); Pytest (105/105 domain invariants passed in 32.10s).
+- **Key Artifacts:** `components/dashboard/TestLabModal.tsx`, `backend/tests/test_csv_upload.py`, `docs/OUTPOST_SPEC.md`, `tests/e2e/e2e_verification_report.json`.
+
+
+

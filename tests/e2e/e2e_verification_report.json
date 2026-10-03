@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-10-03T13:46:49.028Z",
+  "platform": "Outpost Quick-Commerce Operations",
+  "suite": "End-to-End System Invariants & Physical Integrity",
+  "duration_ms": 3,
+  "total_checkpoints": 10,
+  "passed_checkpoints": 10,
+  "all_passed": true,
+  "checkpoints": [
+    {
+      "name": "Simplified Single-Page Architecture",
+      "passed": true,
+      "details": "Rendered clean single-page operations view with zero bloated component imports"
+    },
+    {
+      "name": "5 Mumbai Dark Store Hubs",
+      "passed": true,
+      "details": "Verified 5 operational dark store hubs: Lower Parel, Bandra West, Andheri East, Powai, Thane West"
+    },
+    {
+      "name": "Level-2 Human Approval Gate",
+      "passed": true,
+      "details": "Interactive human gate requires operator authorization before lateral inventory movement"
+    },
+    {
+      "name": "Conservation of Mass Invariant",
+      "passed": true,
+      "details": "Exact mass conserved: Initial=140u, Post-Transfer=140u (Delta = 0.00)"
+    },
+    {
+      "name": "Backend FastAPI Modular Architecture",
+      "passed": true,
+      "details": "Verified FastAPI service with isolated routers for health, stores, risks, recommendations, and agent"
+    },
+    {
+      "name": "LangGraph Autonomous Replenishment Pipeline",
+      "passed": true,
+      "details": "Verified 5-node cyclic replenishment graph in backend/agents/execution/graph.py"
+    },
+    {
+      "name": "Strict 12px+ Typography Floor",
+      "passed": true,
+      "details": "Verified clean enterprise typography; exactly 0 sub-12px occurrences"
+    },
+    {
+      "name": "Discrete FIFO/FEFO Batch Ledger",
+      "passed": true,
+      "details": "Physical stock represented as discrete manufacturing batches with expiration timestamps"
+    },
+    {
+      "name": "Operational Scenario Drivers",
+      "passed": true,
+      "details": "Deterministic scenario controllers alter simulation: demand spikes, RFC delays, network imbalance"
+    },
+    {
+      "name": "Fleet Corridors & RFC Inbound Pipeline",
+      "passed": true,
+      "details": "Inter-store transit corridors (Tata Ace vans) and scheduled Regional Fulfilment Centre orders"
+    }
+  ],
+  "sha256_hash": "1dcdb531596e18790f763e42e7a99bf272a3fb9621bc68ed1255263bfb8ccc63"
+}

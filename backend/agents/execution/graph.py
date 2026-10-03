@@ -1,4 +1,4 @@
-﻿"""LangGraph StateGraph wiring for the GROCER v2 execution agent (spec section 19).
+"""LangGraph StateGraph wiring for the Outpost execution agent.
 
 Graph topology:
     START -> validate -> pre_check -> execute -> verify -> finalize | recover -> END

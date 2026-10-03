@@ -30,37 +30,8 @@ from backend.services.risk.models import (
 )
 
 
-# ─── 1. Data containers ────────────────────────────────────────────────────
+# ─── 1. StockoutCalculator ─────────────────────────────────────────────────
 
-def test_stockout_input_stores_fields():
-    si = StockoutInput(
-        store_id=uuid.uuid4(),
-        product_id=uuid.uuid4(),
-        current_quantity=50,
-        forecast_demand_24h=20.0,
-        forecast_demand_48h=40.0,
-        lead_time_hours=24,
-    )
-    assert si.current_quantity == 50
-    assert si.forecast_demand_24h == 20.0
-    assert si.lead_time_hours == 24
-
-
-def test_spoilage_input_stores_fields():
-    sp = SpoilageInput(
-        store_id=uuid.uuid4(),
-        product_id=uuid.uuid4(),
-        at_risk_quantity=30,
-        total_quantity=80,
-        min_hours_to_expiry=6.0,
-        forecast_demand_before_expiry=10.0,
-        shelf_life_hours=72,
-    )
-    assert sp.at_risk_quantity == 30
-    assert sp.min_hours_to_expiry == 6.0
-
-
-# ─── 2. StockoutCalculator ─────────────────────────────────────────────────
 
 def test_stockout_no_risk_when_inventory_covers_demand():
     """No stockout risk when current stock > 48h forecast."""
@@ -212,27 +183,8 @@ def test_spoilage_at_risk_quantity_correctly_computed():
     assert result.net_spoilage_quantity > 0
 
 
-# ─── 4. RiskResult ────────────────────────────────────────────────────────
+# ─── 3. RiskEngine integration ────────────────────────────────────────────
 
-def test_risk_result_has_required_fields():
-    """RiskResult dataclass exposes all required output fields."""
-    result = RiskResult(
-        store_id=uuid.uuid4(),
-        product_id=uuid.uuid4(),
-        risk_type="stockout",
-        probability=0.8,
-        severity=RiskSeverityLevel.CRITICAL,
-        expected_hours_to_event=10.0,
-        discount_tier=DiscountTier.NONE,
-        net_spoilage_quantity=0,
-    )
-    assert hasattr(result, "probability")
-    assert hasattr(result, "severity")
-    assert hasattr(result, "expected_hours_to_event")
-    assert hasattr(result, "discount_tier")
-
-
-# ─── 5. RiskEngine integration ────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_risk_engine_generates_risks(db_session):

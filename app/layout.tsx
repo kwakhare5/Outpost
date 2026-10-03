@@ -1,18 +1,12 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Public_Sans } from 'next/font/google';
 import { Toaster } from 'sonner';
 import './globals.css';
 import { Analytics } from '@vercel/analytics/react';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const publicSans = Public_Sans({
   subsets: ['latin'],
-  display: 'swap',
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  variable: '--font-sans-public',
   display: 'swap',
 });
 
@@ -35,14 +29,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${publicSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col selection:bg-emerald-600 selection:text-white relative overflow-x-hidden bg-[#FAFAFA] text-zinc-900 font-sans">
-        
-        {/* Page Content */}
+      <body className="min-h-full flex flex-col selection:bg-zinc-800 selection:text-white relative overflow-x-hidden bg-[#FAFAFA] text-zinc-900 font-sans">
         {children}
-
-        {/* System Notifications & Analytics */}
         <Toaster position="top-right" theme="light" richColors />
         <Analytics />
       </body>

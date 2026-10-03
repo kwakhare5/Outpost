@@ -1,4 +1,4 @@
-"""GROCER v2 Forecasting Engine.
+"""Outpost Forecasting Engine.
 
 Orchestrates forecast generation over simulator historical data:
   1. Aggregate daily demand per (store, product) from Order/OrderItem history.

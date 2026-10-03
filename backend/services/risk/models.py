@@ -1,4 +1,4 @@
-"""GROCER v2 Risk Engine — Pure deterministic risk models.
+"""Outpost Risk Engine — Pure deterministic risk models.
 
 Implements spec §5 (availability + waste loops), §13 (batch-aware inventory),
 §14.3 (discount tiers), §29.10 (Risk ORM schema).

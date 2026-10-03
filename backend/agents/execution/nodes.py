@@ -1,4 +1,4 @@
-"""LangGraph node functions for the GROCER v2 execution agent (spec section 19).
+"""LangGraph node functions for the Outpost execution agent.
 
 Node graph:
     validate -> pre_check -> execute -> verify -> (finalize | recover)

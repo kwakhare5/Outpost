@@ -1,4 +1,4 @@
-"""Deterministic seed data catalog for the GROCER v2 simulator.
+"""Deterministic seed data catalog for the Outpost simulator.
 
 Defines 5 dark stores, 8 suppliers, 25 products, and 25 customers.
 All UUIDs are deterministic via uuid5 for reproducibility.
@@ -7,11 +7,11 @@ import uuid
 from dataclasses import dataclass, field
 
 # Namespace for deterministic UUIDs
-GROCER_NS = uuid.UUID('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+OUTPOST_NS = uuid.UUID('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
 
 def _id(name: str) -> uuid.UUID:
     """Generate a deterministic UUID from a name."""
-    return uuid.uuid5(GROCER_NS, name)
+    return uuid.uuid5(OUTPOST_NS, name)
 
 
 @dataclass(frozen=True)

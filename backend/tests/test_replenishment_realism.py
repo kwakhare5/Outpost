@@ -1,4 +1,4 @@
-"""Acceptance tests for FIX B: Make replenishment operationally realistic (DarkStore-Spec §4.B).
+"""Acceptance tests for FIX B: Make replenishment operationally realistic (OUTPOST_SPEC §4.B).
 
 Verifies:
 1. Approving a reorder creates a purchase order but does not immediately change on-hand inventory.

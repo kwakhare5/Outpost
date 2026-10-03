@@ -1,4 +1,4 @@
-"""Inter-Store Transfer Simulation Service for GROCER v2.
+"""Inter-Store Transfer Simulation Service for Outpost.
 
 Calculates spatial distances (Haversine), transfer ETAs based on urban traffic,
 dispatches transfers with immediate source reservation (FIFO), and delivers arriving

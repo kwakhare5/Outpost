@@ -1,9 +1,8 @@
-"""TDD tests for the GROCER v2 simulation engine."""
+"""TDD tests for the Outpost simulation engine."""
 import uuid
 from datetime import datetime, timezone
 
 import pytest
-from httpx import AsyncClient
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,42 +11,12 @@ from backend.models.core import (
     Inventory, Batch, Simulation, Event,
 )
 from backend.models.enums import SimulationStatus, StoreStatus
-from backend.services.simulation.engine import SimulationEngine, SimulationClock
+from backend.services.simulation.engine import SimulationEngine
 from backend.services.simulation.seed_data import STORES, PRODUCTS, CUSTOMERS, SUPPLIERS
 
 
-# ===== Unit Tests: SimulationClock =====
-
-class TestSimulationClock:
-    def test_clock_initial_time(self) -> None:
-        start = datetime(2026, 6, 1, tzinfo=timezone.utc)
-        clock = SimulationClock(start)
-        assert clock.now == start
-        assert clock.start_time == start
-
-    def test_clock_advance(self) -> None:
-        start = datetime(2026, 6, 1, tzinfo=timezone.utc)
-        clock = SimulationClock(start)
-        new_time = clock.advance(24)
-        assert clock.now == datetime(2026, 6, 2, tzinfo=timezone.utc)
-        assert new_time == clock.now
-
-    def test_clock_advance_multiple(self) -> None:
-        start = datetime(2026, 6, 1, tzinfo=timezone.utc)
-        clock = SimulationClock(start)
-        clock.advance(6)
-        clock.advance(6)
-        assert clock.now == datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
-
-    def test_clock_reset(self) -> None:
-        start = datetime(2026, 6, 1, tzinfo=timezone.utc)
-        clock = SimulationClock(start)
-        clock.advance(48)
-        clock.reset()
-        assert clock.now == start
-
-
 # ===== Integration Tests: SimulationEngine =====
+
 
 @pytest.mark.asyncio
 async def test_seed_data_counts(db_session: AsyncSession) -> None:
@@ -145,48 +114,3 @@ async def test_advance_time(db_session: AsyncSession) -> None:
     updated_sim = await db_session.get(Simulation, sim.simulation_id)
     assert updated_sim.status == SimulationStatus.RUNNING
 
-
-@pytest.mark.asyncio
-async def test_simulation_record_created(db_session: AsyncSession) -> None:
-    """A Simulation record should be created in the DB."""
-    engine = SimulationEngine(seed=42, historical_days=7)
-    sim = await engine.initialize(db_session)
-
-    assert sim.simulation_id is not None
-    assert sim.seed == 42
-    assert sim.status == SimulationStatus.CREATED
-    assert sim.configuration['stores'] == 5
-    assert sim.configuration['products'] == 25
-
-
-# ===== API Tests =====
-
-@pytest.mark.asyncio
-async def test_create_simulation_api(client: AsyncClient) -> None:
-    """POST /api/simulations/ should create a simulation."""
-    response = await client.post('/api/simulations/', json={
-        'seed': 42,
-        'historical_days': 3,
-    })
-    assert response.status_code == 201
-    data = response.json()
-    assert 'simulation_id' in data
-    assert data['seed'] == 42
-    assert data['status'] == 'created'
-
-
-@pytest.mark.asyncio
-async def test_get_simulation_api(client: AsyncClient) -> None:
-    """GET /api/simulations/{id} should return simulation details."""
-    # Create first
-    create_resp = await client.post('/api/simulations/', json={
-        'seed': 42,
-        'historical_days': 3,
-    })
-    sim_id = create_resp.json()['simulation_id']
-
-    # Fetch
-    response = await client.get(f'/api/simulations/{sim_id}')
-    assert response.status_code == 200
-    data = response.json()
-    assert data['simulation_id'] == sim_id

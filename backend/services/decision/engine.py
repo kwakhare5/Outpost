@@ -1,4 +1,4 @@
-"""GROCER v2 Decision Engine -- DB orchestration layer.
+"""Outpost Decision Engine -- DB orchestration layer.
 
 Loads risk + inventory + forecast state from DB, calls PureDecisionEvaluator,
 persists a Recommendation row, and emits DECISION_MADE event via EventBus.

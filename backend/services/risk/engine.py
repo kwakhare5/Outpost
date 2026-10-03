@@ -1,4 +1,4 @@
-"""GROCER v2 Risk Engine.
+"""Outpost Risk Engine.
 
 Orchestrates risk detection across inventory, forecasts, and batch states:
   1. Scan store inventory and compare against 24h/48h demand forecasts.

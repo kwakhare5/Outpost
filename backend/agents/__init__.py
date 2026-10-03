@@ -1,4 +1,4 @@
-﻿"""GROCER v2 Agent package.
+"""Outpost Agent package.
 
-Contains the LangGraph execution agent (spec section 19-21).
+Contains the LangGraph execution agent.
 """

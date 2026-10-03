@@ -11,7 +11,7 @@
 ## 1. Live Demo Link
 🔗 **Live Operations Cockpit:** [https://dark-store-operator.vercel.app](https://dark-store-operator.vercel.app) *(Deployment Link)*  
 📂 **Engineering Design Decisions:** [`DESIGN_DECISIONS.md`](./DESIGN_DECISIONS.md)  
-📋 **Specification & Audit Document:** [`DarkStore-Spec.md`](./DarkStore-Spec.md)
+📋 **Master Specification & Operational Case Study:** [`OUTPOST_SPEC.md`](./docs/OUTPOST_SPEC.md)
 
 ---
 
@@ -41,15 +41,18 @@ The platform is designed around **Level-2 Autonomy**:
 
 ---
 
-## 4. The Problem (Sourced Quick-Commerce Cost Realities)
+## 4. The Problem (Sourced Quick-Commerce Cost Realities & Industry Citations)
 
-Quick-commerce delivery networks (10-to-15 minute delivery promises) operate with hyper-compressed fulfillment cycles and single-digit margins:
+Quick-commerce delivery networks (10-to-15 minute delivery promises) operate with hyper-compressed fulfillment cycles and single-digit margins in 2,000–4,000 sq ft micro-warehouses:
 
-- **Stockout Churn:** Quick-commerce grocery orders suffer an **8% to 15% out-of-stock rate** during demand surges, with over **40% of consumers switching to a rival platform** (Zepto, Blinkit, Instamart) when a staple SKU is unavailable (*Bain & Company / Redseer Quick Commerce Report 2024*).
-- **Perishable Food Waste:** Approximately **4% to 7% of fresh dairy, bakery, and produce inventory** in dark stores is written off as shrinkage due to shelf-life expiration (*USDA Economic Research Service; BCG Retail Waste Benchmarks*).
-- **Emergency Replenishment Overhead:** Ad-hoc, unscheduled intraday warehouse reorders and point-to-point courier runs cost **2.5× to 4× standard distribution routing**, eroding net unit economics (*McKinsey Supply Chain Review*).
+- **The "Availability Bias" & Censored Demand Trap:** As published by Swiggy Instamart's data science team (*Swiggy Bytes, Banik & Shedthikere 2023*), raw sales logs represent a censored proxy for true demand. When an SKU stocks out, recorded sales drop to zero; standard models evaluate this as low demand, systematically under-forecasting and under-replenishing in a destructive cycle.
+- **Stockout Churn:** Quick-commerce grocery orders suffer an **8% to 15% out-of-stock rate** during demand surges, with over **40% of consumers switching to a rival platform** (Zepto, Blinkit, Instamart) when a staple SKU is unavailable (*Bain & Company / Redseer Quick Commerce Report 2024*). Stockouts above **5% OOS** trigger permanent churn.
+- **"Dump-Related Cost Burns" (Perishable Wastage):** Blinkit engineering (*Lambda by Blinkit, Utkarsh Shukla*) highlights that quick-commerce dark stores lack walk-in clearance aisles to offload expiring stock; over-replenishment causes direct financial write-offs. Perishable inventory waste must stay strictly below **1.5% of GMV** (*Axis Capital / Zepto Financial Disclosures*) to preserve store contribution margins.
+- **Continuous Replenishment vs. Emergency Overhead:** Blinkit engineering (*Manik Chawla*) notes that *"Continuous replenishment is a 0–1 problem; dark stores require continuous inventory flow with automated triggers when availability dips."* Unscheduled emergency reorders cost **2.5× to 4× standard distribution routing** (*McKinsey Supply Chain Review*).
 
-Preventing these losses requires predictive intervention before stockouts occur, while strictly enforcing inventory mass conservation so operators can trust autonomous recommendations.
+Preventing these losses requires predictive intervention before stockouts occur, transparent tracking of requested vs. lost demand, and strict inventory mass conservation so operators can trust autonomous recommendations.
+
+📂 *Full industry ground truth, quantitative benchmarks, architecture, and executive outreach machine available in [`OUTPOST_SPEC.md`](./OUTPOST_SPEC.md).*
 
 ---
 
@@ -118,7 +121,7 @@ The system coordinates four tightly coupled layers:
 ## 💻 Tech Stack & Test Suite
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy (Async), SQLite WAL, LangGraph, Pydantic v2.
-- **Frontend:** Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS v4, Framer Motion, Lucide React, Recharts.
+- **Frontend:** Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS v4, Lucide React, Sonner.
 - **Test Suite:** **270+ passing tests** across 23 test suites covering deterministic scenarios, two-phase replenishment, sales accounting, and invariant conservation.
 
 ### Running Backend Tests

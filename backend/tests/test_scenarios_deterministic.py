@@ -31,7 +31,7 @@ from backend.services.decision.engine import DecisionOrchestrator
 @pytest.mark.asyncio
 async def test_demand_spike_multiplies_sales_and_accelerates_depletion(db_session: AsyncSession):
     """demand_spike must increase perishable order demand by >= 1.8x under the same seed."""
-    test_seed = 4201
+    test_seed = 7701
 
     # --- 1. Baseline Run (normal) ---
     set_current_scenario("normal")

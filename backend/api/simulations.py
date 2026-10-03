@@ -1,4 +1,4 @@
-"""Simulation API endpoints for GROCER v2."""
+"""Simulation API endpoints for Outpost."""
 import uuid as _uuid
 from typing import Any
 

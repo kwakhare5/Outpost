@@ -1,127 +1,56 @@
-// ---------------------------------------------------------------------------
-// 1. Dark Store Network & Operations Fleet Types
-// ---------------------------------------------------------------------------
+type HubStatusType = "critical" | "warning" | "surplus" | "normal";
 
-export type RiskSeverity = "critical" | "warning" | "low";
-export type ActionType = "transfer" | "reorder" | "discount" | "hold";
-export type ActionStatus = "pending" | "approved" | "executing" | "completed" | "rejected" | "failed";
-
-export interface DarkStore {
+export interface StoreHub {
   id: string;
   code: string;
   name: string;
-  location: string;
-  lat: number;
-  lng: number;
-  x: number; // SVG canvas coordinate
-  y: number; // SVG canvas coordinate
-  status: "active" | "maintenance" | "critical";
-  totalSkus: number;
-  activeBatches: number;
-  stockoutRiskCount: number;
-  spoilageRiskCount: number;
-  excessCapacityUnits: number;
-  inventoryHealth: {
-    dairy: number; // 0-100%
-    produce: number;
-    bakery: number;
-    staples: number;
-    packaged: number;
-  };
+  locality: string;
+  milkUnits: number;
+  capacity: number;
+  status: string;
+  statusType: HubStatusType;
+  nextExpiryHours: number;
+  activeOrders: number;
 }
 
-// ---------------------------------------------------------------------------
-// 3. Recommendation & Decision Stream Types
-// ---------------------------------------------------------------------------
-
-export interface RecommendationAlternative {
-  action: ActionType;
-  label: string;
-  score: number;
-  reason: string;
-  isRecommended?: boolean;
-}
-
-export interface RecommendationItem {
+export interface TransferRecord {
   id: string;
-  riskId: string;
-  title: string;
-  productName: string;
-  productCategory: string;
-  sourceStore?: {
-    id: string;
-    code: string;
-    name: string;
-    safeExcess: number;
-  };
-  destinationStore: {
-    id: string;
-    code: string;
-    name: string;
-  };
-  actionType: ActionType;
-  severity: RiskSeverity;
-  status: ActionStatus;
-  quantity: number;
-  unit: string;
-  distanceKm?: number;
-  stockoutInHours: number;
-  supplierEtaHours: number;
-  probability: number;
-  confidence: number;
-  discountPct?: number;
-  reasonCodes: string[];
-  alternatives: RecommendationAlternative[];
-  tradeoffAnalysis: {
-    spoilageAvoidanceINR: number;
-    transportCostINR: number;
-    stockoutLossAvoidedINR: number;
-    netBenefitINR: number;
-  };
-  createdAt: string;
+  fromCode: string;
+  fromName: string;
+  toCode: string;
+  toName: string;
+  units: number;
+  vanId: string;
+  eta: string;
+  status: "In Transit" | "Completed" | "Staged";
+  corridor: string;
+  batchId?: string;
 }
 
-// ---------------------------------------------------------------------------
-// 4. Simulation Engine & Telemetry Event Types
-// ---------------------------------------------------------------------------
-
-export interface SimulationEvent {
+export interface BatchItem {
   id: string;
-  timestamp: string;
-  type:
-    | "ORDER_CREATED"
-    | "INVENTORY_UPDATED"
-    | "FORECAST_UPDATED"
-    | "RISK_DETECTED"
-    | "RECOMMENDATION_CREATED"
-    | "HUMAN_APPROVED"
-    | "ACTION_EXECUTING"
-    | "TRANSFER_COMPLETED"
-    | "ORDER_CONFIRMED"
-    | "BATCH_EXPIRED"
-    | "EXECUTION_FAILED"
-    | "SCENARIO_STEP";
-  description: string;
-  storeCode?: string;
-  severity?: "critical" | "warning" | "info" | "success";
+  storeCode: string;
+  sku: string;
+  units: number;
+  receivedTime: string;
+  expiresInHours: number;
+  fifoPriority: number;
+  state: "fresh" | "expiring_soon" | "in_transit";
+  transferNote?: string;
+  originCode?: string;
+  destCode?: string;
+  vanId?: string;
 }
 
-export interface SimulationState {
-  isRunning: boolean;
-  currentDay: number;
-  currentHour: number;
-  activeScenario: string;
-  totalOrdersDelivered: number;
-  wasteAvoidedINR: number;
-  stockoutMitigatedCount: number;
-  avgTransferTimeMinutes: number;
+export interface RFCInboundOrder {
+  id: string;
+  storeCode: string;
+  storeName: string;
+  units: number;
+  status: string;
+  eta: string;
+  sku: string;
 }
 
-export interface ScenarioState {
-  activeScenarioId: string | null;
-  currentStep: number;
-  totalSteps: number;
-  isAutoPlaying: boolean;
-  isComplete: boolean;
-  seed: number;
-}
+export type DeckTab = "feed" | "stores" | "transfers" | "batches";
+

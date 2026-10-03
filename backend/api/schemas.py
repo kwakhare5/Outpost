@@ -1,4 +1,4 @@
-"""Pydantic v2 response schemas for GROCER v2 API.
+"""Pydantic v2 response schemas for Outpost API.
 
 Covers: stores, products, inventory, batches, forecasts, events.
 All schemas use ConfigDict for v2-style config.

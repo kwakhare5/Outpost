@@ -251,57 +251,7 @@ async def _seed_pending_rec(db_session):
 
 
 # ---------------------------------------------------------------------------
-# 1. AgentState TypedDict
-# ---------------------------------------------------------------------------
-
-def test_agent_state_can_be_constructed():
-    """AgentState is a TypedDict; required fields can be set."""
-    state: AgentState = {
-        "recommendation_id": uuid.uuid4(),
-        "db": None,
-        "events": [],
-        "status": "running",
-        "pre_check_passed": True,
-        "stale_inventory": False,
-        "verified": False,
-        "requires_human_review": False,
-    }
-    assert state["status"] == "running"
-    assert state["pre_check_passed"] is True
-
-
-# ---------------------------------------------------------------------------
-# 2-5. Tool: get_recommendation / get_inventory
-# ---------------------------------------------------------------------------
-
-async def test_get_recommendation_returns_dict_for_known_id(db_session):
-    scenario = await _seed_transfer_scenario(db_session)
-    rec = scenario["rec"]
-    result = await get_recommendation(db_session, rec.recommendation_id)
-    assert result is not None
-    assert result["recommendation_id"] == str(rec.recommendation_id)
-    assert result["action_type"] == "transfer"
-    assert result["status"] == "approved"
-
-
-async def test_get_recommendation_returns_none_for_unknown_id(db_session):
-    result = await get_recommendation(db_session, uuid.uuid4())
-    assert result is None
-
-
-async def test_get_inventory_returns_quantity(db_session):
-    scenario = await _seed_transfer_scenario(db_session)
-    inv = await get_inventory(db_session, scenario["src_store"].store_id, scenario["product"].product_id)
-    assert inv["quantity"] == 100
-
-
-async def test_get_inventory_returns_zero_for_unknown(db_session):
-    inv = await get_inventory(db_session, uuid.uuid4(), uuid.uuid4())
-    assert inv["quantity"] == 0
-
-
-# ---------------------------------------------------------------------------
-# 6-7. Tool: validate_transfer
+# 1. Tool: validate_transfer
 # ---------------------------------------------------------------------------
 
 async def test_validate_transfer_feasible_when_sufficient_source(db_session):

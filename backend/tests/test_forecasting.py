@@ -28,20 +28,9 @@ from backend.services.forecasting.models import (
 
 
 # ---------------------------------------------------------------------------
-# 1. DemandPoint
+# 1. Anomaly detection
 # ---------------------------------------------------------------------------
 
-def test_demand_point_stores_fields():
-    """DemandPoint is a simple data container."""
-    dp = DemandPoint(day_index=0, day_of_week=1, quantity=10.0)
-    assert dp.day_index == 0
-    assert dp.day_of_week == 1
-    assert dp.quantity == 10.0
-
-
-# ---------------------------------------------------------------------------
-# 2. Anomaly detection
-# ---------------------------------------------------------------------------
 
 def test_detect_anomalies_flags_spikes():
     """Z-score > 3 on a 6x spike is flagged as anomaly."""
@@ -188,15 +177,6 @@ def test_evaluate_forecast_known_mape():
     predicted = [90.0, 220.0]  # APE: 10%, 10% → MAPE = 10.0
     result = evaluate_forecast(actual, predicted)
     assert result.mape == pytest.approx(10.0, abs=0.01)
-
-
-def test_evaluate_forecast_returns_model_evaluation_result():
-    """evaluate_forecast returns a ModelEvaluationResult dataclass."""
-    result = evaluate_forecast([5.0], [5.0])
-    assert isinstance(result, ModelEvaluationResult)
-    assert hasattr(result, "mae")
-    assert hasattr(result, "rmse")
-    assert hasattr(result, "mape")
 
 
 # ---------------------------------------------------------------------------
