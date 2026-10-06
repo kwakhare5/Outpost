@@ -47,10 +47,11 @@ This structure guarantees that execution steps are auditable, predictable, and p
 ## 4. Why the Environment is Simulated
 Live quick-commerce dark stores cannot be used as trial sandboxes for unproven autonomous agents. Running experiments in production dark stores risks actual customer stockouts, food waste, and rider dispatch failures.
 
-The environment simulates a 5-node Mumbai dark store network:
-- **Topology:** Bandra West (BW-01), Andheri East (AE-02), Powai Galleria (PG-03), Lower Parel (LP-04), and Thane West (TW-05).
-- **Spatial Transit Matrix:** Road distance, vehicle transit times (15–35 minutes), and dispatch capacity constraints between nodes.
+The environment simulates a 3-node Mumbai dark store network:
+- **Topology:** Andheri West (ST-01), Bandra (ST-02), and Powai (ST-03), with 195 baseline network milk units.
+- **Spatial Transit Matrix:** Road distance along Western Express Highway, vehicle transit times (15–35 minutes), and dispatch capacity constraints between nodes.
 - **Physical Dynamics:** Discrete manufacturing batches, shelf-life countdowns, and Poisson-distributed customer order generation.
+- **Donor Safety Buffer:** Inter-store lateral transfers require verified donor balance proof ($S_{donor} - Q_{transfer} \ge D_{local} + B_{safety}$) to prevent creating donor shortages.
 
 We state clearly upfront: **this platform is evaluated against a deterministic simulated environment, not in a live production facility.**
 
