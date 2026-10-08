@@ -149,6 +149,13 @@ ST-01,Dark Store Andheri West,SV Road Andheri West,38,60,7.6
 ST-02,Dark Store Bandra,Turner Road Bandra,112,150,1.2
 ST-03,Dark Store Powai,Hiranandani Gardens,45,70,1.8`;
 
+export const SAMPLE_DEMAND_CSV = `timestamp,store_id,sku,requested_units,fulfilled_units,stockout_flag
+08:00,ST-01,Amul Taaza Milk 500ml,8,8,0
+08:10,ST-01,Amul Taaza Milk 500ml,7,7,0
+08:20,ST-01,Amul Taaza Milk 500ml,8,8,0
+08:30,ST-01,Amul Taaza Milk 500ml,9,9,0
+08:40,ST-01,Amul Taaza Milk 500ml,10,10,0`;
+
 export async function uploadStoresCsv(csvContent: string): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/stores/upload-csv`, {

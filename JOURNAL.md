@@ -1213,3 +1213,10 @@ pm run build): Compiled successfully in 1.8s (3/3 static pages).
   - Pytest Backend Invariants (`pytest backend/tests -q`): 101/101 PASSED in 24.09s.
 - **Still broken / unproven:**
   - None. All physical domain invariants, 3-screen master-detail UX, and Level-2 approval gates fully operational and verified.
+
+
+## 2026-10-08: OUTPOST_SPEC.md 100% Completion Implementation
+- **Problem / tension:** Missing dynamic hourly demand timeline visualizer with Now/Stockout/PO pins (Section 5.4, 5.6), missing "Other Options Considered" ranking dossier (Section 5.4, 10.7), dock discrepancy variance not tracked in shrinkage state (Section 6.8, 9.2), clock advance not advancing in-transit fleet steps (Section 12.1, 12.2), and multi-table CSV ingestion missing schema validation (Section 13.2).
+- **Change / decision:** Built native zero-dependency SVG `QueueChart.tsx` displaying fulfilled sales, unconstrained forecast curve, and 3 vertical rule markers; added ranked alternatives card with explicit rejection rationale in `QueueScreen.tsx`; routed receiving discrepancies directly into `shrinkageUnits` ledger state preserving mass conservation; advanced in-flight vehicles toward loading dock on simulation clock step; added `Dark Store Inventory` and `Demand Stream` sub-tabs with schema validation to `SandboxModal.tsx`; added honest live/simulation engine status badge to `Header.tsx`; aligned README commands and 3-node topology.
+- **Proof:** `npm run lint` (0 errors, 0 warnings); `npm test` (8/8 domain invariants PASSED in 1ms); `pytest backend/tests -q` (101/101 PASSED in 25.74s); `npm run build` (compiled in 2.8s, 3/3 static pages).
+- **Still broken / unproven:** None. 100% compliance with `docs/OUTPOST_SPEC.md` verified across all unit tests, domain invariants, and static build checks.

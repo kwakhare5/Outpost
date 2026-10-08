@@ -12,6 +12,7 @@ import {
 import type { DeckTab, AlertItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge, Button, SegmentedControl } from "@/components/ui";
+import { QueueChart } from "./QueueChart";
 
 interface QueueScreenProps {
   alerts: AlertItem[];
@@ -200,42 +201,14 @@ export function QueueScreen({
             </div>
           </div>
 
-          {/* Shelf Depletion Horizon */}
-          <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-[#1C1917]">Depletion Horizon</span>
-              <span className="text-[11px] font-mono text-[#C2410C] font-semibold">
-                Runs out at {selectedAlert.runsOutAtTime} (~{selectedAlert.runsOutInHours}h)
-              </span>
-            </div>
-            <div className="h-2 w-full bg-[#EAE6DF] rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  selectedAlert.runsOutInHours <= 5
-                    ? "bg-rose-500"
-                    : selectedAlert.runsOutInHours <= 8
-                    ? "bg-amber-500"
-                    : "bg-[#2563EB]"
-                )}
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.max(
-                      12,
-                      (selectedAlert.stockOnShelves /
-                        (selectedAlert.stockOnShelves + selectedAlert.orderSpeedPerHour * 4)) *
-                        100
-                    )
-                  )}%`,
-                }}
-              />
-            </div>
-            <div className="flex justify-between text-[11px] text-[#78716C] font-mono">
-              <span>Current Stock: <strong className="text-[#1C1917]">{selectedAlert.stockOnShelves}u</strong></span>
-              <span>Burn Rate: <strong className="text-[#1C1917]">{selectedAlert.orderSpeedPerHour} u/h</strong></span>
-            </div>
-          </div>
+          {/* Dynamic Hourly Demand Timeline & Depletion Chart */}
+          <QueueChart
+            currentStock={selectedAlert.stockOnShelves}
+            burnRate={selectedAlert.orderSpeedPerHour}
+            productName={selectedAlert.productName}
+            runsOutAtTime={selectedAlert.runsOutAtTime}
+            runsOutInHours={selectedAlert.runsOutInHours}
+          />
 
           {/* Contextual Action Dossier */}
           {selectedAlert.actionCategory === "TRANSFER" ? (
@@ -388,6 +361,27 @@ export function QueueScreen({
                     </Button>
                   </div>
                 )}
+
+                {/* Other Options Considered (Section 5.4, 10.7) */}
+                <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-2 text-xs">
+                  <span className="text-[10px] font-bold uppercase text-[#78716C] block">
+                    Other Options Evaluated &amp; Ranked:
+                  </span>
+                  <ul className="space-y-1.5 text-[11px] text-[#57534E]">
+                    <li className="flex items-start justify-between gap-2">
+                      <span>1. Wait for Inbound PO-4471 from RFC:</span>
+                      <span className="text-rose-600 font-semibold shrink-0">Rejected (+5.6h late, arrives 18:40)</span>
+                    </li>
+                    <li className="flex items-start justify-between gap-2">
+                      <span>2. Transfer 20 Units (Smaller Batch):</span>
+                      <span className="text-rose-600 font-semibold shrink-0">Rejected (Depletes recipient by 14:30)</span>
+                    </li>
+                    <li className="flex items-start justify-between gap-2">
+                      <span>3. Do Nothing (Wait for Runout):</span>
+                      <span className="text-rose-600 font-semibold shrink-0">Rejected (Incurs Rs 1,390 lost revenue)</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </>
           ) : selectedAlert.actionCategory === "DISCOUNT" ? (
@@ -444,6 +438,23 @@ export function QueueScreen({
                     Apply 20% In-App Markdown
                   </Button>
                 )}
+
+                {/* Evaluated Alternatives (Section 10.7) */}
+                <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-1.5 text-xs">
+                  <span className="text-[10px] font-bold uppercase text-[#78716C] block">
+                    Other Options Evaluated:
+                  </span>
+                  <ul className="space-y-1 text-[11px] text-[#57534E]">
+                    <li className="flex items-start justify-between gap-2">
+                      <span>1. Lateral Hub Transfer:</span>
+                      <span className="text-rose-600 font-semibold shrink-0">Rejected (Transit time exceeds shelf life)</span>
+                    </li>
+                    <li className="flex items-start justify-between gap-2">
+                      <span>2. Total Write-Off:</span>
+                      <span className="text-rose-600 font-semibold shrink-0">Rejected (100% loss of Rs 400 inventory)</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           ) : selectedAlert.actionCategory === "PO_WAIT" ? (

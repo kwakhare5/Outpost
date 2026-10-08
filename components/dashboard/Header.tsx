@@ -6,7 +6,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { DeckTab } from "@/lib/types";
-import { Button } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -15,6 +15,8 @@ interface HeaderProps {
   onSelectSandbox: () => void;
   onAdvanceTime?: () => void;
   onOpenArchitecture?: () => void;
+  isBackendOnline?: boolean;
+  shrinkageUnits?: number;
 }
 
 export function Header({
@@ -22,6 +24,8 @@ export function Header({
   totalStock,
   onSelectSandbox,
   onAdvanceTime,
+  isBackendOnline = false,
+  shrinkageUnits = 0,
 }: HeaderProps) {
   const [isAdvancing, setIsAdvancing] = useState(false);
 
@@ -71,6 +75,27 @@ export function Header({
 
       {/* Right Controls & Telemetry */}
       <div className="flex items-center gap-2.5">
+        {/* Honest Engine Status Badge (Section 8.2) */}
+        <div className="hidden lg:block">
+          {isBackendOnline ? (
+            <Badge variant="success" size="sm" dot>
+              Live Engine (:8000)
+            </Badge>
+          ) : (
+            <Badge variant="neutral" size="sm" dot>
+              Local Simulation
+            </Badge>
+          )}
+        </div>
+
+        {/* Shrinkage Discrepancy Counter (Section 6.8, 9.2) */}
+        {shrinkageUnits > 0 && (
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-red-50 border border-red-200 text-xs font-semibold text-red-700">
+            <span>Shrinkage:</span>
+            <span className="font-bold font-mono">{shrinkageUnits}u</span>
+          </div>
+        )}
+
         {/* Total Stock Counter */}
         <div className="hidden sm:flex items-center gap-2 px-3 h-8 rounded-lg bg-[#FAF8F5] border border-[#EAE6DF] text-xs font-semibold text-[#1C1917]">
           <span className="text-[#78716C]">Network Stock:</span>

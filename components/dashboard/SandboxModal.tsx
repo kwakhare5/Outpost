@@ -5,7 +5,7 @@ import { Sliders, RotateCcw, X, Cpu, ShieldCheck, Network } from "lucide-react";
 import { toast } from "sonner";
 import { StoreHub } from "@/lib/types";
 import { Badge, Button, SegmentedControl } from "@/components/ui";
-import { uploadStoresCsv, SAMPLE_DARKSTORE_CSV } from "@/lib/api";
+import { uploadStoresCsv, SAMPLE_DARKSTORE_CSV, SAMPLE_DEMAND_CSV } from "@/lib/api";
 
 interface SandboxModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export function SandboxModal({
   const modalTab = userTab ?? initialTab;
   const [demandMultiplier, setDemandMultiplier] = useState<number>(2.5);
   const [delayHours, setDelayHours] = useState<number>(2);
+  const [csvType, setCsvType] = useState<"inventory" | "demand">("inventory");
   const [csvContent, setCsvContent] = useState<string>("");
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
@@ -62,6 +63,17 @@ export function SandboxModal({
       toast.error("Please paste CSV data or load template first.");
       return;
     }
+
+    const header = csvContent.trim().split("\n")[0].toLowerCase();
+    if (csvType === "inventory" && !header.includes("store_id")) {
+      toast.error("Invalid Inventory CSV", { description: "Header row must include 'store_id'." });
+      return;
+    }
+    if (csvType === "demand" && !header.includes("requested_units")) {
+      toast.error("Invalid Demand CSV", { description: "Header row must include 'requested_units'." });
+      return;
+    }
+
     setIsUploading(true);
     const res = await uploadStoresCsv(csvContent);
     setIsUploading(false);
@@ -225,36 +237,53 @@ export function SandboxModal({
               </div>
             </div>
 
-            {/* CSV Replay */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            {/* Multi-Table CSV Ingestion (Section 13.2) */}
+            <div className="space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <h3 className="text-xs font-bold text-[#1C1917] uppercase tracking-wider">
-                  Network CSV Replay
+                  Multi-Table CSV Ingestion &amp; Replay
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setCsvContent(SAMPLE_DARKSTORE_CSV)}
-                  className="text-[11px] font-semibold text-[#2563EB] hover:underline cursor-pointer"
-                >
-                  Load 3-Store Template
-                </button>
+                <div className="flex items-center gap-2">
+                  <SegmentedControl
+                    items={[
+                      { id: "inventory", label: "Inventory" },
+                      { id: "demand", label: "Demand Stream" },
+                    ]}
+                    value={csvType}
+                    onChange={(val) => {
+                      const type = val as "inventory" | "demand";
+                      setCsvType(type);
+                      setCsvContent(type === "inventory" ? SAMPLE_DARKSTORE_CSV : SAMPLE_DEMAND_CSV);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCsvContent(csvType === "inventory" ? SAMPLE_DARKSTORE_CSV : SAMPLE_DEMAND_CSV)}
+                    className="text-[11px] font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                  >
+                    Reset Template
+                  </button>
+                </div>
               </div>
 
               <textarea
                 value={csvContent}
                 onChange={(e) => setCsvContent(e.target.value)}
-                placeholder="Paste CSV rows here..."
+                placeholder={csvType === "inventory" ? "Paste inventory CSV rows..." : "Paste demand history CSV rows..."}
                 className="w-full h-24 p-2.5 rounded-xl border border-[#EAE6DF] font-mono text-[11px] text-[#1C1917] bg-[#FAF8F5] focus:outline-hidden focus:ring-1 focus:ring-[#2563EB]"
               />
 
-              <div className="flex justify-end">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] text-[#78716C]">
+                <span className="font-mono">
+                  Schema: {csvType === "inventory" ? "store_id, store_name, locality, milk_inventory, capacity, burn" : "timestamp, store_id, sku, requested_units, fulfilled_units, stockout_flag"}
+                </span>
                 <Button
                   variant="dark"
                   size="sm"
                   onClick={handleCsvUpload}
                   disabled={isUploading || !csvContent.trim()}
                 >
-                  {isUploading ? "Uploading..." : "Replay Network CSV"}
+                  {isUploading ? "Uploading..." : `Replay ${csvType === "inventory" ? "Inventory" : "Demand"} CSV`}
                 </Button>
               </div>
             </div>

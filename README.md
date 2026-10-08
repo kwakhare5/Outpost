@@ -63,7 +63,7 @@ The system coordinates four tightly coupled layers:
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │               Operations Deck (Next.js 16 + Tailwind CSS)              │
-│  - Spatial Mumbai Fleet Mesh (5 Hubs)    - Candidate Action Drawer     │
+│  - Spatial Mumbai Fleet Mesh (3 Hubs)    - Candidate Action Drawer     │
 │  - Human-in-the-Loop Approval Gate       - Real-Time Simulation Clock  │
 └──────────────────────────────────┬─────────────────────────────────────┘
                                    │ REST / Server-Sent Events
@@ -100,8 +100,8 @@ The system coordinates four tightly coupled layers:
 | **Execution Model** | Deterministic Seeded State Machine | Replenishment commits capital; stochastic agents prevent RCA and testing. Fixed seeds enable exact replay of edge cases. |
 | **Autonomy Level** | Level-2 (Human Approval Gate) | Autonomous execution without human oversight risks inventory drain during false spikes. The machine proposes; the human signs off. |
 | **Forecasting Method** | **Holt Linear** (Double Exponential Smoothing) | Pure mathematical time series (Level + Trend). Evaluated against a 14-day moving average over a 3-day holdout; lower MAE candidate is selected. **Zero machine learning hype.** |
-| **Error Metric** | **WAPE & MAE** | Supply chains reject MAPE because low-volume actuals explode percentage errors. WAPE ($\frac{\sum \|a - p\|}{\sum a} \times 100$) provides robust volume-weighted accuracy. |
-| **Demand Calibration** | **Favorita Grocery Dataset** | Real Kaggle grocery sales dataset (Ecuador, 4+ years) calibrates baseline category volumes, price elasticities, and weekend lifts without synthetic fabrication. |
+| **Error Metric** | **WAPE & MAE** | Supply chains reject MAPE because low-volume actuals explode percentage errors. WAPE ($\frac{\sum |a - p|}{\sum a} \times 100$) provides robust volume-weighted accuracy. |
+| **Demand Calibration** | Documented Intraday Assumptions | Intraday Mumbai delivery dynamics are modeled via an explicit `category × hour block × weekday` rate table without synthetic fabrication. |
 | **Execution Engine** | 5-Node LangGraph DAG | Graph state machine provides explicit pre-check, invariant verification, rollback compensation, and event logging. |
 
 *(For full architectural rationale, see [`DESIGN_DECISIONS.md`](./DESIGN_DECISIONS.md).)*
@@ -110,8 +110,8 @@ The system coordinates four tightly coupled layers:
 
 ## 7. Honest Limits & Boundaries
 
-1. **Simulated Fleet Environment:** The 5 Mumbai dark stores (Bandra West, Andheri East, Powai Galleria, Lower Parel, Thane West) operate inside a deterministic simulator with simulated road travel times and Poisson order arrival.
-2. **Favorita Dataset Scope:** The Favorita dataset provides real daily grocery demand profiles, but originates from Ecuadorian retail stores. It does not reflect Mumbai intraday delivery dynamics; intraday patterns are modeled via an explicit `category × hour block × weekday` rate table.
+1. **Simulated Fleet Environment:** The 3 Mumbai dark stores (Andheri West, Bandra, Powai) operate inside a deterministic simulator with simulated Western Express Highway travel times and Poisson order arrival.
+2. **Demand Calibration Scope:** Intraday demand profiles are modeled via an explicit `category × hour block × weekday` rate table with Holt linear double exponential smoothing.
 3. **POS Integration Not Implemented:** Discount actions are proposed recommendations only; point-of-sale pricing updates are not connected to a physical retail register.
 4. **Single-Process Runtime State:** Simulation state is maintained in a single process with SQLite backing. Multi-instance production deployment would require distributed consensus and row-locked PostgreSQL storage.
 5. **No Speculative ROI Claims:** We report empirical error metrics (MAE, WAPE) and simulated operational outcomes (stockouts prevented under scenario runs). We make zero unsubstantiated claims of dollar savings without a live controlled trial.
@@ -120,19 +120,33 @@ The system coordinates four tightly coupled layers:
 
 ## 💻 Tech Stack & Test Suite
 
-- **Backend:** Python 3.12, FastAPI, SQLAlchemy (Async), SQLite WAL, LangGraph, Pydantic v2.
+- **Backend:** Python 3.11+, FastAPI, SQLAlchemy (Async), SQLite WAL, LangGraph, Pydantic v2.
 - **Frontend:** Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS v4, Lucide React, Sonner.
-- **Test Suite:** **109 passing tests** (101 backend pytest invariants + 8 domain invariant and conservation checks).
+- **Test Suite:** **109 passing tests** (101 backend pytest unit tests + 8 domain invariant and conservation checks).
 
-### Running Backend Tests
-```bash
-cd backend
-python -m pytest tests/ -v
+### Running Tests
+```powershell
+# Backend pytest suite (101 unit tests)
+pytest backend/tests -q
+
+# Frontend invariant verification (8 invariant checks)
+npm test
+
+# Linting
+npm run lint
 ```
 
-### Running Frontend Locally
-```bash
-npm install
+### Running Locally (Dual Mode)
+```powershell
+# 1. Full-Stack Connected Mode (Port 8000 + Port 3000)
+# Terminal 1:
+uvicorn backend.main:app --reload --port 8000
+
+# Terminal 2:
 npm run dev
+
+# 2. Standalone UI Simulation Mode (Port 3000)
+npm run dev
+# The Next.js client seamlessly falls back to local deterministic state when FastAPI is offline.
 ```
 Open [http://localhost:3000](http://localhost:3000) to view the Operations Cockpit.

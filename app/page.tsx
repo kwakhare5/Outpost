@@ -45,6 +45,7 @@ export default function OperationsDeckPage() {
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
   const [simTime, setSimTime] = useState<string>("08:15 AM");
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>("");
+  const [shrinkageUnits, setShrinkageUnits] = useState<number>(0);
 
   // Poll backend health
   useEffect(() => {
@@ -301,6 +302,13 @@ export default function OperationsDeckPage() {
     }
 
     const targetStoreCode = destCode || "ST-01";
+    const shipment = transfers.find((t) => t.id === shipmentId);
+    const manifestUnits = shipment ? shipment.units : receivedUnits;
+    const discrepancy = Math.max(0, manifestUnits - receivedUnits);
+
+    if (discrepancy > 0) {
+      setShrinkageUnits((prev) => prev + discrepancy);
+    }
 
     // Shelf credit commits strictly now
     setStores((prev) =>
@@ -321,9 +329,15 @@ export default function OperationsDeckPage() {
       prev.map((t) => (t.id === shipmentId ? { ...t, status: "Completed", currentStep: 6 } : t))
     );
 
-    toast.success(`Count Confirmed: ${receivedUnits} Units Shelved`, {
-      description: `Store ${targetStoreCode} inventory credited. Conservation of mass verified.`,
-    });
+    if (discrepancy > 0) {
+      toast.warning(`Count Confirmed with Discrepancy: ${receivedUnits}/${manifestUnits} Shelved`, {
+        description: `${discrepancy} units logged to transit shrinkage ledger. Conservation verified.`,
+      });
+    } else {
+      toast.success(`Count Confirmed: ${receivedUnits} Units Shelved`, {
+        description: `Store ${targetStoreCode} inventory credited. Conservation of mass verified.`,
+      });
+    }
   };
 
   // 7. Simulation Controls
@@ -340,11 +354,36 @@ export default function OperationsDeckPage() {
           activeOrders: Math.max(1, s.activeOrders + Math.floor(Math.random() * 3) - 1),
         }))
       );
+      // Advance active in-flight transits toward dock arrival (Section 12.1, 12.2)
+      setTransfers((prev) =>
+        prev.map((t) => {
+          if (t.status !== "Completed" && (t.currentStep === 4 || !t.currentStep || t.currentStep < 5)) {
+            return {
+              ...t,
+              currentStep: 5,
+              etaPassed: true,
+            };
+          }
+          return t;
+        })
+      );
       toast.success("Clock Advanced: +1 Hour Elapsed", {
-        description: "Shelf life timers updated; customer order rates refreshed.",
+        description: "Shelf life timers updated; in-flight vehicles advanced toward dock.",
       });
     } catch {
       setSimTime((prev) => advanceClockString(prev, 1));
+      setTransfers((prev) =>
+        prev.map((t) => {
+          if (t.status !== "Completed" && (t.currentStep === 4 || !t.currentStep || t.currentStep < 5)) {
+            return {
+              ...t,
+              currentStep: 5,
+              etaPassed: true,
+            };
+          }
+          return t;
+        })
+      );
       toast.info("Time advanced (local simulation preview)");
     }
   };
@@ -353,6 +392,7 @@ export default function OperationsDeckPage() {
     setStores(INITIAL_STORES);
     setTransfers(INITIAL_TRANSFERS);
     setAlerts(DEFAULT_ALERTS);
+    setShrinkageUnits(0);
     setSimTime("08:15 AM");
     setSelectedStoreFilter("");
     toast.info("Network Reset: Restored to standard 195-unit Mumbai 3-node equilibrium");
@@ -423,6 +463,8 @@ export default function OperationsDeckPage() {
             setIsSandboxModalOpen(true);
           }}
           onAdvanceTime={handleAdvanceTime}
+          isBackendOnline={isBackendOnline}
+          shrinkageUnits={shrinkageUnits}
         />
 
         <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 w-full">
