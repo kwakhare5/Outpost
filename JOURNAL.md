@@ -1,5 +1,21 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-08: Apple Squircle Kinetic Loop Brand Deployment & Single-Source Architecture
+
+### Work Card: Apple Squircle Kinetic Loop Brand Deployment & Single-Source Architecture
+- **Problem / tension:** Standard circular corner radii looked rigid and boxy; brand mark was redundantly duplicated as inline SVG instead of consuming `public/logo.svg` as single source of truth.
+- **Change / decision:** Deployed authentic Apple $G^2$ continuous-curvature squircle background (`#0F172A`) framing the Kinetic Loop vector mark into `public/logo.svg`; matched `app/icon.svg`; and wired `Sidebar.tsx` to directly consume `/logo.svg` via Next.js `Image`.
+- **Proof:** `npm run lint` exited 0 (0 errors, 0 warnings); `npm test` exited 0 (8/8 domain invariants passed); `npm run build` compiled cleanly in 2.3s generating static `/icon.svg`; single source of truth established.
+- **Still broken / unproven:** None. Pure vector Apple squircle branding active across browser tab, public assets, and console sidebar.
+
+## 2026-10-08: Domain-Specific Vector Logo & Favicon Suite Generation
+
+### Work Card: Domain-Specific Vector Logo & Favicon Suite Generation
+- **Problem / tension:** Previous brand concepts were generic abstract geometric polygons disconnected from Outpost's dark-store replenishment reality (milk/bread crates, dispatch shutters, inter-store transfer corridors, FEFO batch racks).
+- **Change / decision:** Designed 4 domain-grounded vector SVG concepts (Dark-Store Dock & Tote, Monogram 'O' Tote Circuit, Inter-Store Transit Bridge, Tiered FEFO Batch Pallet) rendered in both Light Deck and Dark Ops Terminal editions with 64px, 32px, and 16px scales in `public/logo-options.svg` and updated `outpost_logo_options.html`.
+- **Proof:** `npm run lint` exited 0; `npm test` exited 0 (8/8 domain invariants passed); pure vector SVG rendered and validated across browser and tab scales.
+- **Still broken / unproven:** Awaiting user selection on final candidate (01-L/D, 02-L/D, 03-L/D, or 04-L/D) to deploy into `app/icon.svg`, `public/logo.svg`, and sidebar brand component.
+
 ## 2026-10-08: Global CSS Theme Tokens, Sidebar Badge Purge, Accept Auto-Navigation & Fleet Row Unification
 
 ### Work Card: Global CSS Theme Tokens, Sidebar Badge Purge, Accept Auto-Navigation & Fleet Row Unification

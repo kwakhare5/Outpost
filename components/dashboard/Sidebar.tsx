@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import {
   CheckCircle2,
   Clock,
-  ShieldCheck,
   Truck,
   Zap,
 } from "lucide-react";
@@ -64,9 +64,14 @@ export function Sidebar({
       {/* Brand & Network Status */}
       <div className="p-4 border-b border-[#EAE6DF] shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white shadow-xs">
-            <ShieldCheck className="h-4.5 w-4.5 text-white" />
-          </div>
+          <Image
+            src="/logo.svg"
+            alt="Outpost"
+            width={32}
+            height={32}
+            className="h-8 w-8 shrink-0 select-none rounded-lg shadow-xs"
+            priority
+          />
           <div>
             <span className="font-bold text-[#1C1917] text-sm tracking-tight leading-none block">
               Outpost
