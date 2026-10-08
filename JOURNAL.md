@@ -1220,3 +1220,10 @@ pm run build): Compiled successfully in 1.8s (3/3 static pages).
 - **Change / decision:** Built native zero-dependency SVG `QueueChart.tsx` displaying fulfilled sales, unconstrained forecast curve, and 3 vertical rule markers; added ranked alternatives card with explicit rejection rationale in `QueueScreen.tsx`; routed receiving discrepancies directly into `shrinkageUnits` ledger state preserving mass conservation; advanced in-flight vehicles toward loading dock on simulation clock step; added `Dark Store Inventory` and `Demand Stream` sub-tabs with schema validation to `SandboxModal.tsx`; added honest live/simulation engine status badge to `Header.tsx`; aligned README commands and 3-node topology.
 - **Proof:** `npm run lint` (0 errors, 0 warnings); `npm test` (8/8 domain invariants PASSED in 1ms); `pytest backend/tests -q` (101/101 PASSED in 25.74s); `npm run build` (compiled in 2.8s, 3/3 static pages).
 - **Still broken / unproven:** None. 100% compliance with `docs/OUTPOST_SPEC.md` verified across all unit tests, domain invariants, and static build checks.
+
+
+## 2026-10-08: Metadata Description Tags & README Overhaul
+- **Problem / tension:** Missing comprehensive search/social description tags in `app/layout.tsx`, and `README.md` contained dead video placeholders and speculative walkthrough timestamps.
+- **Change / decision:** Added rich Next.js metadata in `app/layout.tsx` (title, description, keywords, OpenGraph, Twitter card); overhauled `README.md` to remove video placeholders, and added explicit Vercel deployment instructions with hybrid client fallback documentation.
+- **Proof:** `npm run lint` exited 0; `npm test` exited 0 (8/8 domain invariants PASSED in 0ms); `npm run build` compiled successfully in 2.3s (3/3 static pages).
+- **Still broken / unproven:** None. Clean compile and verified production metadata.

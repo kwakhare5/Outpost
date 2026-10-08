@@ -11,13 +11,41 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Outpost -- Autonomous Quick-Commerce Inventory Deck",
+  title: "Outpost — Quick-Commerce Inventory Replenishment Decision Engine",
   description:
-    "Deterministic decision engine for multi-node dark store inventory balancing and human-in-the-loop replenishment execution.",
+    "Deterministic decision engine for high-velocity dark stores. Forecasts localized demand, enforces Level-2 human review, and tracks lateral stock rebalancing with mass conservation.",
+  keywords: [
+    "quick-commerce",
+    "dark store",
+    "inventory replenishment",
+    "supply chain",
+    "FastAPI",
+    "Next.js",
+    "deterministic simulation",
+    "Mumbai",
+    "demand forecasting",
+    "loss prevention",
+  ],
+  authors: [{ name: "Karan Wakhare", url: "https://github.com/kwakhare5" }],
+  openGraph: {
+    title: "Outpost — Quick-Commerce Inventory Replenishment Decision Engine",
+    description:
+      "Deterministic decision engine for high-velocity dark stores. Forecasts localized demand, enforces Level-2 human review, and tracks lateral stock rebalancing with mass conservation.",
+    url: "https://outtpost.vercel.app",
+    siteName: "Outpost",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Outpost — Quick-Commerce Inventory Replenishment Decision Engine",
+    description:
+      "Deterministic decision engine for high-velocity dark stores. Forecasts localized demand, enforces Level-2 human review, and tracks lateral stock rebalancing with mass conservation.",
+  },
   icons: {
-    icon: '/logo.svg',
-    shortcut: '/logo.svg',
-    apple: '/logo.svg',
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+    apple: "/logo.svg",
   },
 };
 
