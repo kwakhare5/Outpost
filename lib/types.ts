@@ -31,20 +31,8 @@ export interface TransferRecord {
   dispatchedAt?: string;
 }
 
-export interface BatchItem {
-  id: string;
-  storeCode: string;
-  sku: string;
-  units: number;
-  receivedTime: string;
-  expiresInHours: number;
-  fifoPriority: number;
-  state: "fresh" | "expiring_soon" | "in_transit";
-  transferNote?: string;
-  originCode?: string;
-  destCode?: string;
-  vanId?: string;
-}
+
+export type ShipmentStep = "approved" | "picked" | "dispatched" | "in_transit" | "awaiting_confirmation" | "received";
 
 export interface ShipmentItem {
   id: string;
@@ -58,8 +46,8 @@ export interface ShipmentItem {
   dispatchedAt: string;
   eta: string;
   etaPassed: boolean;
-  status: "dispatched" | "in_transit" | "awaiting_confirmation" | "received";
-  currentStep: number; // 1 to 5
+  status: ShipmentStep;
+  currentStep: number; // 1 to 6
   type: "TRANSFER" | "RFC_PO";
   corridor: string;
 }
@@ -81,11 +69,14 @@ export interface OutcomeRecordItem {
 }
 
 export interface HistorySummary {
-  totalDecisions: number;
-  stockoutsPrevented: number;
-  moneySavedInr: number;
-  accuracyRatePct: number;
-  spoilageWasteInr: number;
+  resolvedCount: number;
+  stockoutsPreventedCount: number;
+  totalLostSalesUnits: number;
+  totalLostSalesInr: number;
+  totalWasteUnits: number;
+  totalWasteInr: number;
+  forecastMaeUnits: number;
+  forecastWapePct: number;
   records: OutcomeRecordItem[];
 }
 
@@ -120,4 +111,4 @@ export interface AlertItem {
   actionCategory?: "TRANSFER" | "DISCOUNT" | "PO_WAIT" | "MONITOR";
 }
 
-export type DeckTab = "alerts" | "deliveries" | "history" | "inventory" | "sandbox";
+export type DeckTab = "queue" | "inflight" | "outcomes";

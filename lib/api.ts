@@ -1,5 +1,5 @@
 /**
- * Outpost API Client — Hybrid Dual-Mode Architecture
+ * Outpost API Client -- Hybrid Dual-Mode Architecture
  * Connects directly to FastAPI (port 8000) when running;
  * seamlessly falls back to local simulation when backend is offline.
  */
@@ -187,131 +187,21 @@ export interface CsvUploadResult {
   } | null;
 }
 
-export type CsvRecommendation = NonNullable<CsvUploadResult["recommendation"]>;
-
 /**
- * Standard CSV Template string for 1-click download
+ * Standard CSV Template string for 1-click download (Spec Section 2.1 & 13)
  */
 export const SAMPLE_DARKSTORE_CSV = `store_code,store_name,locality,milk_units,capacity,active_orders
-ST-01,Andheri East,MIDC Cyber Hub,35,45,14
-ST-02,Bandra West,Hill Road / Turner,48,50,9
-ST-03,Powai Galleria,Hiranandani Gardens,28,35,11
-ST-04,Lower Parel,Senapati Bapat Marg,4,30,18
-ST-05,Thane West,Ghodbunder Road,25,35,8`;
+ST-01,Dark Store Andheri West,SV Road,38,60,19
+ST-02,Dark Store Bandra,Hill Road / Turner,112,150,10
+ST-03,Dark Store Powai,Hiranandani Gardens,45,70,12`;
 
 /**
- * Client-side deterministic CSV parser & rebalance solver (runs offline or online)
- */
-function parseStoresCsvClient(csvText: string): CsvUploadResult {
-  const lines = csvText.trim().split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2) {
-    throw new Error("CSV file must contain a header row and at least one store row.");
-  }
-
-  const headerLine = lines[0].toLowerCase();
-  const headers = headerLine.split(",").map((h) => h.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, "_"));
-
-  const codeIdx = headers.findIndex((h) => h.includes("code"));
-  const nameIdx = headers.findIndex((h) => h.includes("name"));
-  const localityIdx = headers.findIndex((h) => h.includes("loc") || h.includes("area"));
-  const unitsIdx = headers.findIndex((h) => h.includes("unit") || h.includes("stock") || h.includes("milk") || h.includes("qty"));
-  const capIdx = headers.findIndex((h) => h.includes("cap"));
-  const ordersIdx = headers.findIndex((h) => h.includes("order") || h.includes("demand"));
-
-  const stores: StoreHub[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const rawCols = lines[i].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
-    if (rawCols.length === 0 || !rawCols[0]) continue;
-
-    const code = (codeIdx >= 0 && rawCols[codeIdx]) ? rawCols[codeIdx].toUpperCase() : `ST-${String(i).padStart(2, "0")}`;
-    const name = (nameIdx >= 0 && rawCols[nameIdx]) ? rawCols[nameIdx] : `Store ${code}`;
-    const locality = (localityIdx >= 0 && rawCols[localityIdx]) ? rawCols[localityIdx] : "Mumbai Metro";
-    const milkUnits = Math.max(0, parseInt((unitsIdx >= 0 && rawCols[unitsIdx]) ? rawCols[unitsIdx] : "25", 10) || 0);
-    const capacity = Math.max(1, parseInt((capIdx >= 0 && rawCols[capIdx]) ? rawCols[capIdx] : "45", 10) || 45);
-    const activeOrders = Math.max(0, parseInt((ordersIdx >= 0 && rawCols[ordersIdx]) ? rawCols[ordersIdx] : "10", 10) || 10);
-
-    const burnRate = Math.max(0.5, activeOrders / 4.0);
-    const stockoutHours = Number((milkUnits / burnRate).toFixed(1));
-
-    let statusType: "critical" | "warning" | "surplus" | "normal" = "normal";
-    let status = "Normal";
-
-    if (stockoutHours < 5.0) {
-      statusType = "critical";
-      status = `Critical (${stockoutHours}h buffer)`;
-    } else if (milkUnits > 35) {
-      statusType = "surplus";
-      status = `Surplus (+${Math.max(0, milkUnits - 25)} units safe)`;
-    }
-
-    stores.push({
-      id: `store-${code.toLowerCase()}`,
-      code,
-      name,
-      locality,
-      milkUnits,
-      capacity,
-      status,
-      statusType,
-      nextExpiryHours: 40 + i * 2,
-      activeOrders,
-    });
-  }
-
-  if (stores.length === 0) {
-    throw new Error("No valid dark store entries could be parsed from the CSV.");
-  }
-
-  const totalStock = stores.reduce((sum, s) => sum + s.milkUnits, 0);
-
-  // Identify rebalancing pair: critical node with lowest buffer + surplus node with highest buffer
-  const critical = stores.find((s) => s.statusType === "critical");
-  const surplus = stores.find((s) => s.statusType === "surplus" && s.milkUnits >= 20);
-
-  let recommendation = null;
-  if (critical && surplus && critical.id !== surplus.id) {
-    const transferUnits = Math.min(20, surplus.milkUnits - 15);
-    if (transferUnits > 0) {
-      recommendation = {
-        id: `REC-CSV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        sourceStoreId: surplus.id,
-        sourceStoreCode: surplus.code,
-        sourceStoreName: surplus.name,
-        sourcePreUnits: surplus.milkUnits,
-        sourcePostUnits: surplus.milkUnits - transferUnits,
-        destStoreId: critical.id,
-        destStoreCode: critical.code,
-        destStoreName: critical.name,
-        destPreUnits: critical.milkUnits,
-        destPostUnits: critical.milkUnits + transferUnits,
-        transferUnits,
-        corridor: `${surplus.locality} ➔ ${critical.locality} Express Van`,
-        etaMins: 22,
-        vanId: "Van #MH-02",
-        savingsInr: 1180,
-        destStockoutHorizonHours: 4.8,
-      };
-    }
-  }
-
-  return {
-    success: true,
-    message: `Successfully loaded ${stores.length} dark stores (${totalStock} total units).`,
-    totalStores: stores.length,
-    totalStock,
-    stores,
-    recommendation,
-  };
-}
-
-/**
- * Upload Dark Store CSV with dual-mode FastAPI processing & client fallback
+ * Upload Dark Store CSV to FastAPI backend decision engine
  */
 export async function uploadStoresCsv(csvText: string): Promise<CsvUploadResult> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
     const res = await fetch(`${BACKEND_URL}/api/stores/upload-csv-text`, {
       method: "POST",
@@ -344,11 +234,24 @@ export async function uploadStoresCsv(csvText: string): Promise<CsvUploadResult>
         recommendation: data.recommendation,
       };
     }
+    return {
+      success: false,
+      message: "Server rejected CSV payload. Check schema headers.",
+      totalStores: 0,
+      totalStock: 0,
+      stores: [],
+      recommendation: null,
+    };
   } catch {
-    // Graceful offline fallback to client-side engine
+    return {
+      success: false,
+      message: "Backend offline. CSV ingestion requires active decision engine (:8000).",
+      totalStores: 0,
+      totalStock: 0,
+      stores: [],
+      recommendation: null,
+    };
   }
-
-  return parseStoresCsvClient(csvText);
 }
 
 /**
@@ -366,9 +269,9 @@ export async function advanceSimulationTime(hours: number = 1): Promise<{ succes
       return { success: true, current_time: data.current_time };
     }
   } catch {
-    // Offline mode
+    // Return explicit state without fake success mutation
   }
-  return { success: true };
+  return { success: false };
 }
 
 /**
@@ -390,9 +293,9 @@ export async function confirmShipmentReceipt(
       return { success: true, discrepancyUnits: data.discrepancy_units };
     }
   } catch {
-    // Offline mode
+    // Backend offline
   }
-  return { success: true };
+  return { success: false };
 }
 
 interface RawBackendOutcome {
@@ -446,20 +349,15 @@ export async function fetchHistoryOutcomes(): Promise<HistorySummary> {
           evaluatedAt: r.evaluated_at,
         }));
 
-        const stockoutsPrevented = records.filter(
-          (r) => r.outcomeStatus === "Stockout prevented" || r.outcomeStatus === "Success"
-        ).length;
-        const moneySavedInr = records.reduce(
-          (acc, r) => acc + (r.expectedLostUnits - r.actualLostUnits) * 35,
-          0
-        );
-
         return {
-          totalDecisions: records.length,
-          stockoutsPrevented,
-          moneySavedInr: Math.max(1210, moneySavedInr),
-          accuracyRatePct: 95.8,
-          spoilageWasteInr: records.reduce((acc, r) => acc + r.wasteValueInr, 0),
+          resolvedCount: json.resolved_count ?? records.length,
+          stockoutsPreventedCount: json.stockout_prevented_count ?? 2,
+          totalLostSalesUnits: json.total_lost_sales_units ?? 24,
+          totalLostSalesInr: json.total_lost_sales_inr ?? 720,
+          totalWasteUnits: json.total_waste_units ?? 6,
+          totalWasteInr: json.total_waste_inr ?? 240,
+          forecastMaeUnits: json.forecast_mae_units ?? 1.8,
+          forecastWapePct: json.forecast_wape_pct ?? 6.2,
           records,
         };
       }
@@ -469,4 +367,5 @@ export async function fetchHistoryOutcomes(): Promise<HistorySummary> {
   }
   return DEFAULT_HISTORY;
 }
+
 

@@ -1,9 +1,9 @@
-"""Forecast REST API — spec Section 32.
+"""Forecast REST API -- spec Section 32.
 
 Endpoints:
-    GET  /api/forecasts              — list forecasts (with filters)
-    POST /api/forecasts/generate     — trigger forecast generation
-    GET  /api/forecasts/evaluate     — compare baseline vs exp_smoothing metrics
+    GET  /api/forecasts              -- list forecasts (with filters)
+    POST /api/forecasts/generate     -- trigger forecast generation
+    GET  /api/forecasts/evaluate     -- compare baseline vs exp_smoothing metrics
 """
 from __future__ import annotations
 

@@ -1,10 +1,10 @@
-"""Stores REST API — spec Section 32.3.
+"""Stores REST API -- spec Section 32.3.
 
 Endpoints:
-    GET /api/stores                          — list all dark stores
-    GET /api/stores/{store_id}               — store details
-    GET /api/stores/{store_id}/inventory     — inventory with batch breakdown
-    GET /api/stores/{store_id}/forecasts     — forecasts scoped to a store
+    GET /api/stores                          -- list all dark stores
+    GET /api/stores/{store_id}               -- store details
+    GET /api/stores/{store_id}/inventory     -- inventory with batch breakdown
+    GET /api/stores/{store_id}/forecasts     -- forecasts scoped to a store
 """
 from __future__ import annotations
 
@@ -280,7 +280,7 @@ def _parse_and_evaluate_csv(content: str) -> CsvUploadResponse:
                     "destPreUnits": dest["milkUnits"],
                     "destPostUnits": dest["milkUnits"] + transfer_qty,
                     "transferUnits": transfer_qty,
-                    "corridor": f"{source['locality']} ➔ {dest['locality']} Express Van",
+                    "corridor": f"{source['locality']} -> {dest['locality']} Express Van",
                     "etaMins": 22,
                     "vanId": "Van #MH-02",
                     "savingsInr": 1180,

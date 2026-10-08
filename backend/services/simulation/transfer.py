@@ -318,7 +318,7 @@ async def process_arriving_transfers(
                 )
                 db.add(event)
             else:
-                # Spec Section 6.6: Awaiting count confirmation — NO stock credit yet
+                # Spec Section 6.6: Awaiting count confirmation -- NO stock credit yet
                 transfer.status = 'awaiting_confirmation'
                 if shipment:
                     shipment.status = ShipmentStatus.AWAITING_CONFIRMATION

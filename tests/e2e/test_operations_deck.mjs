@@ -29,7 +29,7 @@ async function runDomainInvariantSuite() {
   function record(name, passed, details) {
     results.push({ name, passed, details });
     const mark = passed ? '[PASS]' : '[FAIL]';
-    console.log(`${mark}: ${name.padEnd(46)} — ${details}`);
+    console.log(`${mark}: ${name.padEnd(46)} -- ${details}`);
   }
 
   try {

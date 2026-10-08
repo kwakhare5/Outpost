@@ -7,7 +7,7 @@ import {
   Layers,
 } from "lucide-react";
 import { DeckTab } from "@/lib/types";
-import { Badge, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -38,35 +38,25 @@ export function Header({
 
   const getTabTitle = () => {
     switch (activeTab) {
-      case "alerts":
+      case "queue":
         return {
-          title: "Stock Alerts & Urgent Needs",
-          subtitle: "Instant warnings when a store is running low on customer favorites",
+          title: "Exception Review Queue",
+          subtitle: "Human verification gate for lateral inventory rebalancing",
         };
-      case "deliveries":
+      case "inflight":
         return {
-          title: "Van Deliveries & Door Arrivals",
-          subtitle: "Live tracking of vans between stores and back-door arrival count checks",
+          title: "Fleet In-Flight Movements",
+          subtitle: "Active inter-store transfers and back-door dock count confirmation",
         };
-      case "history":
+      case "outcomes":
         return {
-          title: "Past Results & Accuracy",
-          subtitle: "Audited record of stockouts prevented, money saved, and forecast accuracy",
-        };
-      case "inventory":
-        return {
-          title: "Store Shelves & Freshness",
-          subtitle: "Shelf stock with expiry timers and first-in, first-out pick priority",
-        };
-      case "sandbox":
-        return {
-          title: "What-If Sandbox",
-          subtitle: "Simulate cricket match rushes and highway delivery delays",
+          title: "Measured Outcomes & Error",
+          subtitle: "Audited decisions benchmarked against counterfactual baselines",
         };
       default:
         return {
-          title: "Outpost Mumbai Console",
-          subtitle: "Quick-commerce store replenishment command deck",
+          title: "Operations Console",
+          subtitle: "Dark store replenishment command deck",
         };
     }
   };
@@ -77,24 +67,16 @@ export function Header({
     <header className="h-14 border-b border-[#EAE6DF] bg-white px-4 md:px-5 flex items-center justify-between shrink-0 sticky top-0 z-30 select-none">
       {/* Title & Context */}
       <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-bold text-[#1C1917] tracking-tight">{title}</h1>
-          <Badge variant="neutral">
-            MUMBAI NETWORK (5 STORES)
-          </Badge>
-        </div>
+        <h1 className="text-sm font-bold text-[#1C1917] tracking-tight">{title}</h1>
         <p className="text-[11px] text-[#78716C] leading-none mt-0.5">{subtitle}</p>
       </div>
 
       {/* Right Controls & Telemetry */}
       <div className="flex items-center gap-2.5">
         {/* Total Stock Counter */}
-        <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#FAF8F5] border border-[#EAE6DF] text-xs font-semibold text-[#1C1917]">
+        <div className="hidden sm:flex items-center gap-2 px-3 h-8 rounded-lg bg-[#FAF8F5] border border-[#EAE6DF] text-xs font-semibold text-[#1C1917]">
           <span className="text-[#78716C]">Network Stock:</span>
           <span className="font-bold text-[#2563EB]">{totalStock} units</span>
-          <Badge variant="success">
-            Balanced
-          </Badge>
         </div>
 
         {/* Advance 1h Quick Button */}
@@ -111,13 +93,13 @@ export function Header({
 
         {/* Sandbox Trigger */}
         <Button
-          variant={activeTab === "sandbox" ? "dark" : "primary"}
+          variant="primary"
           size="sm"
           onClick={onSelectSandbox}
-          title="Open What-If Sandbox"
+          title="Open What-If Scenarios"
         >
           <Sliders className="w-3.5 h-3.5" />
-          <span>Sandbox</span>
+          <span className="hidden sm:inline">Scenarios</span>
         </Button>
 
         {/* Architecture Spec Button */}
@@ -125,8 +107,8 @@ export function Header({
           variant="ghost"
           size="sm"
           onClick={onOpenArchitecture}
-          className="p-1.5"
-          title="View Outpost Spec & Architecture"
+          className="h-8 w-8 p-0"
+          title="View System Architecture"
         >
           <Layers className="w-4 h-4" />
         </Button>

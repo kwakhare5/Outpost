@@ -1,13 +1,13 @@
-"""Outpost Risk Engine — Pure deterministic risk models.
+"""Outpost Risk Engine -- Pure deterministic risk models.
 
 Implements spec Section 5 (availability + waste loops), Section 13 (batch-aware inventory),
 Section 14.3 (discount tiers), Section 29.10 (Risk ORM schema).
 
 Risk Types:
-  STOCKOUT — expected demand will exhaust inventory before resupply (Section 5.1)
-  SPOILAGE — perishable batch will expire before it can be sold (Section 5.2)
+  STOCKOUT -- expected demand will exhaust inventory before resupply (Section 5.1)
+  SPOILAGE -- perishable batch will expire before it can be sold (Section 5.2)
 
-All logic is pure Python — no async, no DB. Easily unit-tested.
+All logic is pure Python -- no async, no DB. Easily unit-tested.
 The RiskEngine (engine.py) orchestrates DB I/O and event emission.
 """
 from __future__ import annotations
@@ -34,8 +34,8 @@ class RiskSeverityLevel(str, enum.Enum):
 
 class DiscountTier(str, enum.Enum):
     NONE        = "none"       # > 24h remaining
-    TEN_PCT     = "10%"        # 12–24h
-    TWENTY_PCT  = "20%"        # 6–12h
+    TEN_PCT     = "10%"        # 12-24h
+    TWENTY_PCT  = "20%"        # 6-12h
     THIRTY_PCT  = "30%"        # < 6h
 
 
@@ -157,7 +157,7 @@ class StockoutCalculator:
         else:
             hourly_demand = inp.forecast_demand_24h / 24.0
 
-        # Avoid division by zero — zero demand means no stockout risk
+        # Avoid division by zero -- zero demand means no stockout risk
         if hourly_demand <= 0:
             return RiskResult(
                 store_id=inp.store_id,
@@ -183,7 +183,7 @@ class StockoutCalculator:
         if hours_of_stock <= 0:
             probability = 1.0
         elif hours_of_stock >= safe_window:
-            # Plenty of stock — safe
+            # Plenty of stock -- safe
             probability = 0.0
         else:
             # Linear ramp: 0 at safe_window, 1 at hours_of_stock=0

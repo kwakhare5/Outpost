@@ -1,16 +1,16 @@
 """TDD tests for the Risk Engine (spec Section 5, Section 13, Section 29.10, Phase 4).
 
-Test seams in order of the red→green loop:
+Test seams in order of the red->green loop:
 
 Unit seams (pure math, no DB):
-1. StockoutInput / SpoilageInput — data containers
-2. StockoutCalculator — probability, severity, expected_hours_to_stockout
-3. SpoilageCalculator — at-risk quantity, probability, severity, discount tier
-4. RiskResult — output container
+1. StockoutInput / SpoilageInput -- data containers
+2. StockoutCalculator -- probability, severity, expected_hours_to_stockout
+3. SpoilageCalculator -- at-risk quantity, probability, severity, discount tier
+4. RiskResult -- output container
 
 Integration seams (DB):
-5. RiskEngine.run() — scans inventory, creates Risk rows, emits RISK_DETECTED events
-6. RiskEngine.resolve() — marks a Risk as RESOLVED
+5. RiskEngine.run() -- scans inventory, creates Risk rows, emits RISK_DETECTED events
+6. RiskEngine.resolve() -- marks a Risk as RESOLVED
 7. RiskEngine re-detects risk after inventory drops
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ from backend.services.risk.models import (
 )
 
 
-# ─── 1. StockoutCalculator ─────────────────────────────────────────────────
+# --- 1. StockoutCalculator -------------------------------------------------
 
 
 def test_stockout_no_risk_when_inventory_covers_demand():
@@ -47,7 +47,7 @@ def test_stockout_no_risk_when_inventory_covers_demand():
 
 
 def test_stockout_critical_when_out_of_stock():
-    """Zero inventory → critical stockout."""
+    """Zero inventory -> critical stockout."""
     calc = StockoutCalculator()
     inp = StockoutInput(
         store_id=uuid.uuid4(), product_id=uuid.uuid4(),
@@ -60,7 +60,7 @@ def test_stockout_critical_when_out_of_stock():
 
 
 def test_stockout_warning_when_stock_covers_less_than_48h():
-    """Stock covering only ~20h of demand at 24h lead time → WARNING."""
+    """Stock covering only ~20h of demand at 24h lead time -> WARNING."""
     calc = StockoutCalculator()
     inp = StockoutInput(
         store_id=uuid.uuid4(), product_id=uuid.uuid4(),
@@ -73,7 +73,7 @@ def test_stockout_warning_when_stock_covers_less_than_48h():
 
 
 def test_stockout_expected_hours_below_lead_time_is_critical():
-    """If expected stockout arrives before lead time → critical."""
+    """If expected stockout arrives before lead time -> critical."""
     calc = StockoutCalculator()
     inp = StockoutInput(
         store_id=uuid.uuid4(), product_id=uuid.uuid4(),
@@ -81,7 +81,7 @@ def test_stockout_expected_hours_below_lead_time_is_critical():
         lead_time_hours=24,
     )
     result = calc.evaluate(inp)
-    # 5 units / (20/24 per hour) ≈ 6h before stockout, less than 24h lead time
+    # 5 units / (20/24 per hour) ~= 6h before stockout, less than 24h lead time
     assert result.expected_hours_to_event < 24
     assert result.severity == RiskSeverityLevel.CRITICAL
 
@@ -99,10 +99,10 @@ def test_stockout_result_probability_in_unit_interval():
         assert 0.0 <= result.probability <= 1.0
 
 
-# ─── 3. SpoilageCalculator ────────────────────────────────────────────────
+# --- 3. SpoilageCalculator ------------------------------------------------
 
 def test_spoilage_no_risk_when_expiry_distant():
-    """Product expiring in 3 days with low inventory → no spoilage risk."""
+    """Product expiring in 3 days with low inventory -> no spoilage risk."""
     calc = SpoilageCalculator()
     inp = SpoilageInput(
         store_id=uuid.uuid4(), product_id=uuid.uuid4(),
@@ -117,7 +117,7 @@ def test_spoilage_no_risk_when_expiry_distant():
 
 
 def test_spoilage_critical_when_expiry_imminent_excess_stock():
-    """Large stock, expiry in 4h, demand won't cover it → critical spoilage."""
+    """Large stock, expiry in 4h, demand won't cover it -> critical spoilage."""
     calc = SpoilageCalculator()
     inp = SpoilageInput(
         store_id=uuid.uuid4(), product_id=uuid.uuid4(),
@@ -160,7 +160,7 @@ def test_spoilage_discount_tier_by_hours():
         )
         return calc.evaluate(inp).discount_tier
 
-    # Spec Section 14.3: >24h → 0%, 12-24h → 10%, 6-12h → 20%, <6h → 30%
+    # Spec Section 14.3: >24h -> 0%, 12-24h -> 10%, 6-12h -> 20%, <6h -> 30%
     assert tier(30.0) == DiscountTier.NONE
     assert tier(18.0) == DiscountTier.TEN_PCT
     assert tier(9.0) == DiscountTier.TWENTY_PCT
@@ -179,11 +179,11 @@ def test_spoilage_at_risk_quantity_correctly_computed():
         shelf_life_hours=72,
     )
     result = calc.evaluate(inp)
-    # At-risk: 70 units, expected sell-through: 20 → net at risk ≈ 50
+    # At-risk: 70 units, expected sell-through: 20 -> net at risk ~= 50
     assert result.net_spoilage_quantity > 0
 
 
-# ─── 3. RiskEngine integration ────────────────────────────────────────────
+# --- 3. RiskEngine integration --------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -272,7 +272,7 @@ async def test_risk_engine_emits_risk_detected_events(db_session):
 
 @pytest.mark.asyncio
 async def test_risk_engine_detects_stockout_in_depleted_scenario(db_session):
-    """Forcing a near-zero inventory scenario → stockout risk is detected."""
+    """Forcing a near-zero inventory scenario -> stockout risk is detected."""
     from sqlalchemy import select, update
     from backend.models.core import Inventory, Risk
     from backend.models.enums import RiskType
@@ -335,7 +335,7 @@ async def test_risk_engine_resolve_marks_risk_resolved(db_session):
 
     risks = (await db_session.execute(select(Risk))).scalars().all()
     if not risks:
-        pytest.skip("No risks created — cannot test resolution")
+        pytest.skip("No risks created -- cannot test resolution")
 
     # Resolve the first risk
     risk_id = risks[0].risk_id

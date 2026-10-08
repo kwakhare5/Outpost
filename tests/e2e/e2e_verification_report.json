@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-10-03T20:25:50.947Z",
+  "timestamp": "2026-10-08T13:11:05.445Z",
   "platform": "Outpost Quick-Commerce Operations",
   "suite": "Domain Invariants & Physical Integrity Runner",
-  "duration_ms": 1,
+  "duration_ms": 0,
   "total_checkpoints": 8,
   "passed_checkpoints": 8,
   "all_passed": true,

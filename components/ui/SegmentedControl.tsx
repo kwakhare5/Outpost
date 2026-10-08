@@ -36,7 +36,7 @@ export function SegmentedControl<T extends string = string>({
             type="button"
             onClick={() => onChange(item.id)}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-[0.98]",
+              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2563EB]",
               isActive
                 ? "bg-white text-[#1C1917] shadow-xs"
                 : "text-[#78716C] hover:text-[#1C1917]"

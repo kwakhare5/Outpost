@@ -1,20 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   CheckCircle2,
   Clock,
-  Package,
-  RotateCw,
-  Search,
   ShieldCheck,
-  Sliders,
   Truck,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DeckTab, StoreHub } from "@/lib/types";
-import { Badge, Button } from "@/components/ui";
+import { Badge } from "@/components/ui";
 
 interface SidebarProps {
   activeTab: DeckTab;
@@ -22,87 +18,51 @@ interface SidebarProps {
   queueCount?: number;
   inFlightCount?: number;
   outcomesCount?: number;
-  batchesCount?: number;
   stores?: StoreHub[];
   selectedStoreCode?: string;
   onSelectStore?: (code: string) => void;
   simTime?: string;
-  isSimulating?: boolean;
-  onAdvanceHour?: () => void;
-  onOpenTestLab?: () => void;
   isBackendOnline?: boolean;
 }
 
 export function Sidebar({
   activeTab,
   setActiveTab,
-  queueCount = 6,
+  queueCount = 4,
   inFlightCount = 3,
   outcomesCount = 5,
-  batchesCount = 6,
   stores = [],
   selectedStoreCode,
   onSelectStore,
   simTime = "08:15 AM",
-  isSimulating = false,
-  onAdvanceHour,
-  onOpenTestLab,
   isBackendOnline = false,
 }: SidebarProps) {
-  const [navSearch, setNavSearch] = useState("");
-
   const navItems = [
     {
-      id: "alerts" as const,
-      label: "Alerts",
-      subtitle: "Stockout warnings",
+      id: "queue" as const,
+      label: "Queue",
       icon: Zap,
       count: queueCount,
       badgeVariant: "urgent" as const,
     },
     {
-      id: "deliveries" as const,
-      label: "Deliveries",
-      subtitle: "Vans moving between stores",
+      id: "inflight" as const,
+      label: "In-Flight",
       icon: Truck,
       count: inFlightCount,
       badgeVariant: "info" as const,
     },
     {
-      id: "history" as const,
-      label: "History",
-      subtitle: "Past results & accuracy",
+      id: "outcomes" as const,
+      label: "Outcomes",
       icon: CheckCircle2,
       count: outcomesCount,
       badgeVariant: "success" as const,
     },
-    {
-      id: "inventory" as const,
-      label: "Inventory",
-      subtitle: "Shelves & freshness",
-      icon: Package,
-      count: batchesCount,
-      badgeVariant: "neutral" as const,
-    },
-    {
-      id: "sandbox" as const,
-      label: "Sandbox",
-      subtitle: "What-if simulator & CSV",
-      icon: Sliders,
-      count: undefined,
-      badgeVariant: "neutral" as const,
-    },
   ];
 
-  const filteredStores = stores.filter((s) =>
-    navSearch.trim()
-      ? s.name.toLowerCase().includes(navSearch.toLowerCase()) ||
-        s.code.toLowerCase().includes(navSearch.toLowerCase())
-      : true
-  );
-
   return (
-    <aside className="w-64 h-full shrink-0 bg-white border-r border-[#EAE6DF] flex flex-col justify-between select-none">
+    <aside className="w-60 h-full shrink-0 bg-white border-r border-[#EAE6DF] flex flex-col justify-between select-none">
       {/* Brand & Network Status */}
       <div className="p-4 border-b border-[#EAE6DF] shrink-0">
         <div className="flex items-center justify-between">
@@ -117,36 +77,24 @@ export function Sidebar({
                   Mumbai
                 </Badge>
               </div>
-              <p className="text-[11px] text-[#A8A29E] font-medium">Dark Store Network</p>
+              <p className="text-[11px] text-[#78716C] font-medium">Dark Store Network</p>
             </div>
           </div>
           <Badge
-            variant={isBackendOnline ? "success" : "info"}
+            variant={isBackendOnline ? "success" : "neutral"}
             dot
-            title={isBackendOnline ? "Connected to live FastAPI engine" : "Running on local instant simulator"}
+            title={isBackendOnline ? "Connected to FastAPI engine" : "Local Simulation Preview"}
           >
-            {isBackendOnline ? "ONLINE" : "READY"}
+            {isBackendOnline ? "ONLINE" : "OFFLINE"}
           </Badge>
-        </div>
-
-        {/* Search */}
-        <div className="relative mt-3">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#A8A29E] pointer-events-none" />
-          <input
-            type="text"
-            value={navSearch}
-            onChange={(e) => setNavSearch(e.target.value)}
-            placeholder="Search stores..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#FAF8F5] border border-[#EAE6DF] rounded-lg text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 transition-all shadow-inner"
-          />
         </div>
       </div>
 
-      {/* Main Navigation & Stores List (Dedicated Scroll Container) */}
+      {/* Main Navigation & Stores List */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-5">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[#A8A29E] px-3 mb-2">
-            Main Menu
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#78716C] px-3 mb-2">
+            Operations
           </p>
           <nav className="space-y-1">
             {navItems.map((item) => {
@@ -157,22 +105,16 @@ export function Sidebar({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    if (item.id === "sandbox" && onOpenTestLab) {
-                      onOpenTestLab();
-                    } else {
-                      setActiveTab(item.id);
-                    }
-                  }}
+                  onClick={() => setActiveTab(item.id)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all text-left cursor-pointer active:scale-[0.98]",
+                    "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all text-left cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-hidden",
                     isActive
                       ? "bg-[#EFF6FF] text-[#2563EB] shadow-xs"
                       : "text-[#57534E] hover:text-[#1C1917] hover:bg-[#FAF8F5]"
                   )}
                 >
                   <div className="flex items-center gap-2.5">
-                    <Icon className={cn("h-4 w-4", isActive ? "text-[#2563EB]" : "text-[#A8A29E]")} />
+                    <Icon className={cn("h-4 w-4", isActive ? "text-[#2563EB]" : "text-[#78716C]")} />
                     <span>{item.label}</span>
                   </div>
                   {item.count !== undefined && (
@@ -195,8 +137,8 @@ export function Sidebar({
         {/* Live Mumbai Stores Summary */}
         <div>
           <div className="flex items-center justify-between px-3 mb-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#A8A29E]">
-              Mumbai Stores ({stores.length})
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#78716C]">
+              Stores ({stores.length})
             </p>
             {selectedStoreCode ? (
               <button
@@ -204,16 +146,16 @@ export function Sidebar({
                 onClick={() => onSelectStore?.("")}
                 className="text-[10px] font-semibold text-[#2563EB] hover:underline cursor-pointer"
               >
-                Clear Filter
+                Clear
               </button>
             ) : (
               <span className="text-[11px] font-semibold text-[#78716C] tabular-nums">
-                {stores.reduce((acc, s) => acc + s.milkUnits, 0)}u total
+                {stores.reduce((acc, s) => acc + s.milkUnits, 0)}u
               </span>
             )}
           </div>
           <div className="space-y-1 px-1">
-            {filteredStores.map((s) => {
+            {stores.map((s) => {
               const isSelected = selectedStoreCode === s.code;
               return (
                 <button
@@ -221,7 +163,7 @@ export function Sidebar({
                   type="button"
                   onClick={() => onSelectStore?.(isSelected ? "" : s.code)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs text-left cursor-pointer transition-all active:scale-[0.98]",
+                    "w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs text-left cursor-pointer transition-all active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-hidden",
                     isSelected
                       ? "bg-[#EFF6FF] border-[#2563EB]/40 text-[#2563EB] shadow-xs"
                       : "bg-[#FAF8F5] border-[#EAE6DF]/70 text-[#1C1917] hover:bg-[#F5F2EB]"
@@ -253,37 +195,22 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Footer: Clock & Planner Profile (Permanently Pinned) */}
-      <div className="p-3 border-t border-[#EAE6DF] bg-[#FAF8F5]/80 space-y-2.5 shrink-0">
-        {/* Simulation Clock & Advance 1h */}
-        <div className="bg-white border border-[#EAE6DF] rounded-lg p-2.5 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5 text-xs text-[#78716C] font-semibold">
-              <Clock className="h-3.5 w-3.5 text-[#A8A29E]" />
-              <span className="tabular-nums font-mono font-bold text-[#1C1917]">{simTime}</span>
-            </div>
-            <Badge variant="success" className="text-[10px] px-1.5 py-0">
-              Live Feed
-            </Badge>
+      {/* Footer: Clock & Operator Profile */}
+      <div className="p-3 border-t border-[#EAE6DF] bg-[#FAF8F5]/80 space-y-2 shrink-0">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5 text-xs text-[#78716C] font-semibold">
+            <Clock className="h-3.5 w-3.5 text-[#78716C]" />
+            <span className="tabular-nums font-mono font-bold text-[#1C1917]">{simTime}</span>
           </div>
-          {onAdvanceHour && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onAdvanceHour}
-              disabled={isSimulating}
-              className="w-full"
-            >
-              <RotateCw className={cn("h-3.5 w-3.5 text-[#78716C]", isSimulating && "animate-spin")} />
-              <span>Advance Time (+1h)</span>
-            </Button>
-          )}
+          <Badge variant="success" className="text-[10px] px-1.5 py-0">
+            Live
+          </Badge>
         </div>
 
         {/* User Card */}
-        <div className="flex items-center justify-between px-2 pt-0.5">
+        <div className="flex items-center justify-between px-1 pt-1 border-t border-[#EAE6DF]/60">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full bg-[#1C1917] text-white flex items-center justify-center text-[11px] font-bold shadow-xs">
+            <div className="h-6 w-6 rounded-full bg-[#1C1917] text-white flex items-center justify-center text-[10px] font-bold">
               KW
             </div>
             <div>

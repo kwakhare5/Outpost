@@ -14,11 +14,19 @@ type BadgeVariant =
   | "neutral"
   | "hub";
 
+type BadgeSize = "sm" | "md";
+
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
+  size?: BadgeSize;
   dot?: boolean;
   children: React.ReactNode;
 }
+
+const sizeStyles: Record<BadgeSize, string> = {
+  sm: "text-[10px] px-2 py-0.5 h-5 leading-none",
+  md: "text-[11px] px-2.5 py-0.5 h-6 leading-none",
+};
 
 const variantStyles: Record<BadgeVariant, string> = {
   urgent: "bg-rose-50 text-rose-800 border-rose-200",
@@ -46,6 +54,7 @@ const dotColors: Record<BadgeVariant, string> = {
 
 export function Badge({
   variant = "neutral",
+  size = "md",
   dot = false,
   className,
   children,
@@ -54,7 +63,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        "text-[11px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1.5 whitespace-nowrap",
+        "font-semibold rounded-full border inline-flex items-center gap-1.5 whitespace-nowrap select-none",
+        sizeStyles[size],
         variantStyles[variant],
         className
       )}

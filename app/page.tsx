@@ -2,16 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { BatchItem, DeckTab, StoreHub, TransferRecord } from "@/lib/types";
-import { INITIAL_STORES, INITIAL_BATCHES, INITIAL_TRANSFERS } from "@/lib/mockData";
+import { DeckTab, StoreHub, TransferRecord } from "@/lib/types";
+import { INITIAL_STORES, INITIAL_TRANSFERS } from "@/lib/mockData";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { ArchitectureModal } from "@/components/dashboard/ArchitectureModal";
-import { AlertsScreen } from "@/components/alerts/AlertsScreen";
-import { DeliveriesScreen } from "@/components/deliveries/DeliveriesScreen";
-import { HistoryScreen } from "@/components/history/HistoryScreen";
-import { InventoryScreen } from "@/components/inventory/InventoryScreen";
-import { SandboxScreen } from "@/components/sandbox/SandboxScreen";
+import { SandboxModal } from "@/components/dashboard/SandboxModal";
+import { QueueScreen } from "@/components/screens/QueueScreen";
+import { FleetScreen } from "@/components/screens/FleetScreen";
+import { OutcomesScreen } from "@/components/screens/OutcomesScreen";
 import {
   advanceSimulationTime,
   applyLiveScenario,
@@ -40,11 +39,11 @@ function advanceClockString(currentTime: string, hoursToAdd: number = 1): string
 export default function OperationsDeckPage() {
   const [stores, setStores] = useState<StoreHub[]>(INITIAL_STORES);
   const [transfers, setTransfers] = useState<TransferRecord[]>(INITIAL_TRANSFERS);
-  const [batches, setBatches] = useState<BatchItem[]>(INITIAL_BATCHES);
-  const [activeTab, setActiveTab] = useState<DeckTab>("alerts");
+  const [activeTab, setActiveTab] = useState<DeckTab>("queue");
   const [isTransferred, setIsTransferred] = useState(false);
   const [activeScenario, setActiveScenario] = useState("nominal");
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
+  const [isSandboxModalOpen, setIsSandboxModalOpen] = useState(false);
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
   const [simTime, setSimTime] = useState<string>("08:15 AM");
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>("");
@@ -74,32 +73,33 @@ export default function OperationsDeckPage() {
 
   const totalStock = stores.reduce((acc, s) => acc + s.milkUnits, 0);
 
-  // Send Van Now Handler (Human approval gate)
+  // Send Van Handler (Level-2 Human Gate)
   const handleExecuteTransfer = async () => {
     if (isTransferred) return;
 
     if (isBackendOnline) {
       try {
-        await executeLiveTransfer("st-02", "st-04", 20);
+        await executeLiveTransfer("store-02", "store-01", 40);
       } catch {
         // Fallback to local deterministic execution
       }
     }
 
+    // Deduct 40 units strictly from Bandra source; destination remains uncredited while in transit
     setStores((prev) =>
       prev.map((s) => {
-        if (s.id === "st-02" || s.code === "ST-02") {
+        if (s.id === "store-02" || s.code === "ST-02") {
           return {
             ...s,
-            milkUnits: s.milkUnits - 20,
-            status: "Normal (Safe buffer kept)",
+            milkUnits: s.milkUnits - 40,
+            status: "Normal (Safe buffer retained: 72u)",
             statusType: "normal",
           };
         }
-        if (s.id === "st-04" || s.code === "ST-04") {
+        if (s.id === "store-01" || s.code === "ST-01") {
           return {
             ...s,
-            status: "Van on the Way (20 units en route)",
+            status: "Van En Route (40u arriving ~10:15)",
             statusType: "warning",
           };
         }
@@ -109,40 +109,28 @@ export default function OperationsDeckPage() {
 
     setTransfers((prev) => [
       {
-        id: `TR-${Date.now().toString().slice(-4)}`,
+        id: "REC-4470-TR",
         fromCode: "ST-02",
-        fromName: "Bandra West",
-        toCode: "ST-04",
-        toName: "Lower Parel",
-        units: 20,
+        fromName: "Dark Store Bandra",
+        toCode: "ST-01",
+        toName: "Dark Store Andheri West",
+        units: 40,
         vanId: "Van #MH-02 (Tata Ace)",
-        eta: "10:15 AM (25m via Sea Link)",
+        eta: "10:15 AM (35m via WEH)",
         status: "In Transit",
-        corridor: "Sea Link Express Route",
+        corridor: "Bandra-Andheri Western Corridor",
         batchId: "B-MUM-MILK-002",
         sku: "Amul Taaza Milk 500ml",
         currentStep: 3,
         etaPassed: true,
         dispatchedAt: simTime,
       },
-      ...prev,
+      ...prev.filter((t) => t.id !== "REC-4470-TR"),
     ]);
 
-    setBatches((prev) =>
-      prev.map((b) =>
-        b.id === "B-MUM-MILK-002"
-          ? {
-              ...b,
-              state: "in_transit",
-              transferNote: "En Route to Lower Parel via Sea Link (Van #MH-02)",
-            }
-          : b
-      )
-    );
-
     setIsTransferred(true);
-    toast.success("Van Dispatched from Bandra West Store", {
-      description: "20 units deducted from Bandra. Van is on the road; empty shelf risk avoided!",
+    toast.success("Van Dispatched from Bandra Dark Store", {
+      description: "40 units deducted from Bandra. Destination stock unchanged until dock arrival confirmation.",
     });
   };
 
@@ -157,12 +145,13 @@ export default function OperationsDeckPage() {
       try {
         await confirmShipmentReceipt(shipmentId, receivedUnits, notes);
       } catch {
-        // Local fallback
+        // Fallback
       }
     }
 
-    const targetStoreCode = destCode || "ST-04";
+    const targetStoreCode = destCode || "ST-01";
 
+    // Physical stock credited ONLY upon committed count confirmation
     setStores((prev) =>
       prev.map((s) => {
         if (s.id.toLowerCase() === targetStoreCode.toLowerCase() || s.code === targetStoreCode) {
@@ -178,25 +167,11 @@ export default function OperationsDeckPage() {
     );
 
     setTransfers((prev) =>
-      prev.map((t) => (t.id === shipmentId ? { ...t, status: "Completed" } : t))
+      prev.map((t) => (t.id === shipmentId ? { ...t, status: "Completed", currentStep: 6 } : t))
     );
 
-    setBatches((prev) =>
-      prev.map((b) =>
-        b.destCode === targetStoreCode || b.id.includes(shipmentId.slice(-4))
-          ? {
-              ...b,
-              state: "fresh",
-              storeCode: targetStoreCode,
-              units: receivedUnits,
-              transferNote: undefined,
-            }
-          : b
-      )
-    );
-
-    toast.success(`Count Verified: ${receivedUnits} Units Added to Shelves`, {
-      description: `Store ${targetStoreCode} inventory safely restocked. Exact stock count preserved.`,
+    toast.success(`Count Verified: ${receivedUnits} Units Shelved at Dock`, {
+      description: `Store ${targetStoreCode} inventory safely restocked. Exact mass conservation preserved.`,
     });
   };
 
@@ -218,24 +193,18 @@ export default function OperationsDeckPage() {
       });
     } catch {
       setSimTime((prev) => advanceClockString(prev, 1));
-      toast.info("Time advanced (local simulation)");
+      toast.info("Time advanced (local simulation preview)");
     }
-  };
-
-  const handleApplyStores = (newStores: StoreHub[]) => {
-    setStores(newStores);
-    setIsTransferred(false);
   };
 
   const handleReset = () => {
     setStores(INITIAL_STORES);
     setTransfers(INITIAL_TRANSFERS);
-    setBatches(INITIAL_BATCHES);
     setIsTransferred(false);
     setActiveScenario("nominal");
     setSimTime("08:15 AM");
     setSelectedStoreFilter("");
-    toast.info("Network Reset: Restored to standard 140-unit Mumbai equilibrium");
+    toast.info("Network Reset: Restored to standard 195-unit Mumbai 3-node equilibrium");
   };
 
   const handleTriggerScenario = (name: string) => {
@@ -247,26 +216,17 @@ export default function OperationsDeckPage() {
     if (name === "demand_spike") {
       setStores((prev) =>
         prev.map((s) =>
-          s.id === "st-02"
-            ? { ...s, activeOrders: 38, status: "Surplus (Surge Underway)", statusType: "warning" }
+          s.id === "store-01" || s.code === "ST-01"
+            ? { ...s, activeOrders: 38, status: "Critical Surge Underway", statusType: "critical" }
             : s
         )
       );
-      toast.warning("Scenario Activated: Bandra West Demand Surge (38 orders)");
+      toast.warning("Scenario Activated: Andheri West Demand Surge (38 orders)");
     } else if (name === "supplier_delay") {
       toast.warning("Scenario Activated: Bhiwandi RFC Supply Delay (+4h ETA)");
-    } else if (name === "imbalance") {
-      handleReset();
-      toast.warning("Scenario Activated: Critical Stock Imbalance");
     } else {
       handleReset();
     }
-  };
-
-  const handleUpdateStore = (storeId: string, updates: Partial<StoreHub>) => {
-    setStores((prev) =>
-      prev.map((s) => (s.id === storeId ? { ...s, ...updates } : s))
-    );
   };
 
   const handleApplyScenarioMultiplier = (demandMultiplier: number, delayHours: number) => {
@@ -277,7 +237,7 @@ export default function OperationsDeckPage() {
           activeOrders: Math.round(s.activeOrders * demandMultiplier),
         }))
       );
-      toast.warning(`Cricket Match Rush: Demand Multiplier set to ${demandMultiplier}x`);
+      toast.warning(`Demand Multiplier set to ${demandMultiplier}x`);
     }
     if (delayHours > 0) {
       toast.warning(`Highway Delay: Warehouse Truck delayed by +${delayHours} hours`);
@@ -285,54 +245,50 @@ export default function OperationsDeckPage() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#FAF8F5] text-[#1C1917] font-sans flex flex-row">
-      {/* ─────────────────────────────────────────────────────────────
-          1. SIDEBAR (w-64 Permanent Left Rail)
-      ───────────────────────────────────────────────────────────── */}
+    <div className="h-screen w-full overflow-hidden bg-[#FAF8F5] text-[#1C1917] font-sans flex flex-row">
+      {/* 1. Permanent Left Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        queueCount={6}
+        queueCount={4}
         inFlightCount={transfers.filter((t) => t.status !== "Completed").length}
         outcomesCount={5}
-        batchesCount={batches.length}
         stores={stores}
         selectedStoreCode={selectedStoreFilter}
         onSelectStore={(code) => setSelectedStoreFilter(code)}
         simTime={simTime}
-        onAdvanceHour={handleAdvanceTime}
         isBackendOnline={isBackendOnline}
       />
 
-      {/* ─────────────────────────────────────────────────────────────
-          2. MAIN OPERATIONS AREA (Full-Width Isolated Scroll)
-      ───────────────────────────────────────────────────────────── */}
+      {/* 2. Main Operations Area */}
       <div className="flex-1 h-full min-w-0 flex flex-col overflow-hidden">
         <Header
           activeTab={activeTab}
           totalStock={totalStock}
           onOpenArchitecture={() => setIsArchitectureOpen(true)}
-          onSelectSandbox={() => setActiveTab("sandbox")}
+          onSelectSandbox={() => setIsSandboxModalOpen(true)}
           onAdvanceTime={handleAdvanceTime}
         />
 
-        <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 space-y-4 w-full">
-          {activeTab === "alerts" && (
-            <AlertsScreen
+        <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 w-full">
+          {activeTab === "queue" && (
+            <QueueScreen
               stores={stores}
               isTransferred={isTransferred}
               onExecuteTransfer={handleExecuteTransfer}
               onReset={handleReset}
               onTriggerScenario={handleTriggerScenario}
               activeScenario={activeScenario}
-              onOpenTestLab={() => setActiveTab("sandbox")}
+              onOpenTestLab={() => setIsSandboxModalOpen(true)}
               onNavigateTab={(tab) => setActiveTab(tab)}
               isBackendOnline={isBackendOnline}
+              selectedStoreCode={selectedStoreFilter}
+              onSelectStore={(code) => setSelectedStoreFilter(code)}
             />
           )}
 
-          {activeTab === "deliveries" && (
-            <DeliveriesScreen
+          {activeTab === "inflight" && (
+            <FleetScreen
               transfers={transfers}
               isTransferred={isTransferred}
               onConfirmReceipt={handleConfirmReceipt}
@@ -340,39 +296,27 @@ export default function OperationsDeckPage() {
             />
           )}
 
-          {activeTab === "history" && (
-            <HistoryScreen isBackendOnline={isBackendOnline} />
-          )}
-
-          {activeTab === "inventory" && (
-            <InventoryScreen
-              batches={batches}
-              stores={stores}
-              selectedStoreCode={selectedStoreFilter}
-              onSelectStore={(code) => setSelectedStoreFilter(code)}
-            />
-          )}
-
-          {activeTab === "sandbox" && (
-            <SandboxScreen
-              stores={stores}
-              onUpdateStore={handleUpdateStore}
-              onApplyScenario={handleTriggerScenario}
-              onApplyMultiplierShock={handleApplyScenarioMultiplier}
-              onApplyCustomStores={handleApplyStores}
-              onReset={handleReset}
-              onNavigateTab={(tab) => setActiveTab(tab)}
-            />
+          {activeTab === "outcomes" && (
+            <OutcomesScreen isBackendOnline={isBackendOnline} />
           )}
         </main>
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────────
-          3. ARCHITECTURE MODAL
-      ───────────────────────────────────────────────────────────────── */}
+      {/* 3. Architecture Spec Modal */}
       <ArchitectureModal
         isOpen={isArchitectureOpen}
         onClose={() => setIsArchitectureOpen(false)}
+      />
+
+      {/* 4. Scenarios & Data Ingestion Modal */}
+      <SandboxModal
+        isOpen={isSandboxModalOpen}
+        onClose={() => setIsSandboxModalOpen(false)}
+        stores={stores}
+        onTriggerScenario={handleTriggerScenario}
+        onApplyScenarioMultiplier={handleApplyScenarioMultiplier}
+        onReset={handleReset}
+        isBackendOnline={isBackendOnline}
       />
     </div>
   );

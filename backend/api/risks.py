@@ -1,10 +1,10 @@
-"""Risk REST API — spec Section 32.
+"""Risk REST API -- spec Section 32.
 
 Endpoints:
-    GET  /api/risks                  — list risks with optional filters (store_id, product_id, risk_type, severity, status)
-    GET  /api/risks/{risk_id}        — get risk details
-    POST /api/risks/evaluate         — trigger risk engine evaluation
-    POST /api/risks/{risk_id}/resolve — resolve an active risk
+    GET  /api/risks                  -- list risks with optional filters (store_id, product_id, risk_type, severity, status)
+    GET  /api/risks/{risk_id}        -- get risk details
+    POST /api/risks/evaluate         -- trigger risk engine evaluation
+    POST /api/risks/{risk_id}/resolve -- resolve an active risk
 """
 from __future__ import annotations
 

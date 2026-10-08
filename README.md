@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python)](https://python.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat&logo=typescript)](https://typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-270%20Passing-brightgreen?style=flat)]()
+[![Tests](https://img.shields.io/badge/Tests-109%20Passing-brightgreen?style=flat)]()
 
 ---
 
@@ -122,7 +122,7 @@ The system coordinates four tightly coupled layers:
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy (Async), SQLite WAL, LangGraph, Pydantic v2.
 - **Frontend:** Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS v4, Lucide React, Sonner.
-- **Test Suite:** **270+ passing tests** across 23 test suites covering deterministic scenarios, two-phase replenishment, sales accounting, and invariant conservation.
+- **Test Suite:** **109 passing tests** (101 backend pytest invariants + 8 domain invariant and conservation checks).
 
 ### Running Backend Tests
 ```bash

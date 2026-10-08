@@ -1,10 +1,10 @@
-"""Outpost Forecasting — Pure mathematical models.
+"""Outpost Forecasting -- Pure mathematical models.
 
 Implements spec Section 12:
-  Level 1 — Baseline: moving average + day-of-week seasonality (Section 12.1)
-  Level 2 — Time-series: exponential smoothing with trend (Section 12.1)
+  Level 1 -- Baseline: moving average + day-of-week seasonality (Section 12.1)
+  Level 2 -- Time-series: exponential smoothing with trend (Section 12.1)
   Anomaly detection and cleaning (Section 12.4)
-  Confidence scoring — composite multi-factor (Section 12.3)
+  Confidence scoring -- composite multi-factor (Section 12.3)
   Evaluation metrics: MAE, RMSE, MAPE (Section 12.2)
 
 Zero heavy C-extension deps: pure Python + stdlib math only.
@@ -27,7 +27,7 @@ class DemandPoint:
     """A single daily demand observation."""
 
     day_index: int     # 0-based sequential day
-    day_of_week: int   # 0=Mon … 6=Sun
+    day_of_week: int   # 0=Mon ... 6=Sun
     quantity: float    # total units sold that day
 
 
@@ -74,7 +74,7 @@ def detect_anomalies(
     iqr = q3 - q1
 
     if iqr == 0:
-        # All values are identical — use a multiplier heuristic to catch extreme spikes
+        # All values are identical -- use a multiplier heuristic to catch extreme spikes
         median = q1  # when IQR=0, q1=q3=median
         if median == 0:
             return []
@@ -126,7 +126,7 @@ def clean_demand_series(
 
 
 # ---------------------------------------------------------------------------
-# Baseline predictor — Level 1 (Section 12.1)
+# Baseline predictor -- Level 1 (Section 12.1)
 # ---------------------------------------------------------------------------
 
 _MOVING_AVERAGE_WINDOW = 14  # days
@@ -187,7 +187,7 @@ def _compute_dow_multiplier(
 
 
 # ---------------------------------------------------------------------------
-# Holt linear predictor (double exponential smoothing) — Level 2 (Section 12.1)
+# Holt linear predictor (double exponential smoothing) -- Level 2 (Section 12.1)
 # ---------------------------------------------------------------------------
 
 _MIN_SERIES_FOR_ES = 7  # minimum days to attempt smoothing
@@ -233,8 +233,8 @@ exponential_smoothing_predict = holt_linear_predict
 # Confidence scorer (Section 12.3)
 # ---------------------------------------------------------------------------
 
-_SAMPLE_SIZE_FULL_CONF = 30  # n ≥ this → max sample-size confidence
-_MAX_ANOMALY_RATIO = 0.5     # above this → confidence → 0
+_SAMPLE_SIZE_FULL_CONF = 30  # n >= this -> max sample-size confidence
+_MAX_ANOMALY_RATIO = 0.5     # above this -> confidence -> 0
 
 
 def compute_confidence(
@@ -244,19 +244,19 @@ def compute_confidence(
     """Return a composite confidence score in [0.0, 1.0].
 
     Four factors combined multiplicatively:
-    - Sample size factor: ramps from 0 → 1 as n → _SAMPLE_SIZE_FULL_CONF.
+    - Sample size factor: ramps from 0 -> 1 as n -> _SAMPLE_SIZE_FULL_CONF.
     - Coefficient of variation factor: penalises high CV.
     - Anomaly ratio factor: penalises frequent anomalies.
-    - Trend stability factor: high variability between recent halves → lower score.
+    - Trend stability factor: high variability between recent halves -> lower score.
     """
     n = len(series)
     if n == 0:
         return 0.0
 
-    # Factor 1 — sample size
+    # Factor 1 -- sample size
     size_factor = min(1.0, n / _SAMPLE_SIZE_FULL_CONF)
 
-    # Factor 2 — coefficient of variation
+    # Factor 2 -- coefficient of variation
     values = [p.quantity for p in series]
     mean_ = statistics.mean(values)
     if mean_ == 0:
@@ -266,7 +266,7 @@ def compute_confidence(
         cv = stdev_ / mean_
         cv_factor = max(0.0, 1.0 - min(cv, 1.0))
 
-    # Factor 3 — anomaly ratio
+    # Factor 3 -- anomaly ratio
     anomaly_ratio = min(anomaly_count / max(n, 1), _MAX_ANOMALY_RATIO)
     anomaly_factor = 1.0 - (anomaly_ratio / _MAX_ANOMALY_RATIO)
 
@@ -298,11 +298,11 @@ def evaluate_forecast(
     mae = sum(errors) / n
     rmse = math.sqrt(sum(e ** 2 for e in errors) / n)
 
-    # WAPE — Weighted Absolute Percentage Error
+    # WAPE -- Weighted Absolute Percentage Error
     sum_actual = sum(actual)
     wape = (sum(errors) / sum_actual * 100.0) if sum_actual > 0 else 0.0
 
-    # MAPE — skip zero-actual entries to avoid division by zero
+    # MAPE -- skip zero-actual entries to avoid division by zero
     pct_errors = [abs(a - p) / a * 100 for a, p in zip(actual, predicted) if a != 0]
     mape = sum(pct_errors) / len(pct_errors) if pct_errors else 0.0
 

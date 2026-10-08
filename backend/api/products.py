@@ -1,8 +1,8 @@
-"""Products REST API — spec Section 32.4.
+"""Products REST API -- spec Section 32.4.
 
 Endpoints:
-    GET /api/products              — list all catalog products
-    GET /api/products/{product_id} — product detail with supplier info
+    GET /api/products              -- list all catalog products
+    GET /api/products/{product_id} -- product detail with supplier info
 """
 from __future__ import annotations
 

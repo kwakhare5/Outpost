@@ -1,14 +1,14 @@
 """TDD tests for the forecasting engine (spec Section 12).
 
-Test seams, in order of the red→green loop:
+Test seams, in order of the red->green loop:
 
-1. DemandPoint — data container
-2. Anomaly detection — Z-score / IQR spike filter
-3. Baseline predictor — moving average + day-of-week seasonality
-4. Confidence scorer — multi-factor output in [0, 1]
-5. Evaluation metrics — MAE, RMSE, MAPE
-6. Time-series predictor — exponential smoothing with seasonality
-7. ForecastingEngine (integration) — reads history, writes Forecast rows
+1. DemandPoint -- data container
+2. Anomaly detection -- Z-score / IQR spike filter
+3. Baseline predictor -- moving average + day-of-week seasonality
+4. Confidence scorer -- multi-factor output in [0, 1]
+5. Evaluation metrics -- MAE, RMSE, MAPE
+6. Time-series predictor -- exponential smoothing with seasonality
+7. ForecastingEngine (integration) -- reads history, writes Forecast rows
 """
 from __future__ import annotations
 
@@ -69,13 +69,13 @@ def test_baseline_predict_uniform_demand():
     """On perfectly uniform demand, baseline prediction equals that demand."""
     series = [DemandPoint(i, i % 7, 10.0) for i in range(30)]
     result = baseline_predict(series, horizon_hours=24)
-    # With uniform data and no day-of-week variation, prediction ≈ 10
+    # With uniform data and no day-of-week variation, prediction ~= 10
     assert abs(result - 10.0) < 2.0
 
 
 def test_baseline_predict_higher_on_weekend():
     """Baseline predictor lifts forecast for weekend days (5=Sat, 6=Sun) when they have higher historical demand."""
-    # Mon–Fri = 8, Sat–Sun = 20 (weekend demand is 2.5x higher)
+    # Mon-Fri = 8, Sat-Sun = 20 (weekend demand is 2.5x higher)
     series = []
     for i in range(28):
         dow = i % 7
@@ -125,7 +125,7 @@ def test_confidence_lower_for_high_variance():
 
 
 def test_confidence_lower_for_more_anomalies():
-    """More anomalies in history → lower confidence."""
+    """More anomalies in history -> lower confidence."""
     series = [DemandPoint(i, i % 7, 10.0) for i in range(30)]
     c_clean = compute_confidence(series, anomaly_count=0)
     c_dirty = compute_confidence(series, anomaly_count=10)
@@ -133,7 +133,7 @@ def test_confidence_lower_for_more_anomalies():
 
 
 def test_confidence_lower_for_small_sample():
-    """Fewer data points → lower confidence."""
+    """Fewer data points -> lower confidence."""
     large = [DemandPoint(i, i % 7, 10.0) for i in range(60)]
     small = [DemandPoint(i, i % 7, 10.0) for i in range(5)]
     c_large = compute_confidence(large, anomaly_count=0)
@@ -158,7 +158,7 @@ def test_evaluate_forecast_perfect_predictions():
 def test_evaluate_forecast_known_mae():
     """MAE is correctly computed from a worked example."""
     actual    = [10.0, 20.0]
-    predicted = [8.0, 22.0]   # errors: 2, 2 → MAE = 2.0
+    predicted = [8.0, 22.0]   # errors: 2, 2 -> MAE = 2.0
     result = evaluate_forecast(actual, predicted)
     assert result.mae == pytest.approx(2.0)
 
@@ -166,7 +166,7 @@ def test_evaluate_forecast_known_mae():
 def test_evaluate_forecast_known_rmse():
     """RMSE is correctly computed from a worked example."""
     actual    = [10.0, 10.0]
-    predicted = [7.0, 13.0]   # squared errors: 9, 9 → RMSE = 3.0
+    predicted = [7.0, 13.0]   # squared errors: 9, 9 -> RMSE = 3.0
     result = evaluate_forecast(actual, predicted)
     assert result.rmse == pytest.approx(3.0)
 
@@ -174,7 +174,7 @@ def test_evaluate_forecast_known_rmse():
 def test_evaluate_forecast_known_mape():
     """MAPE is correctly computed from a worked example."""
     actual    = [100.0, 200.0]
-    predicted = [90.0, 220.0]  # APE: 10%, 10% → MAPE = 10.0
+    predicted = [90.0, 220.0]  # APE: 10%, 10% -> MAPE = 10.0
     result = evaluate_forecast(actual, predicted)
     assert result.mape == pytest.approx(10.0, abs=0.01)
 

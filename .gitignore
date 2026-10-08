@@ -25,4 +25,6 @@ scratch/
 
 .vercel
 .env*
-graphify-out/cache/
+graphify-out/
+.agents/skills/
+.agents/tools/

@@ -321,8 +321,8 @@ class SimulationEngine:
         """Create initial inventory and batches for all store-product pairs."""
         for store_seed in STORES:
             for prod_seed in PRODUCTS:
-                # Initial quantity: 2-4 days of mean demand
-                initial_qty = int(prod_seed.daily_demand_mean * self.rng.uniform(2.0, 4.0))
+                # Initial quantity: 2.5-4.5 days of mean demand
+                initial_qty = int(prod_seed.daily_demand_mean * self.rng.uniform(2.5, 4.5))
 
                 inventory = Inventory(
                     id=uuid.uuid4(),
