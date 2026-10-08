@@ -1,4 +1,4 @@
-type HubStatusType = "critical" | "warning" | "surplus" | "normal";
+export type HubStatusType = "critical" | "warning" | "surplus" | "normal";
 
 export interface StoreHub {
   id: string;
@@ -13,9 +13,11 @@ export interface StoreHub {
   activeOrders: number;
 }
 
+export type TransferStatus = "In Transit" | "Completed" | "Staged";
+
 export interface TransferRecord {
   id: string;
-  sku?: string;
+  sku: string;
   fromCode: string;
   fromName: string;
   toCode: string;
@@ -23,34 +25,54 @@ export interface TransferRecord {
   units: number;
   vanId: string;
   eta: string;
-  status: "In Transit" | "Completed" | "Staged";
+  status: TransferStatus;
   corridor: string;
-  batchId?: string;
-  currentStep?: number;
+  currentStep: number; // 1 to 6
   etaPassed?: boolean;
   dispatchedAt?: string;
 }
 
+export type AlertUrgency = "urgent" | "moderate" | "low";
+export type AlertActionCategory = "TRANSFER" | "DISCOUNT" | "PO_WAIT" | "MONITOR";
+export type AlertStatus =
+  | "Needs Your Approval"
+  | "Watching"
+  | "Scheduled"
+  | "Van on the Way"
+  | "Rejected"
+  | "Discount Active"
+  | "Acknowledged";
 
-export type ShipmentStep = "approved" | "picked" | "dispatched" | "in_transit" | "awaiting_confirmation" | "received";
-
-export interface ShipmentItem {
+export interface AlertItem {
   id: string;
-  sku: string;
-  source: string;
-  sourceCode: string;
-  dest: string;
-  destCode: string;
-  units: number;
-  vanId: string;
-  dispatchedAt: string;
-  eta: string;
-  etaPassed: boolean;
-  status: ShipmentStep;
-  currentStep: number; // 1 to 6
-  type: "TRANSFER" | "RFC_PO";
-  corridor: string;
+  productName: string;
+  category: string;
+  storeCode: string;
+  storeName: string;
+  stockOnShelves: number;
+  runsOutInHours: number;
+  runsOutAtTime: string;
+  orderSpeedPerHour: number;
+  urgency: AlertUrgency;
+  suggestedAction: string;
+  status: AlertStatus;
+  sendingStoreCode: string;
+  sendingStoreName: string;
+  transferQuantity: number;
+  senderStartingStock: number;
+  senderLocalDemand: number;
+  moneyAtRisk: number;
+  moneySaved: number;
+  simpleDescription: string;
+  actionCategory: AlertActionCategory;
 }
+
+export type OutcomeStatus =
+  | "Stockout prevented"
+  | "Worse than expected"
+  | "Residual loss"
+  | "Rejected"
+  | "Success";
 
 export interface OutcomeRecordItem {
   id: string;
@@ -58,7 +80,7 @@ export interface OutcomeRecordItem {
   storeName: string;
   productName: string;
   actionTaken: string;
-  outcomeStatus: "Stockout prevented" | "Worse than expected" | "Residual loss" | "Rejected" | "Success";
+  outcomeStatus: OutcomeStatus;
   expectedLostUnits: number;
   actualLostUnits: number;
   measuredVsExpected: string;
@@ -85,30 +107,6 @@ export interface LogEvent {
   title: string;
   detail: string;
   type: "info" | "action" | "arrival";
-}
-
-export interface AlertItem {
-  id: string;
-  productName: string;
-  category: string;
-  storeCode: string;
-  storeName: string;
-  stockOnShelves: number;
-  runsOutInHours: number;
-  runsOutAtTime: string;
-  orderSpeedPerHour: number;
-  urgency: "urgent" | "moderate" | "low";
-  suggestedAction: string;
-  status: "Needs Your Approval" | "Watching" | "Scheduled" | "Van on the Way";
-  sendingStoreCode: string;
-  sendingStoreName: string;
-  transferQuantity: number;
-  senderStartingStock: number;
-  senderLocalDemand: number;
-  moneyAtRisk: number;
-  moneySaved: number;
-  simpleDescription: string;
-  actionCategory?: "TRANSFER" | "DISCOUNT" | "PO_WAIT" | "MONITOR";
 }
 
 export type DeckTab = "queue" | "inflight" | "outcomes";

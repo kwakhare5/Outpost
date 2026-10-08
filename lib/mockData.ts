@@ -2,7 +2,6 @@ import { StoreHub, TransferRecord, AlertItem, HistorySummary } from "./types";
 
 /**
  * 3 Mumbai Operational Dark Store Hubs (Spec Section 2.1)
- * Exactly three fictional store nodes: Andheri West, Bandra, Powai
  */
 export const INITIAL_STORES: StoreHub[] = [
   {
@@ -59,7 +58,6 @@ export const INITIAL_TRANSFERS: TransferRecord[] = [
     eta: "10:15 AM (35m via WEH)",
     status: "In Transit",
     corridor: "Bandra-Andheri Western Corridor",
-    batchId: "B-MUM-MILK-002",
     currentStep: 3,
     etaPassed: true,
     dispatchedAt: "08:15 AM",
@@ -99,7 +97,7 @@ export const INITIAL_TRANSFERS: TransferRecord[] = [
 ];
 
 /**
- * Default Stock Alerts for Mumbai Network (Spec Section 5.6)
+ * Default Operational Stock Alerts for Mumbai Network
  */
 export const DEFAULT_ALERTS: AlertItem[] = [
   {
@@ -145,7 +143,7 @@ export const DEFAULT_ALERTS: AlertItem[] = [
     senderLocalDemand: 10,
     moneyAtRisk: 720,
     moneySaved: 480,
-    simpleDescription: "18 cups expiring by 17:00. Elasticity model projects 20% discount clears inventory before expiration wave.",
+    simpleDescription: "18 cups expiring by 17:00. Elasticity model projects 20% discount clears inventory before afternoon expiration.",
     actionCategory: "DISCOUNT",
   },
   {
@@ -191,13 +189,13 @@ export const DEFAULT_ALERTS: AlertItem[] = [
     senderLocalDemand: 20,
     moneyAtRisk: 0,
     moneySaved: 0,
-    simpleDescription: "Routine scheduled replenishment PO already queued in background; covers afternoon tea-time rush.",
+    simpleDescription: "Routine scheduled replenishment PO queued in background; covers afternoon tea-time demand.",
     actionCategory: "MONITOR",
   },
 ];
 
 /**
- * Historical Audited Decision Records (Spec Section 7.2)
+ * Historical Audited Decision Records
  */
 export const DEFAULT_HISTORY: HistorySummary = {
   resolvedCount: 5,
@@ -221,7 +219,7 @@ export const DEFAULT_HISTORY: HistorySummary = {
       measuredVsExpected: "0 empty shelves vs 38 packets that would have run out",
       wasteUnits: 0,
       wasteValueInr: 0,
-      notes: "Van arrived at 10:15 AM via WEH. All 40 packets verified by operator. No stockout observed in this run.",
+      notes: "Van arrived at 10:15 AM via WEH. All 40 packets verified by operator. Zero stockout observed.",
       evaluatedAt: "Today 11:30 AM",
     },
     {

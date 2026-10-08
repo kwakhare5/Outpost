@@ -24,20 +24,20 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const sizeStyles: Record<BadgeSize, string> = {
-  sm: "text-[10px] px-2 py-0.5 h-5 leading-none",
-  md: "text-[11px] px-2.5 py-0.5 h-6 leading-none",
+  sm: "text-[10px] px-2 h-5 leading-none",
+  md: "text-[11px] px-2.5 h-6 leading-none",
 };
 
 const variantStyles: Record<BadgeVariant, string> = {
-  urgent: "bg-rose-50 text-rose-800 border-rose-200",
-  danger: "bg-rose-50 text-rose-800 border-rose-200",
+  urgent: "bg-rose-50 text-rose-700 border-rose-200",
+  danger: "bg-rose-50 text-rose-700 border-rose-200",
   warning: "bg-amber-50 text-amber-800 border-amber-200",
   success: "bg-emerald-50 text-emerald-800 border-emerald-200",
   safe: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  info: "bg-blue-50 text-blue-800 border-blue-200",
-  transit: "bg-blue-50 text-blue-800 border-blue-200",
-  neutral: "bg-[#FAF8F5] text-[#57534E] border-[#EAE6DF]",
-  hub: "bg-[#FAF8F5] text-[#57534E] border-[#EAE6DF]",
+  info: "bg-blue-50 text-blue-700 border-blue-200",
+  transit: "bg-blue-50 text-blue-700 border-blue-200",
+  neutral: "bg-stone-100 text-stone-700 border-stone-200",
+  hub: "bg-stone-100 text-stone-700 border-stone-200",
 };
 
 const dotColors: Record<BadgeVariant, string> = {
@@ -54,7 +54,7 @@ const dotColors: Record<BadgeVariant, string> = {
 
 export function Badge({
   variant = "neutral",
-  size = "md",
+  size = "sm",
   dot = false,
   className,
   children,

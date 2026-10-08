@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   RotateCw,
   Sliders,
-  Layers,
 } from "lucide-react";
 import { DeckTab } from "@/lib/types";
 import { Button } from "@/components/ui";
@@ -13,15 +12,14 @@ import { cn } from "@/lib/utils";
 interface HeaderProps {
   activeTab: DeckTab;
   totalStock: number;
-  onOpenArchitecture: () => void;
   onSelectSandbox: () => void;
   onAdvanceTime?: () => void;
+  onOpenArchitecture?: () => void;
 }
 
 export function Header({
   activeTab,
   totalStock,
-  onOpenArchitecture,
   onSelectSandbox,
   onAdvanceTime,
 }: HeaderProps) {
@@ -91,26 +89,15 @@ export function Header({
           <span className="hidden md:inline">Advance 1h</span>
         </Button>
 
-        {/* Sandbox Trigger */}
+        {/* Scenarios & Spec Modal Trigger */}
         <Button
           variant="primary"
           size="sm"
           onClick={onSelectSandbox}
-          title="Open What-If Scenarios"
+          title="Open Scenarios & System Architecture"
         >
           <Sliders className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Scenarios</span>
-        </Button>
-
-        {/* Architecture Spec Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onOpenArchitecture}
-          className="h-8 w-8 p-0"
-          title="View System Architecture"
-        >
-          <Layers className="w-4 h-4" />
+          <span className="hidden sm:inline">Scenarios &amp; Spec</span>
         </Button>
       </div>
     </header>

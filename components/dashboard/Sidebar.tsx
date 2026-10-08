@@ -22,7 +22,6 @@ interface SidebarProps {
   selectedStoreCode?: string;
   onSelectStore?: (code: string) => void;
   simTime?: string;
-  isBackendOnline?: boolean;
 }
 
 export function Sidebar({
@@ -35,7 +34,6 @@ export function Sidebar({
   selectedStoreCode,
   onSelectStore,
   simTime = "08:15 AM",
-  isBackendOnline = false,
 }: SidebarProps) {
   const navItems = [
     {
@@ -65,28 +63,18 @@ export function Sidebar({
     <aside className="w-60 h-full shrink-0 bg-white border-r border-[#EAE6DF] flex flex-col justify-between select-none">
       {/* Brand & Network Status */}
       <div className="p-4 border-b border-[#EAE6DF] shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white shadow-xs">
-              <ShieldCheck className="h-4.5 w-4.5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-[#1C1917] text-sm tracking-tight">Outpost</span>
-                <Badge variant="neutral" className="text-[10px] px-1.5 py-0">
-                  Mumbai
-                </Badge>
-              </div>
-              <p className="text-[11px] text-[#78716C] font-medium">Dark Store Network</p>
-            </div>
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white shadow-xs">
+            <ShieldCheck className="h-4.5 w-4.5 text-white" />
           </div>
-          <Badge
-            variant={isBackendOnline ? "success" : "neutral"}
-            dot
-            title={isBackendOnline ? "Connected to FastAPI engine" : "Local Simulation Preview"}
-          >
-            {isBackendOnline ? "ONLINE" : "OFFLINE"}
-          </Badge>
+          <div>
+            <span className="font-bold text-[#1C1917] text-sm tracking-tight leading-none block">
+              Outpost
+            </span>
+            <p className="text-[11px] text-[#78716C] font-medium mt-0.5">
+              Mumbai Network
+            </p>
+          </div>
         </div>
       </div>
 
@@ -119,11 +107,11 @@ export function Sidebar({
                   </div>
                   {item.count !== undefined && (
                     isActive ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#2563EB] text-white">
+                      <span className="inline-flex items-center justify-center text-[10px] font-bold px-2 h-5 rounded-full bg-[#2563EB] text-white select-none">
                         {item.count}
                       </span>
                     ) : (
-                      <Badge variant={item.badgeVariant} className="text-[10px] px-2 py-0">
+                      <Badge variant={item.badgeVariant} size="sm">
                         {item.count}
                       </Badge>
                     )
@@ -165,8 +153,8 @@ export function Sidebar({
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs text-left cursor-pointer transition-all active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-hidden",
                     isSelected
-                      ? "bg-[#EFF6FF] border-[#2563EB]/40 text-[#2563EB] shadow-xs"
-                      : "bg-[#FAF8F5] border-[#EAE6DF]/70 text-[#1C1917] hover:bg-[#F5F2EB]"
+                      ? "bg-[#EFF6FF] border-[#2563EB] text-[#2563EB] shadow-xs"
+                      : "bg-[#FAF8F5] border-[#EAE6DF] text-[#1C1917] hover:bg-[#F5F2EB]"
                   )}
                   title={`Filter operations to ${s.name}`}
                 >
@@ -202,13 +190,13 @@ export function Sidebar({
             <Clock className="h-3.5 w-3.5 text-[#78716C]" />
             <span className="tabular-nums font-mono font-bold text-[#1C1917]">{simTime}</span>
           </div>
-          <Badge variant="success" className="text-[10px] px-1.5 py-0">
-            Live
-          </Badge>
+          <span className="text-[10px] font-mono font-semibold text-[#78716C]">
+            IST
+          </span>
         </div>
 
         {/* User Card */}
-        <div className="flex items-center justify-between px-1 pt-1 border-t border-[#EAE6DF]/60">
+        <div className="flex items-center justify-between px-1 pt-1 border-t border-[#EAE6DF]">
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-[#1C1917] text-white flex items-center justify-center text-[10px] font-bold">
               KW

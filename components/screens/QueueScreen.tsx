@@ -1,95 +1,80 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
   Clock,
   ShieldCheck,
+  Tag,
   XCircle,
 } from "lucide-react";
-import { toast } from "sonner";
-import { StoreHub, DeckTab, AlertItem } from "@/lib/types";
-import { DEFAULT_ALERTS } from "@/lib/mockData";
+import type { DeckTab, AlertItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge, Button, SegmentedControl } from "@/components/ui";
 
 interface QueueScreenProps {
-  stores: StoreHub[];
-  isTransferred: boolean;
-  onExecuteTransfer: () => void;
-  onReset: () => void;
-  onTriggerScenario: (name: string) => void;
-  activeScenario?: string;
-  onOpenTestLab: () => void;
+  alerts: AlertItem[];
+  onApproveTransfer: (alertId: string) => void;
+  onRejectTransfer: (alertId: string) => void;
+  onUndoAlert?: (alertId: string) => void;
+  onApplyDiscount: (alertId: string) => void;
+  onAcknowledgeAlert: (alertId: string) => void;
   onNavigateTab: (tab: DeckTab) => void;
-  isBackendOnline?: boolean;
   selectedStoreCode?: string;
   onSelectStore?: (code: string) => void;
 }
 
 export function QueueScreen({
-  stores,
-  isTransferred,
-  onExecuteTransfer,
+  alerts,
+  onApproveTransfer,
+  onRejectTransfer,
+  onUndoAlert,
+  onApplyDiscount,
+  onAcknowledgeAlert,
   onNavigateTab,
   selectedStoreCode = "",
   onSelectStore,
 }: QueueScreenProps) {
   const [localFilter, setLocalFilter] = useState<string>("ALL");
-  const selectedFilter = selectedStoreCode ? selectedStoreCode : localFilter;
+  const selectedFilter = selectedStoreCode || localFilter;
   const [selectedAlertId, setSelectedAlertId] = useState<string>("ALERT-01");
-  const [isRejected, setIsRejected] = useState(false);
 
-  const alerts = useMemo<AlertItem[]>(() => {
-    const andheri = stores.find((s) => s.code === "ST-01" || s.name.includes("Andheri")) || stores[0];
-    const bandra = stores.find((s) => s.code === "ST-02" || s.name.includes("Bandra")) || stores[1];
-    const powai = stores.find((s) => s.code === "ST-03" || s.name.includes("Powai")) || stores[2];
-
-    return DEFAULT_ALERTS.map((a) => {
-      if (a.id === "ALERT-01") {
-        return {
-          ...a,
-          storeCode: andheri?.code || a.storeCode,
-          storeName: andheri?.name || a.storeName,
-          stockOnShelves: andheri?.milkUnits ?? a.stockOnShelves,
-          suggestedAction: isTransferred ? "Van on the Way (Arriving 10:15 AM)" : a.suggestedAction,
-          status: isTransferred ? ("Van on the Way" as const) : a.status,
-          sendingStoreCode: bandra?.code || a.sendingStoreCode,
-          sendingStoreName: bandra?.name || a.sendingStoreName,
-          senderStartingStock: isTransferred ? (bandra?.milkUnits ?? 72) + 40 : (bandra?.milkUnits ?? 112),
-        };
-      }
-      if (a.id === "ALERT-02" && powai) {
-        return {
-          ...a,
-          storeName: powai.name,
-        };
-      }
-      return a;
-    });
-  }, [stores, isTransferred]);
-
-  const filteredAlerts = useMemo(() => {
-    return alerts.filter((a) => {
-      if (selectedFilter === "ALL") return true;
-      if (selectedFilter === "URGENT") return a.urgency === "urgent";
-      if (selectedFilter === "ST-01") return a.storeCode === "ST-01";
-      if (selectedFilter === "ST-02") return a.storeCode === "ST-02";
-      if (selectedFilter === "ST-03") return a.storeCode === "ST-03";
-      return true;
-    });
-  }, [alerts, selectedFilter]);
+  const filteredAlerts = alerts.filter((a) => {
+    if (selectedFilter === "ALL") return true;
+    if (selectedFilter === "URGENT") return a.urgency === "urgent";
+    if (selectedFilter === "ST-01") return a.storeCode === "ST-01";
+    if (selectedFilter === "ST-02") return a.storeCode === "ST-02";
+    if (selectedFilter === "ST-03") return a.storeCode === "ST-03";
+    return true;
+  });
 
   const selectedAlert = alerts.find((a) => a.id === selectedAlertId) || alerts[0];
   const senderPostStock = Math.max(0, selectedAlert.senderStartingStock - selectedAlert.transferQuantity);
   const senderSafeMargin = Math.max(0, senderPostStock - selectedAlert.senderLocalDemand);
 
+  const getStatusBadge = (status: AlertItem["status"]) => {
+    switch (status) {
+      case "Van on the Way":
+        return <Badge variant="success" dot size="sm">Van Dispatched</Badge>;
+      case "Rejected":
+        return <Badge variant="neutral" dot size="sm">Rejected</Badge>;
+      case "Discount Active":
+        return <Badge variant="warning" dot size="sm">Discount Active</Badge>;
+      case "Acknowledged":
+        return <Badge variant="neutral" dot size="sm">Acknowledged</Badge>;
+      case "Needs Your Approval":
+        return <Badge variant="urgent" dot size="sm">Needs Review</Badge>;
+      case "Scheduled":
+        return <Badge variant="warning" size="sm">Scheduled</Badge>;
+      default:
+        return <Badge variant="neutral" size="sm">Watching</Badge>;
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-      {/* =========================================================
-          LEFT COLUMN (7 cols): EXCEPTION QUEUE TABLE
-      ========================================================= */}
+      {/* 1. Left Column (7 cols): Exception Queue List */}
       <div className="lg:col-span-7 space-y-4">
         <section className="bg-white rounded-2xl border border-[#EAE6DF] shadow-xs overflow-hidden">
           <div className="p-4 border-b border-[#EAE6DF] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -102,7 +87,6 @@ export function QueueScreen({
               </p>
             </div>
 
-            {/* Store Filter Track */}
             <SegmentedControl
               items={[
                 { id: "ALL", label: "All Stores" },
@@ -119,69 +103,58 @@ export function QueueScreen({
             />
           </div>
 
-          {/* Queue Rows */}
+          {/* List Rows */}
           <div className="divide-y divide-[#EAE6DF]">
             {filteredAlerts.map((item) => {
               const isSelected = item.id === selectedAlertId;
-              const isItemResolved = item.id === "ALERT-01" && isTransferred;
 
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedAlertId(item.id);
-                    setIsRejected(false);
-                  }}
+                  onClick={() => setSelectedAlertId(item.id)}
                   className={cn(
-                    "w-full p-3.5 transition-all text-left grid grid-cols-12 items-center gap-2 cursor-pointer active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-hidden",
+                    "w-full px-4 py-3 text-left transition-all cursor-pointer space-y-1.5 focus-visible:outline-hidden",
                     isSelected
-                      ? "bg-[#EFF6FF] ring-1 ring-inset ring-[#2563EB]/30 shadow-xs"
-                      : "hover:bg-[#FAF8F5]"
+                      ? "bg-[#F5F2EB]/70 border-l-4 border-l-[#2563EB]"
+                      : "hover:bg-[#FAF8F5] border-l-4 border-l-transparent"
                   )}
                 >
-                  <div className="col-span-12 sm:col-span-6 min-w-0 flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#1C1917] truncate">
-                      {item.productName}
-                    </span>
-                    <span className="text-[11px] text-[#78716C]">·</span>
-                    <span className="text-[11px] font-semibold text-[#57534E] shrink-0">
-                      {item.storeName}
-                    </span>
-                    <Badge
-                      variant={
-                        item.urgency === "urgent"
-                          ? "urgent"
-                          : item.urgency === "moderate"
-                          ? "warning"
-                          : "neutral"
-                      }
-                      size="sm"
-                    >
-                      {item.urgency.toUpperCase()}
-                    </Badge>
+                  {/* Top Line: Product Name + Urgency Badge + Status Badge */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-bold text-[#1C1917] truncate">
+                        {item.productName}
+                      </span>
+                      <Badge
+                        variant={
+                          item.urgency === "urgent"
+                            ? "urgent"
+                            : item.urgency === "moderate"
+                            ? "warning"
+                            : "neutral"
+                        }
+                        size="sm"
+                      >
+                        {item.urgency.toUpperCase()}
+                      </Badge>
+                    </div>
+
+                    <div className="shrink-0">
+                      {getStatusBadge(item.status)}
+                    </div>
                   </div>
 
-                  <div className="col-span-7 sm:col-span-3 flex items-center gap-2 text-[11px] text-[#78716C] font-mono">
-                    <span>Stock: <strong className="text-[#1C1917]">{item.stockOnShelves}u</strong></span>
-                    <span>·</span>
-                    <span>Runout: <strong className="text-[#C2410C]">~{item.runsOutInHours}h</strong></span>
-                  </div>
-
-                  <div className="col-span-5 sm:col-span-3 text-right">
-                    {isItemResolved ? (
-                      <Badge variant="success" dot>
-                        Van Dispatched
-                      </Badge>
-                    ) : item.status === "Needs Your Approval" ? (
-                      <Badge variant="urgent" dot>
-                        Needs Review
-                      </Badge>
-                    ) : item.status === "Scheduled" ? (
-                      <Badge variant="warning">Scheduled</Badge>
-                    ) : (
-                      <Badge variant="neutral">Watching</Badge>
-                    )}
+                  {/* Bottom Line: Store Name + Stock / Runout Telemetry */}
+                  <div className="flex items-center justify-between text-[11px] text-[#78716C]">
+                    <span className="font-semibold text-[#57534E]">
+                      {item.storeName.replace("Dark Store ", "")}
+                    </span>
+                    <div className="flex items-center gap-2 font-mono">
+                      <span>Stock: <strong className="text-[#1C1917] font-semibold">{item.stockOnShelves}u</strong></span>
+                      <span>·</span>
+                      <span>Runout: <strong className="text-[#C2410C] font-semibold">~{item.runsOutInHours}h</strong></span>
+                    </div>
                   </div>
                 </button>
               );
@@ -190,15 +163,13 @@ export function QueueScreen({
         </section>
       </div>
 
-      {/* =========================================================
-          RIGHT COLUMN (5 cols): SELECTED RISK & DISPATCH DOSSIER
-      ========================================================= */}
+      {/* 2. Right Column (5 cols): Selected Exception Dossier */}
       <div className="lg:col-span-5 space-y-4">
         <section className="bg-white rounded-2xl border border-[#EAE6DF] p-5 shadow-xs space-y-4">
           {/* Header & Meta */}
           <div className="border-b border-[#EAE6DF] pb-3.5 space-y-1">
             <div className="flex items-center justify-between">
-              <Badge variant="neutral" className="uppercase tracking-wider text-[10px]">
+              <Badge variant="neutral" size="sm" className="uppercase tracking-wider">
                 {selectedAlert.actionCategory || "INVENTORY EXCEPTION"}
               </Badge>
               <span className="text-[11px] font-mono text-[#78716C]">
@@ -209,7 +180,7 @@ export function QueueScreen({
               {selectedAlert.productName}
             </h3>
             <p className="text-xs text-[#57534E] font-medium">
-              {selectedAlert.storeName} · Category: {selectedAlert.category}
+              {selectedAlert.storeName.replace("Dark Store ", "")} · Category: {selectedAlert.category}
             </p>
           </div>
 
@@ -280,16 +251,16 @@ export function QueueScreen({
                 </p>
               </div>
 
-              {/* Transfer Recommendation & Donor Proof */}
+              {/* Proposed Transfer Details */}
               <div className="p-3.5 bg-white border border-[#EAE6DF] rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[#1C1917]">Proposed Transfer</span>
-                  <Badge variant="info">LATERAL TRANSFER</Badge>
+                  <Badge variant="info" size="sm">LATERAL TRANSFER</Badge>
                 </div>
 
                 <div className="space-y-1 text-xs">
                   <p className="text-[#1C1917] font-semibold">
-                    Transfer {selectedAlert.transferQuantity} units from {selectedAlert.sendingStoreName}
+                    Transfer {selectedAlert.transferQuantity} units from {selectedAlert.sendingStoreName.replace("Dark Store ", "")}
                   </p>
                   <div className="text-[11px] text-[#78716C] space-y-0.5">
                     <p>· Fleet: Van #MH-02 (Tata Ace) via Western Express Highway</p>
@@ -298,16 +269,16 @@ export function QueueScreen({
                   </div>
                 </div>
 
-                {/* Donor Verification Proof */}
+                {/* Donor Balance Proof */}
                 <div className="p-2.5 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF] space-y-1">
                   <span className="text-[10px] font-bold uppercase text-[#78716C] block">
                     Donor Balance Verification:
                   </span>
                   <p className="text-[11px] text-[#1C1917]">
-                    {selectedAlert.sendingStoreName} opening stock: <strong>{selectedAlert.senderStartingStock}u</strong> − Transfer: <strong>{selectedAlert.transferQuantity}u</strong> = <strong>{senderPostStock}u</strong> remaining.
+                    {selectedAlert.sendingStoreName.replace("Dark Store ", "")} stock: <strong>{selectedAlert.senderStartingStock}u</strong> − {selectedAlert.transferQuantity}u = <strong>{senderPostStock}u</strong> remaining.
                   </p>
                   <p className="text-[11px] text-[#059669] font-medium">
-                    Local demand: ~{selectedAlert.senderLocalDemand}u (+{senderSafeMargin}u safe buffer retained). Zero donor shortage created.
+                    Local demand: ~{selectedAlert.senderLocalDemand}u (+{senderSafeMargin}u safe buffer retained). Zero donor shortage.
                   </p>
                 </div>
               </div>
@@ -326,49 +297,90 @@ export function QueueScreen({
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-2 border-t border-[#EAE6DF]">
-                {isTransferred ? (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-1">
-                    <div className="flex items-center justify-center gap-1.5 text-emerald-800 font-bold text-xs">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      <span>Transfer Approved &amp; Dispatched</span>
+                {selectedAlert.status === "Van on the Way" ? (
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        <span>Action Accepted · Van En Route</span>
+                      </div>
+                      <Badge variant="success" dot size="sm">DISPATCHED</Badge>
                     </div>
-                    <p className="text-[11px] text-emerald-700">
+                    <p className="text-[11px] text-emerald-700 leading-snug">
                       {selectedAlert.transferQuantity} units deducted from {selectedAlert.sendingStoreName}. Van #MH-02 is en route to {selectedAlert.storeName}.
                     </p>
-                    <Button
-                      variant="dark"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => onNavigateTab("inflight")}
-                    >
-                      Track in In-Flight Deck
-                      <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                    </Button>
+                    <div className="flex items-center gap-2 pt-1">
+                      {onUndoAlert && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="flex-1 justify-center"
+                          onClick={() => onUndoAlert(selectedAlert.id)}
+                        >
+                          Undo Acceptance
+                        </Button>
+                      )}
+                      <Button
+                        variant="dark"
+                        size="sm"
+                        className="flex-1 justify-center"
+                        onClick={() => onNavigateTab("inflight")}
+                      >
+                        Track in In-Flight Deck
+                        <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    </div>
                   </div>
-                ) : isRejected ? (
-                  <div className="p-3 bg-stone-50 border border-[#EAE6DF] rounded-xl text-center space-y-1">
-                    <p className="text-xs font-semibold text-[#1C1917]">Action Rejected</p>
-                    <p className="text-[11px] text-[#78716C]">Lateral transfer dismissed by operator.</p>
+                ) : selectedAlert.status === "Rejected" ? (
+                  <div className="p-3.5 bg-stone-50 border border-[#EAE6DF] rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#1C1917]">
+                        <XCircle className="h-4 w-4 text-[#78716C]" />
+                        <span>Action Rejected · Emergency PO Queued</span>
+                      </div>
+                      <Badge variant="neutral" size="sm">REJECTED</Badge>
+                    </div>
+                    <p className="text-[11px] text-[#78716C] leading-snug">
+                      Operator elected to retain stock at donor store. Emergency RFC PO routed to Bhiwandi (80u, +4h ETA).
+                    </p>
+                    <div className="flex items-center gap-2 pt-1">
+                      {onUndoAlert && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="flex-1 justify-center"
+                          onClick={() => onUndoAlert(selectedAlert.id)}
+                        >
+                          Undo Rejection
+                        </Button>
+                      )}
+                      <Button
+                        variant="dark"
+                        size="sm"
+                        className="flex-1 justify-center"
+                        onClick={() => onNavigateTab("inflight")}
+                      >
+                        Track in In-Flight Deck
+                        <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       variant="success"
                       size="md"
-                      onClick={onExecuteTransfer}
+                      onClick={() => onApproveTransfer(selectedAlert.id)}
                       className="w-full justify-center"
                     >
                       <ShieldCheck className="h-4 w-4" />
-                      Approve Transfer
+                      Accept Action
                     </Button>
 
                     <Button
                       variant="danger-outline"
                       size="md"
-                      onClick={() => {
-                        setIsRejected(true);
-                        toast.info("Transfer action rejected by operator");
-                      }}
+                      onClick={() => onRejectTransfer(selectedAlert.id)}
                       className="w-full justify-center"
                     >
                       <XCircle className="h-4 w-4" />
@@ -383,7 +395,7 @@ export function QueueScreen({
               <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-amber-950">In-App Dynamic Markdown</span>
-                  <Badge variant="warning">DISCOUNT</Badge>
+                  <Badge variant="warning" size="sm">DISCOUNT</Badge>
                 </div>
                 <p className="text-[11px] text-amber-900 leading-relaxed">
                   {selectedAlert.simpleDescription}
@@ -402,14 +414,36 @@ export function QueueScreen({
               </div>
 
               <div className="pt-2 border-t border-[#EAE6DF]">
-                <Button
-                  variant="warning"
-                  size="md"
-                  className="w-full justify-center"
-                  onClick={() => toast.success(`20% Flash Markdown Applied to ${selectedAlert.productName} in App`)}
-                >
-                  Apply 20% In-App Markdown
-                </Button>
+                {selectedAlert.status === "Discount Active" ? (
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-emerald-800 font-bold text-xs">
+                      <Tag className="h-4 w-4 text-emerald-600" />
+                      <span>20% Markdown Active in App</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700">
+                      In-app banner and discounted price published to quick-commerce consumers.
+                    </p>
+                    {onUndoAlert && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full justify-center mt-1"
+                        onClick={() => onUndoAlert(selectedAlert.id)}
+                      >
+                        Undo Markdown
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    variant="warning"
+                    size="md"
+                    className="w-full justify-center"
+                    onClick={() => onApplyDiscount(selectedAlert.id)}
+                  >
+                    Apply 20% In-App Markdown
+                  </Button>
+                )}
               </div>
             </div>
           ) : selectedAlert.actionCategory === "PO_WAIT" ? (
@@ -417,7 +451,7 @@ export function QueueScreen({
               <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-blue-950">Regional Supplier PO in Transit</span>
-                  <Badge variant="info">INBOUND</Badge>
+                  <Badge variant="info" size="sm">INBOUND</Badge>
                 </div>
                 <p className="text-[11px] text-blue-900 leading-relaxed">
                   {selectedAlert.simpleDescription}
@@ -425,14 +459,36 @@ export function QueueScreen({
               </div>
 
               <div className="pt-2 border-t border-[#EAE6DF]">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  className="w-full justify-center"
-                  onClick={() => toast.info(`Acknowledged highway transit for ${selectedAlert.productName}`)}
-                >
-                  Acknowledge &amp; Monitor
-                </Button>
+                {selectedAlert.status === "Acknowledged" ? (
+                  <div className="p-3.5 bg-stone-50 border border-[#EAE6DF] rounded-xl space-y-2 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-[#1C1917] font-bold text-xs">
+                      <CheckCircle2 className="h-4 w-4 text-[#2563EB]" />
+                      <span>Acknowledged &amp; Monitored</span>
+                    </div>
+                    <p className="text-[11px] text-[#78716C]">
+                      Order acknowledged. Fleet telemetry will alert upon dock arrival.
+                    </p>
+                    {onUndoAlert && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full justify-center mt-1"
+                        onClick={() => onUndoAlert(selectedAlert.id)}
+                      >
+                        Reset Status
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="w-full justify-center"
+                    onClick={() => onAcknowledgeAlert(selectedAlert.id)}
+                  >
+                    Acknowledge &amp; Monitor
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -440,7 +496,7 @@ export function QueueScreen({
               <div className="p-3.5 bg-[#FAF8F5] border border-[#EAE6DF] rounded-xl space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#1C1917]">Routine Replenishment Queued</span>
-                  <Badge variant="neutral">MONITOR</Badge>
+                  <Badge variant="neutral" size="sm">MONITOR</Badge>
                 </div>
                 <p className="text-[11px] text-[#78716C] leading-relaxed">
                   {selectedAlert.simpleDescription}
@@ -448,14 +504,36 @@ export function QueueScreen({
               </div>
 
               <div className="pt-2 border-t border-[#EAE6DF]">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  className="w-full justify-center"
-                  onClick={() => toast.info(`Routine replenishment active for ${selectedAlert.productName}`)}
-                >
-                  Acknowledge Routine Replenishment
-                </Button>
+                {selectedAlert.status === "Acknowledged" ? (
+                  <div className="p-3.5 bg-stone-50 border border-[#EAE6DF] rounded-xl space-y-2 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-[#1C1917] font-bold text-xs">
+                      <CheckCircle2 className="h-4 w-4 text-[#2563EB]" />
+                      <span>Routine Replenishment Acknowledged</span>
+                    </div>
+                    <p className="text-[11px] text-[#78716C]">
+                      Stock levels remain within automated reorder buffers.
+                    </p>
+                    {onUndoAlert && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full justify-center mt-1"
+                        onClick={() => onUndoAlert(selectedAlert.id)}
+                      >
+                        Reset Status
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="w-full justify-center"
+                    onClick={() => onAcknowledgeAlert(selectedAlert.id)}
+                  >
+                    Acknowledge Routine Replenishment
+                  </Button>
+                )}
               </div>
             </div>
           )}

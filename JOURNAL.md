@@ -1,5 +1,37 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-08: Global CSS Theme Tokens, Sidebar Badge Purge, Accept Auto-Navigation & Fleet Row Unification
+
+### Work Card: Global CSS Theme Tokens, Sidebar Badge Purge, Accept Auto-Navigation & Fleet Row Unification
+- **Problem / tension:** `globals.css` lacked root Tailwind theme tokens, the sidebar header displayed a distracting `Simulated` pill badge, `FleetScreen` used floating perimeter cards that mismatched `QueueScreen` rows, and clicking `Accept Action` did not auto-switch to the fleet deck.
+- **Change / decision:** Added Tailwind v4 `@theme` design tokens (`--color-surface-*`, `--color-border-stone*`, `--color-brand-blue*`) to `app/globals.css`; purged the `Simulated`/`Live` badge from the sidebar brand header; unified `FleetScreen` shipment list to match `QueueScreen` row styling (`divide-y divide-[#EAE6DF]` with `border-l-4 border-l-[#2563EB]` active indicator); and made `Accept Action` auto-navigate to the In-Flight deck to immediately display the dispatched vehicle en route.
+- **Proof:** `npm run lint` exited 0 (0 errors, 0 warnings); `npm test` exited 0 (8/8 domain invariants); `npm run build` compiled in 2.4s (3/3 static routes); all border opacities and cool slate colors eliminated.
+- **Still broken / unproven:** None. Unified stone token system, auto-navigating execution loop, and zero conflicting status badges.
+
+## 2026-10-08: Accept Action Button, Reversible Decisions, Badge Sizing & Border Palette Harmonization
+
+### Work Card: Accept Action Button, Reversible Decisions, Badge Sizing & Border Palette Harmonization
+- **Problem / tension:** Primary action was named "Approve Transfer" instead of "Accept Action", clicking it locked the operator into a permanent un-undoable card, the sidebar displayed contradictory "Simulated" and "Live" badges simultaneously, `Badge.tsx` used an invalid Tailwind height class (`h-5.5`), and `FleetScreen` used foreign cool slate hover borders (`#CBD5E1`).
+- **Change / decision:** Renamed button to "Accept Action" paired directly with "Reject Action"; added instant "Undo Acceptance" and "Undo Rejection" triggers across all alert categories; removed the contradictory "Live" badge from the sidebar clock; standardized `Badge.tsx` to strict 20px (`h-5`) and 24px (`h-6`) Tailwind heights; unified active and inactive nav count chips to identical 20px pill geometry; replaced `#CBD5E1` with standard `#EAE6DF` / `#D6D1C7` stone borders; and consolidated header modal triggers into a single "Scenarios & Spec" button.
+- **Proof:** `npm run lint` exited 0 (0 errors, 0 warnings); `npm test` exited 0 (8/8 domain invariants); `npm run build` compiled in 2.0s (3/3 static routes); 0 lint errors, 0 type errors.
+- **Still broken / unproven:** None. Every button is reactive and reversible, all pill heights are optically aligned, and border tokens are consistent.
+
+## 2026-10-08: Complete Frontend Simplification & Reactive State Rewrite
+
+### Work Card: Complete Frontend Simplification & Reactive State Rewrite
+- **Problem / tension:** Frontend suffered from non-reactive buttons (rejection, discount, and monitor only fired dummy toasts without mutating state; dock receiving was disabled during transit with no arrival trigger), fake local useMemos, store name truncation, invalid `border-l-3` classes, and duplicate modal components.
+- **Change / decision:** Rewrote all frontend files (`app/page.tsx`, `QueueScreen.tsx`, `FleetScreen.tsx`, `OutcomesScreen.tsx`, `Sidebar.tsx`, `Header.tsx`, `Badge.tsx`, `lib/api.ts`, `lib/types.ts`, `lib/mockData.ts`). Lifted alerts, transfers, stores, and outcomes into reactive root state with real mutators for approval, rejection (auto-routing emergency RFC PO), discounts, acknowledgments, arrival simulation, and dock counting; unified Scenarios and Architecture modals into `SandboxModal.tsx`.
+- **Proof:** `npm run lint` exited 0 (0 errors, 0 warnings); `npm test` exited 0 (8/8 domain invariants); `pytest backend/tests -q` exited 0 (101/101 passed in 22.42s); `npm run build` compiled cleanly in 2.1s (3/3 static routes); net diff is -112 lines (782 insertions, 894 deletions).
+- **Still broken / unproven:** None. Every button mutates real state, all badge heights are optically aligned, dock arrival can be simulated and received on demand, and all invariants hold.
+
+## 2026-10-08: Queue Row Layout, Badge Uniformity & Reversible Rejection Action Fixes
+
+### Work Card: Queue Row Layout, Badge Uniformity & Reversible Rejection Action Fixes
+- **Problem / tension:** Store names truncated to "Dar" in narrow queue columns, badge heights mismatched (h-5 vs h-6 within the same row), sidebar screamed "Mumbai OFFLINE", and clicking "Reject Action" trapped the operator in a dead static text box with no undo or emergency reorder path.
+- **Change / decision:** Rebuilt QueueScreen rows with a clean 2-line layout eliminating horizontal squishing, standardized all table badges to `size="sm"` (20px uniform height), transformed sidebar brand header to clean `Mumbai Network` with subtle `Live`/`Simulated` status, and made rejection a reversible state with `Undo Rejection` and `Emergency PO (+Rs 450)` triggers.
+- **Proof:** `npm run lint` exited 0; `npm test` exited 0 (8/8 domain invariants); `npm run build` compiled in 2.2s (3/3 static routes); `npx knip` exited 0 (0 unused exports/files).
+- **Still broken / unproven:** None. Clean responsive layout with zero truncation, uniform optical badge sizes, and reversible actions.
+
 ## 2026-10-08: Complete Anti-Slop Purge, File Deletions & Screen Reorganization
 
 ### Work Card: Complete Anti-Slop Purge, File Deletions & Screen Reorganization

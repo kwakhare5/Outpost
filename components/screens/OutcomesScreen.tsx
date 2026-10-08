@@ -35,7 +35,7 @@ export function OutcomesScreen({ isBackendOnline = false }: { isBackendOnline?: 
       {/* 1. Header & Time Filter */}
       <section className="bg-white border border-[#EAE6DF] rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <Badge variant="success" className="uppercase tracking-wide text-[10px]">
+          <Badge variant="success" size="sm" className="uppercase tracking-wide">
             Audited Outcomes
           </Badge>
           <h2 className="text-xl font-bold text-[#1C1917] mt-1.5 tracking-tight">
@@ -99,7 +99,7 @@ export function OutcomesScreen({ isBackendOnline = false }: { isBackendOnline?: 
               Includes successes, rejections, dynamic markdowns, and residual stockouts
             </p>
           </div>
-          <Badge variant="neutral">
+          <Badge variant="neutral" size="sm">
             {filteredRecords.length} Records Logged
           </Badge>
         </div>
@@ -141,6 +141,7 @@ export function OutcomesScreen({ isBackendOnline = false }: { isBackendOnline?: 
                       </td>
                       <td className="py-3 px-4">
                         <Badge
+                          size="sm"
                           variant={
                             isSuccess
                               ? "success"
