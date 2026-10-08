@@ -3,13 +3,14 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { DeckTab, StoreHub, TransferRecord, AlertItem } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { INITIAL_STORES, INITIAL_TRANSFERS, DEFAULT_ALERTS } from "@/lib/mockData";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
-import { SandboxModal } from "@/components/dashboard/SandboxModal";
-import { QueueScreen } from "@/components/screens/QueueScreen";
-import { FleetScreen } from "@/components/screens/FleetScreen";
-import { OutcomesScreen } from "@/components/screens/OutcomesScreen";
+import { ScenariosModal } from "@/components/dashboard/ScenariosModal";
+import { StockAlertsScreen } from "@/components/screens/StockAlertsScreen";
+import { DeliveriesScreen } from "@/components/screens/DeliveriesScreen";
+import { ResultsScreen } from "@/components/screens/ResultsScreen";
 import {
   advanceSimulationTime,
   applyLiveScenario,
@@ -463,13 +464,20 @@ export default function OperationsDeckPage() {
             setIsSandboxModalOpen(true);
           }}
           onAdvanceTime={handleAdvanceTime}
+          onResetDay={handleReset}
+          simTime={simTime}
           isBackendOnline={isBackendOnline}
           shrinkageUnits={shrinkageUnits}
         />
 
-        <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 w-full">
+        <main
+          className={cn(
+            "flex-1 min-h-0 w-full p-4 md:p-5",
+            activeTab === "outcomes" ? "overflow-y-auto" : "overflow-y-auto lg:overflow-hidden"
+          )}
+        >
           {activeTab === "queue" && (
-            <QueueScreen
+            <StockAlertsScreen
               alerts={alerts}
               onApproveTransfer={handleApproveTransfer}
               onRejectTransfer={handleRejectTransfer}
@@ -483,7 +491,7 @@ export default function OperationsDeckPage() {
           )}
 
           {activeTab === "inflight" && (
-            <FleetScreen
+            <DeliveriesScreen
               transfers={transfers}
               onConfirmReceipt={handleConfirmReceipt}
               onSimulateArrival={handleSimulateArrival}
@@ -491,13 +499,13 @@ export default function OperationsDeckPage() {
           )}
 
           {activeTab === "outcomes" && (
-            <OutcomesScreen isBackendOnline={isBackendOnline} />
+            <ResultsScreen isBackendOnline={isBackendOnline} />
           )}
         </main>
       </div>
 
       {/* 3. Unified Scenarios & Architecture Modal */}
-      <SandboxModal
+      <ScenariosModal
         isOpen={isSandboxModalOpen}
         onClose={() => setIsSandboxModalOpen(false)}
         stores={stores}

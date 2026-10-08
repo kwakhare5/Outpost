@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Sliders, RotateCcw, X, Cpu, ShieldCheck, Network } from "lucide-react";
+import { Sliders, X, Cpu, ShieldCheck, Network } from "lucide-react";
 import { toast } from "sonner";
 import { StoreHub } from "@/lib/types";
 import { Badge, Button, SegmentedControl } from "@/components/ui";
 import { uploadStoresCsv, SAMPLE_DARKSTORE_CSV, SAMPLE_DEMAND_CSV } from "@/lib/api";
 
-interface SandboxModalProps {
+interface ScenariosModalProps {
   isOpen: boolean;
   onClose: () => void;
   stores?: StoreHub[];
@@ -18,14 +18,13 @@ interface SandboxModalProps {
   isBackendOnline?: boolean;
 }
 
-export function SandboxModal({
+export function ScenariosModal({
   isOpen,
   onClose,
   initialTab = "scenarios",
   onTriggerScenario,
   onApplyScenarioMultiplier,
-  onReset,
-}: SandboxModalProps) {
+}: ScenariosModalProps) {
   const [userTab, setUserTab] = useState<"scenarios" | "architecture" | null>(null);
   const modalTab = userTab ?? initialTab;
   const [demandMultiplier, setDemandMultiplier] = useState<number>(2.5);
@@ -96,7 +95,7 @@ export function SandboxModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-[#1C1917] tracking-tight">
-                Simulation Controls &amp; Architecture
+                Simulation Controls &amp; Scenarios
               </h2>
               <p className="text-xs text-[#78716C]">
                 Configure operational scenarios or review system contracts
@@ -119,7 +118,7 @@ export function SandboxModal({
                 setUserTab(null);
                 onClose();
               }}
-              className="h-8 w-8 p-0"
+              className="h-8 w-8 p-0 cursor-pointer"
               title="Close"
             >
               <X className="w-4 h-4" />
@@ -134,7 +133,7 @@ export function SandboxModal({
               <h3 className="text-xs font-bold text-[#1C1917] uppercase tracking-wider">
                 Quick Scenario Drivers
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -142,14 +141,14 @@ export function SandboxModal({
                     toast.warning("Scenario: Demand Surge (2.5x) activated");
                     onClose();
                   }}
-                  className="p-3 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-[#2563EB] transition-all text-left space-y-1 cursor-pointer"
+                  className="p-3.5 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-[#2563EB] transition-all text-left space-y-1.5 cursor-pointer shadow-2xs"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#1C1917]">Demand Surge</span>
                     <Badge variant="urgent" size="sm">2.5x</Badge>
                   </div>
-                  <p className="text-[11px] text-[#78716C] leading-snug">
-                    Simulates evening customer surge across Mumbai nodes.
+                  <p className="text-xs text-[#57534E] leading-snug">
+                    Simulates evening customer order surge across Mumbai dark stores.
                   </p>
                 </button>
 
@@ -160,32 +159,14 @@ export function SandboxModal({
                     toast.warning("Scenario: Freight Highway Delay (+4h) activated");
                     onClose();
                   }}
-                  className="p-3 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-[#D97706] transition-all text-left space-y-1 cursor-pointer"
+                  className="p-3.5 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-[#D97706] transition-all text-left space-y-1.5 cursor-pointer shadow-2xs"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#1C1917]">Supplier Delay</span>
                     <Badge variant="warning" size="sm">+4h</Badge>
                   </div>
-                  <p className="text-[11px] text-[#78716C] leading-snug">
-                    Adds highway transit delay to Bhiwandi trucks.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onReset();
-                    toast.info("Network Reset to 3-Node Equilibrium");
-                    onClose();
-                  }}
-                  className="p-3 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-emerald-600 transition-all text-left space-y-1 cursor-pointer"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#1C1917]">Reset Run</span>
-                    <RotateCcw className="h-3.5 w-3.5 text-[#78716C]" />
-                  </div>
-                  <p className="text-[11px] text-[#78716C] leading-snug">
-                    Restores standard 195-unit Mumbai network baseline.
+                  <p className="text-xs text-[#57534E] leading-snug">
+                    Adds highway transit delay to Bhiwandi regional warehouse trucks.
                   </p>
                 </button>
               </div>
@@ -237,7 +218,7 @@ export function SandboxModal({
               </div>
             </div>
 
-            {/* Multi-Table CSV Ingestion (Section 13.2) */}
+            {/* Multi-Table CSV Ingestion */}
             <div className="space-y-2.5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <h3 className="text-xs font-bold text-[#1C1917] uppercase tracking-wider">
@@ -259,7 +240,7 @@ export function SandboxModal({
                   <button
                     type="button"
                     onClick={() => setCsvContent(csvType === "inventory" ? SAMPLE_DARKSTORE_CSV : SAMPLE_DEMAND_CSV)}
-                    className="text-[11px] font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                    className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
                   >
                     Reset Template
                   </button>
@@ -270,10 +251,10 @@ export function SandboxModal({
                 value={csvContent}
                 onChange={(e) => setCsvContent(e.target.value)}
                 placeholder={csvType === "inventory" ? "Paste inventory CSV rows..." : "Paste demand history CSV rows..."}
-                className="w-full h-24 p-2.5 rounded-xl border border-[#EAE6DF] font-mono text-[11px] text-[#1C1917] bg-[#FAF8F5] focus:outline-hidden focus:ring-1 focus:ring-[#2563EB]"
+                className="w-full h-24 p-2.5 rounded-xl border border-[#EAE6DF] font-mono text-xs text-[#1C1917] bg-[#FAF8F5] focus:outline-hidden focus:ring-1 focus:ring-[#2563EB]"
               />
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] text-[#78716C]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#78716C]">
                 <span className="font-mono">
                   Schema: {csvType === "inventory" ? "store_id, store_name, locality, milk_inventory, capacity, burn" : "timestamp, store_id, sku, requested_units, fulfilled_units, stockout_flag"}
                 </span>
@@ -296,7 +277,7 @@ export function SandboxModal({
                   <Cpu className="w-3.5 h-3.5 text-[#2563EB]" />
                   <span>Deterministic Sizing</span>
                 </div>
-                <p className="text-[#78716C] leading-relaxed">
+                <p className="text-[#57534E] leading-relaxed">
                   Computes burn rates from active 10-minute demand orders and safety stock thresholds.
                 </p>
               </div>
@@ -306,7 +287,7 @@ export function SandboxModal({
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Human Review Gate</span>
                 </div>
-                <p className="text-[#78716C] leading-relaxed">
+                <p className="text-[#57534E] leading-relaxed">
                   State machine pauses on lateral reorder until verified human approval is submitted.
                 </p>
               </div>
@@ -316,17 +297,17 @@ export function SandboxModal({
                   <Network className="w-3.5 h-3.5 text-[#2563EB]" />
                   <span>Mass Conservation</span>
                 </div>
-                <p className="text-[#78716C] leading-relaxed">
+                <p className="text-[#57534E] leading-relaxed">
                   FIFO/FEFO batch deduction guarantees strict conservation ($\Delta = 0.00$) between source and destination.
                 </p>
               </div>
             </div>
 
             <div className="space-y-2 pt-2 border-t border-[#EAE6DF]">
-              <span className="text-[#78716C] font-bold uppercase tracking-wider text-[10px]">
+              <span className="text-[#57534E] font-bold uppercase tracking-wider text-xs">
                 REST Telemetry Endpoints:
               </span>
-              <div className="grid grid-cols-2 gap-2 font-mono text-[11px] text-[#44403C]">
+              <div className="grid grid-cols-2 gap-2 font-mono text-xs text-[#44403C]">
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/stores</div>
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/risks</div>
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/recommendations</div>
@@ -341,3 +322,6 @@ export function SandboxModal({
     </div>
   );
 }
+
+// Backward compatibility alias
+export const SandboxModal = ScenariosModal;

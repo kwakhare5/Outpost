@@ -2,11 +2,13 @@
 
 import React, { useState } from "react";
 import {
-  RotateCw,
+  Clock,
+  FastForward,
+  RotateCcw,
   Sliders,
 } from "lucide-react";
 import { DeckTab } from "@/lib/types";
-import { Badge, Button } from "@/components/ui";
+import { Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -14,6 +16,8 @@ interface HeaderProps {
   totalStock: number;
   onSelectSandbox: () => void;
   onAdvanceTime?: () => void;
+  onResetDay?: () => void;
+  simTime?: string;
   onOpenArchitecture?: () => void;
   isBackendOnline?: boolean;
   shrinkageUnits?: number;
@@ -24,6 +28,8 @@ export function Header({
   totalStock,
   onSelectSandbox,
   onAdvanceTime,
+  onResetDay,
+  simTime = "08:15 AM",
   isBackendOnline = false,
   shrinkageUnits = 0,
 }: HeaderProps) {
@@ -35,30 +41,30 @@ export function Header({
     if (onAdvanceTime) {
       onAdvanceTime();
     }
-    setTimeout(() => setIsAdvancing(false), 600);
+    setTimeout(() => setIsAdvancing(false), 500);
   };
 
   const getTabTitle = () => {
     switch (activeTab) {
       case "queue":
         return {
-          title: "Exception Review Queue",
-          subtitle: "Human verification gate for lateral inventory rebalancing",
+          title: "Stock Alerts",
+          subtitle: "Items needing lateral inventory rebalancing",
         };
       case "inflight":
         return {
-          title: "Fleet In-Flight Movements",
-          subtitle: "Active inter-store transfers and back-door dock count confirmation",
+          title: "Live Deliveries",
+          subtitle: "Vans on the road and loading dock receiving",
         };
       case "outcomes":
         return {
-          title: "Measured Outcomes & Error",
-          subtitle: "Audited decisions benchmarked against counterfactual baselines",
+          title: "Past Results",
+          subtitle: "How our decisions performed vs doing nothing",
         };
       default:
         return {
-          title: "Operations Console",
-          subtitle: "Dark store replenishment command deck",
+          title: "Operations Deck",
+          subtitle: "Dark store replenishment command center",
         };
     }
   };
@@ -70,60 +76,88 @@ export function Header({
       {/* Title & Context */}
       <div>
         <h1 className="text-sm font-bold text-[#1C1917] tracking-tight">{title}</h1>
-        <p className="text-[11px] text-[#78716C] leading-none mt-0.5">{subtitle}</p>
+        <p className="text-xs text-[#57534E] leading-none mt-0.5">{subtitle}</p>
       </div>
 
       {/* Right Controls & Telemetry */}
       <div className="flex items-center gap-2.5">
-        {/* Honest Engine Status Badge (Section 8.2) */}
-        <div className="hidden lg:block">
-          {isBackendOnline ? (
+        {/* Live Engine Status Badge when connected */}
+        {isBackendOnline && (
+          <div className="hidden xl:block">
             <Badge variant="success" size="sm" dot>
               Live Engine (:8000)
             </Badge>
-          ) : (
-            <Badge variant="neutral" size="sm" dot>
-              Local Simulation
-            </Badge>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Shrinkage Discrepancy Counter (Section 6.8, 9.2) */}
         {shrinkageUnits > 0 && (
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-red-50 border border-red-200 text-xs font-semibold text-red-700">
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
             <span>Shrinkage:</span>
             <span className="font-bold font-mono">{shrinkageUnits}u</span>
           </div>
         )}
 
         {/* Total Stock Counter */}
-        <div className="hidden sm:flex items-center gap-2 px-3 h-8 rounded-lg bg-[#FAF8F5] border border-[#EAE6DF] text-xs font-semibold text-[#1C1917]">
-          <span className="text-[#78716C]">Network Stock:</span>
+        <div className="hidden md:flex items-center gap-2 px-3 h-8 rounded-lg bg-[#FAF8F5] border border-[#EAE6DF] text-xs font-semibold text-[#1C1917]">
+          <span className="text-[#57534E]">Network Stock:</span>
           <span className="font-bold text-[#2563EB]">{totalStock} units</span>
         </div>
 
-        {/* Advance 1h Quick Button */}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleAdvance}
-          disabled={isAdvancing}
-          title="Advance simulation clock by 1 hour"
-        >
-          <RotateCw className={cn("w-3.5 h-3.5 text-[#78716C]", isAdvancing && "animate-spin")} />
-          <span className="hidden md:inline">Advance 1h</span>
-        </Button>
+        {/* Prominent Simulation Time Capsule */}
+        <div className="flex items-center bg-[#FAF8F5] border border-[#EAE6DF] rounded-xl p-0.5 shadow-xs">
+          {/* Clock Display */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-[#1C1917]">
+            <Clock className="w-3.5 h-3.5 text-[#2563EB]" />
+            <span className="font-mono">{simTime}</span>
+          </div>
 
-        {/* Scenarios & Spec Modal Trigger */}
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={onSelectSandbox}
-          title="Open Scenarios & System Architecture"
-        >
-          <Sliders className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Scenarios &amp; Spec</span>
-        </Button>
+          <div className="h-4 w-px bg-[#EAE6DF] mx-0.5" />
+
+          {/* Advance 1h Button */}
+          <button
+            type="button"
+            onClick={handleAdvance}
+            disabled={isAdvancing}
+            title="Advance simulation time by +1 hour"
+            className={cn(
+              "flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+              "text-[#2563EB] hover:bg-blue-50 active:scale-95 disabled:opacity-50"
+            )}
+          >
+            <FastForward className={cn("w-3.5 h-3.5", isAdvancing && "translate-x-0.5")} />
+            <span>+1h</span>
+          </button>
+
+          {/* 1-Click Reset Day Button */}
+          {onResetDay && (
+            <>
+              <div className="h-4 w-px bg-[#EAE6DF] mx-0.5" />
+              <button
+                type="button"
+                onClick={onResetDay}
+                title="Reset simulation day to morning 08:15 baseline"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-[#57534E] hover:text-[#1C1917] hover:bg-white active:scale-95 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3 text-[#78716C]" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
+            </>
+          )}
+
+          <div className="h-4 w-px bg-[#EAE6DF] mx-0.5" />
+
+          {/* Scenarios Button */}
+          <button
+            type="button"
+            onClick={onSelectSandbox}
+            title="Open Scenarios & CSV Ingest"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-[#1C1917] hover:bg-white active:scale-95 transition-all cursor-pointer"
+          >
+            <Sliders className="w-3.5 h-3.5 text-[#57534E]" />
+            <span className="hidden sm:inline">Scenarios</span>
+          </button>
+        </div>
       </div>
     </header>
   );

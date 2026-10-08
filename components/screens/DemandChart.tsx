@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-interface QueueChartProps {
+interface DemandChartProps {
   currentStock: number;
   burnRate: number;
   productName: string;
@@ -12,14 +12,14 @@ interface QueueChartProps {
   className?: string;
 }
 
-export function QueueChart({
+export function DemandChart({
   currentStock,
   burnRate,
   productName,
   runsOutAtTime = "13:00",
   runsOutInHours = 4.8,
   className,
-}: QueueChartProps) {
+}: DemandChartProps) {
   // Chart coordinate mapping (viewBox 0 0 500 160)
   // Time domain: 06:00 (6.0) to 20:00 (20.0) -> 14 hours
   const startHour = 6.0;
@@ -85,13 +85,13 @@ export function QueueChart({
     <div className={cn("p-3.5 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-2", className)}>
       <div className="flex items-center justify-between text-xs">
         <div>
-          <span className="font-bold text-[#1C1917]">Hourly Demand &amp; Depletion Timeline</span>
+          <span className="font-bold text-[#1C1917]">Hourly Sales &amp; Demand Forecast</span>
           <span className="text-[10px] text-[#78716C] ml-2 font-mono">
-            {productName} ({currentStock}u on shelf)
+            {productName} ({currentStock} units left)
           </span>
         </div>
         <span className="text-[11px] font-mono font-semibold text-[#C2410C]">
-          Stockout: {runsOutAtTime} (~{runsOutInHours.toFixed(1)}h)
+          Empty: ~{runsOutAtTime} (in ~{runsOutInHours.toFixed(1)}h)
         </span>
       </div>
 
@@ -288,7 +288,7 @@ export function QueueChart({
             fill="#FFFFFF"
             fontFamily="sans-serif"
           >
-            PO-4471 ETA 18:40
+            Truck Arrives 18:40
           </text>
 
           {/* X-axis tick labels */}
@@ -326,25 +326,28 @@ export function QueueChart({
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-2 bg-[#2563EB] rounded-xs" />
-            <span>Fulfilled Sales</span>
+            <span>Sales Done</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block w-3 border-t-2 border-dashed border-[#2563EB]" />
-            <span>Requested Forecast ({burnRate} u/h)</span>
+            <span>Demand Forecast ({burnRate}/hr)</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-full bg-[#E11D48]" />
-            <span>Stockout Horizon</span>
+            <span>Runs Out (~{runsOutAtTime})</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-full bg-[#D97706]" />
-            <span>RFC PO (+5.6h late)</span>
+            <span>Truck (Too Late)</span>
           </span>
         </div>
         <span className="font-mono text-[#1C1917] font-semibold">
-          Burn: {burnRate} u/h · Cover: {runsOutInHours.toFixed(1)}h
+          Sales Rate: {burnRate}/hr · Covers: {runsOutInHours.toFixed(1)}h
         </span>
       </div>
     </div>
   );
 }
+
+// Backward compatibility alias
+export const QueueChart = DemandChart;

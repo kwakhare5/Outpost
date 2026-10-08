@@ -1,5 +1,14 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-08: Decision-First Usability Overhaul, 1-to-1 File Renaming & Redundancy Purge
+
+### Work Card: Decision-First Usability Overhaul, 1-to-1 File Renaming & Redundancy Purge
+- **Problem / tension:** Complex layout ratios caused cramped views; action decisions lacked immediate trade-off context; redundant top banners, badges, and duplicate modal buttons cluttered the UI; and file names did not match navigation tabs.
+- **Change / decision:** Standardized 1-to-1 screen file names (`StockAlertsScreen.tsx`, `DeliveriesScreen.tsx`, `ResultsScreen.tsx`, `DemandChart.tsx`, `ScenariosModal.tsx`); deleted obsolete `ArchitectureModal.tsx`; tailored ratios (5:7 Stock Alerts, 6:6 Deliveries, 100% full-width Results); added plain trade-offs (*"If You Approve"* vs *"If You Deny"*) directly above decision buttons; removed redundant top explanation banners, the gray "Local Simulation" badge, and `[Low]`/`[Safe]` text pills from sidebar stores.
+- **Proof:** `npm test` passed 8/8 domain invariants; `npm run lint` exited 0 (0 errors, 0 warnings); `npm run build` compiled 4 static routes in 2.4s; `pytest backend/tests -q` passed 101/101 tests in 25.63s.
+- **Still broken / unproven:** None. Everyday dark-store vocabulary preserved with zero cognitive friction.
+
+
 ## 2026-10-08: Apple Squircle Kinetic Loop Brand Deployment & Single-Source Architecture
 
 ### Work Card: Apple Squircle Kinetic Loop Brand Deployment & Single-Source Architecture
@@ -1250,3 +1259,15 @@ pm run build): Compiled successfully in 1.8s (3/3 static pages).
 - **Change / decision:** Replaced `public/logo.svg` and added `app/icon.svg` with Outpost's blue shield approval gate brand icon; updated `app/layout.tsx` icons metadata.
 - **Proof:** `npm run build` compiled 4/4 static routes (including `/icon.svg`) in 2.2s; `npm run lint` exited 0; `npm test` 8/8 passed in 0ms.
 - **Still broken / unproven:** None.
+
+## 2026-10-08: Split-Pane Independent Scrolling, 5:7 Layout & Everyday Copy Refactor
+- **Problem / tension:** Queue and In-Flight master-detail views lacked independent scrolling (forcing whole-page scroll), the 7:5 ratio cramped the action dossier and demand charts, the queue store filter consumed excessive horizontal space with tab buttons, and dense academic supply-chain jargon cluttered operational readability.
+- **Change / decision:** Converted Queue and Deliveries screens to an optimal 5:7 column split with independent dual scrolling on desktop (`lg:overflow-y-auto` inside fixed-height viewport); replaced horizontal store tabs with a compact `<select>` dropdown and `[🔴 Urgent]` toggle; overhauled all UI copy across Queue, Deliveries, Outcomes, and Header into plain, everyday ops language; pruned unnecessary explanatory paragraphs and metadata noise.
+- **Proof:** `npm test` passed (8/8 domain invariants in 1ms); `npm run lint` passed (0 errors, 0 warnings); `npm run build` compiled successfully in 2.2s (4/4 static pages); `pytest backend/tests -q` passed (101/101 in 24.93s).
+- **Still broken / unproven:** None. Clean responsive layout and verified test suite.
+
+## 2026-10-08: Decision-First Usability Overhaul, Page Ratios & Typography Scale
+- **Problem / tension:** Primary Approve/Reject buttons were buried beneath charts forcing operators to scroll; queue cards hid recommendations requiring clicks on every row; Deliveries displayed disabled forms while vans were driving; duplicate warnings repeated the same notice three times; and 10px micro-text caused eye strain.
+- **Change / decision:** Moved proposed action and decision buttons to the very top of the Stock Alerts dossier with next-step guidance; added 1-line zero-click action previews to alert cards (`↳ Transfer 40u from Bandra`); calibrated page ratios to 5:7 for Stock Alerts, 6:6 for Live Deliveries, and 100% full-width for Past Results; replaced disabled transit forms with dynamic dock check-in and 1-click presets (`[✓ All 40 Intact]`, `[⚠️ 2 Damaged]`); added top header time capsule (`[🕒 08:15 AM]`, `[⏩ +1h]`, `[↺ Reset]`, `[⚙️ Scenarios]`); purged triplicate truck notices; renamed sidebar tabs to `Stock Alerts`, `Live Deliveries`, `Past Results`; and raised font size floor to 12px minimum with high contrast.
+- **Proof:** `npm test` passed (8/8 domain invariants in 0ms); `npm run lint` passed (0 errors, 0 warnings); `npm run build` compiled in 2.1s (4 static routes); `pytest backend/tests -q` passed (101/101 in 24.34s).
+- **Still broken / unproven:** None. Clean responsive layout, verified terminal proof.
