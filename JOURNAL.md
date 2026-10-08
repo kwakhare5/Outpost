@@ -1227,3 +1227,10 @@ pm run build): Compiled successfully in 1.8s (3/3 static pages).
 - **Change / decision:** Added rich Next.js metadata in `app/layout.tsx` (title, description, keywords, OpenGraph, Twitter card); overhauled `README.md` to remove video placeholders, and added explicit Vercel deployment instructions with hybrid client fallback documentation.
 - **Proof:** `npm run lint` exited 0; `npm test` exited 0 (8/8 domain invariants PASSED in 0ms); `npm run build` compiled successfully in 2.3s (3/3 static pages).
 - **Still broken / unproven:** None. Clean compile and verified production metadata.
+
+
+## 2026-10-08: Favicon Branding Replacement
+- **Problem / tension:** `public/logo.svg` was a leftover green grocery bag with a smiley face from a legacy project, displaying as the browser tab favicon.
+- **Change / decision:** Replaced `public/logo.svg` and added `app/icon.svg` with Outpost's blue shield approval gate brand icon; updated `app/layout.tsx` icons metadata.
+- **Proof:** `npm run build` compiled 4/4 static routes (including `/icon.svg`) in 2.2s; `npm run lint` exited 0; `npm test` 8/8 passed in 0ms.
+- **Still broken / unproven:** None.

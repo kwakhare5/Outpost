@@ -43,9 +43,9 @@ export const metadata: Metadata = {
       "Deterministic decision engine for high-velocity dark stores. Forecasts localized demand, enforces Level-2 human review, and tracks lateral stock rebalancing with mass conservation.",
   },
   icons: {
-    icon: "/logo.svg",
-    shortcut: "/logo.svg",
-    apple: "/logo.svg",
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
   },
 };
 
