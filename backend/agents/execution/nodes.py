@@ -363,7 +363,8 @@ async def node_finalize(state: AgentState) -> dict:
     db     = state["db"]
     rec_id = state["recommendation_id"]
     events = list(state.get("events", []))
-    now    = datetime.now(timezone.utc).replace(tzinfo=None)
+    from backend.services.decision.engine import _get_sim_now
+    now    = await _get_sim_now(db)
 
     rec_row = await db.get(Recommendation, rec_id)
     if rec_row:

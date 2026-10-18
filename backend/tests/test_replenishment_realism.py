@@ -17,7 +17,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Store, Product, Supplier, Inventory, Batch, Risk, Recommendation, Action, Event, Simulation
-from backend.models.enums import StoreStatus, SupplierStatus, ProductCategory, RiskType, RiskSeverity, RiskStatus, RecommendationStatus, ActionType, ActionStatus, SimulationStatus
+from backend.models.enums import StoreStatus, SupplierStatus, ProductCategory, RiskType, RiskSeverity, RiskStatus, RecommendationStatus, ActionType, ActionStatus, SimulationStatus, POStatus
 from backend.agents.execution.tools import create_transfer, create_reorder
 from backend.agents.execution.runner import ExecutionRunner
 from backend.services.simulation.transfer import (
@@ -348,3 +348,89 @@ def test_regional_fulfilment_centre_naming_convention():
         assert "RFC" in s.name or "Regional Fulfilment Centre" in s.name, (
             f"Supplier '{s.name}' does not follow the Regional Fulfilment Centre (RFC) naming convention"
         )
+
+
+@pytest.mark.asyncio
+async def test_outpost_po_arrives_at_sim_time_plus_lead_time(db_session: AsyncSession):
+    """Item 1: Outpost PO created by agent execution arrives at sim time plus lead time."""
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.simulation.scenarios import get_simulation_state
+    from backend.models.core import PurchaseOrder as PurchaseOrderModel
+
+    # 1. Initialize simulation engine
+    sim_engine = SimulationEngine(seed=42, historical_days=7, policy="outpost")
+    await sim_engine.initialize(db_session, policy="outpost")
+    await db_session.commit()
+
+    clear_active_pos()
+    from sqlalchemy import delete
+    await db_session.execute(delete(PurchaseOrderModel))
+    await db_session.commit()
+
+    sim_start = sim_engine.clock.now
+    state = get_simulation_state(sim_engine.simulation_id)
+    state.engine = sim_engine
+
+    # 2. Pick a product and its supplier
+    product = (await db_session.execute(select(Product))).scalars().first()
+    supplier = await db_session.get(Supplier, product.supplier_id)
+    lead_time = supplier.lead_time_hours
+    assert lead_time > 0
+
+    # Pick a store
+    store = (await db_session.execute(select(Store))).scalars().first()
+
+    # Get initial inventory
+    inv = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == store.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one_or_none()
+    initial_qty = inv.quantity if inv else 0
+
+    # 3. Create approved reorder recommendation
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=store.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity=RiskSeverity.CRITICAL,
+        probability=0.9,
+        expected_time=sim_start + timedelta(hours=lead_time),
+        status=RiskStatus.ACTIVE,
+        created_at=sim_start,
+    )
+    rec = Recommendation(
+        recommendation_id=uuid.uuid4(),
+        risk_id=risk.risk_id,
+        action_type=ActionType.REORDER,
+        quantity=50,
+        source_store_id=None,
+        destination_store_id=store.store_id,
+        score=0.9,
+        confidence=0.9,
+        reason_codes=["LOW_STOCK"],
+        alternatives=[],
+        status=RecommendationStatus.APPROVED,
+        created_at=sim_start,
+    )
+    db_session.add_all([risk, rec])
+    await db_session.commit()
+
+    # 4. Agent creates reorder
+    res = await create_reorder(db_session, rec.recommendation_id)
+    assert res["success"] is True, f"create_reorder failed: {res}"
+    po_id = uuid.UUID(res["po_id"])
+    expected_arrival = datetime.fromisoformat(res["expected_arrival"])
+
+    expected_sim_arrival = (sim_start + timedelta(hours=lead_time)).replace(tzinfo=None)
+    assert expected_arrival == expected_sim_arrival
+
+    # 5. Advance simulation time by lead_time hours
+    advance_res = await sim_engine.advance_time(db_session, sim_engine.simulation_id, hours=lead_time, auto_execute=False)
+    assert advance_res["pos_delivered"] >= 1
+
+    # 6. Verify PO status is RECEIVED in database and batches/inventory credited
+    po_db = await db_session.get(PurchaseOrderModel, po_id)
+    assert po_db.status == POStatus.RECEIVED
+
+    await db_session.refresh(inv)
+    assert inv.quantity >= initial_qty + 50

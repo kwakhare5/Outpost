@@ -55,7 +55,7 @@ from backend.agents.execution.nodes import (
 )
 from backend.agents.execution.runner import ExecutionRunner
 from backend.models.core import (
-    Recommendation, Inventory, Risk, Store, Supplier, Product, Batch, Simulation,
+    Recommendation, Inventory, Risk, Store, Supplier, Product, Batch, Simulation, Forecast,
 )
 from backend.models.enums import (
     RecommendationStatus, ActionType, ActionStatus, RiskType, RiskSeverity,
@@ -220,6 +220,18 @@ async def _seed_reorder_scenario(db_session):
     inv = Inventory(store_id=store.store_id, product_id=product.product_id, quantity=5)
     db_session.add(inv)
 
+    fc = Forecast(
+        forecast_id=uuid.uuid4(),
+        store_id=store.store_id,
+        product_id=product.product_id,
+        forecast_window_hours=24,
+        predicted_demand=50.0,
+        confidence=0.90,
+        model_name="test_model",
+        created_at=now,
+    )
+    db_session.add(fc)
+
     rec = Recommendation(
         recommendation_id=uuid.uuid4(),
         risk_id=risk.risk_id,
@@ -245,7 +257,7 @@ async def _seed_reorder_scenario(db_session):
     db_session.add(rec)
     await db_session.commit()
 
-    return {"supplier": supplier, "product": product, "store": store, "risk": risk, "inv": inv, "rec": rec, "sim": sim}
+    return {"supplier": supplier, "product": product, "store": store, "risk": risk, "inv": inv, "rec": rec, "sim": sim, "fc": fc}
 
 
 async def _seed_pending_rec(db_session):
@@ -386,6 +398,20 @@ async def test_validate_reorder_real_checks(db_session):
     res_abundant = await validate_reorder(db_session, rec.recommendation_id)
     assert res_abundant["feasible"] is False
     assert res_abundant["reason"] == "no_order_needed"
+
+
+async def test_validate_reorder_missing_forecast_rejected(db_session):
+    """Part 2c: validate_reorder returns not feasible with clear reason when forecast is missing."""
+    from backend.agents.execution.tools import validate_reorder
+    from sqlalchemy import delete
+    scenario = await _seed_reorder_scenario(db_session)
+    await db_session.execute(delete(Forecast))
+    await db_session.commit()
+
+    result = await validate_reorder(db_session, scenario["rec"].recommendation_id)
+    assert result["feasible"] is False
+    assert result["reason"] == "missing_demand_forecast"
+    assert result["reorder_quantity"] == 0
 
 
 async def test_apply_discount_rejects_non_approved_rec(db_session):

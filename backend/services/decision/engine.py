@@ -315,7 +315,7 @@ class DecisionOrchestrator:
             "discount": ActionType.DISCOUNT,
             "hold":     ActionType.HOLD,
         }
-        now = _naive_now()
+        now = sim_now
         alternatives_payload = [
             {
                 "action_type": a.action_type,
@@ -425,7 +425,7 @@ class DecisionOrchestrator:
             return None
         rec.status = RecommendationStatus.APPROVED
 
-        now = _naive_now()
+        now = await _get_sim_now(db)
         from backend.models.core import Action
         from backend.models.enums import ActionStatus
         action = Action(

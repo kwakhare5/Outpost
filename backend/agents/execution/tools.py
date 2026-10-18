@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.core import Recommendation, Inventory, Risk, Store, Batch, Product, Action
+from backend.models.core import Recommendation, Inventory, Risk, Store, Batch, Product, Action, Simulation
 from backend.models.enums import RecommendationStatus, ActionType, ActionStatus
 from backend.services.decision.models import SafeExcessCalculator, DEFAULT_WEIGHTS
 from backend.events.audit import audit_log
@@ -25,6 +25,21 @@ from backend.events.audit import audit_log
 
 def _naive_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+async def _get_sim_now(db: AsyncSession) -> datetime:
+    try:
+        from backend.services.simulation.scenarios import get_active_simulation_id, get_simulation_state
+        sim_id = await get_active_simulation_id(db)
+        state = get_simulation_state(sim_id)
+        if state and state.engine and state.engine.clock:
+            return state.engine.clock.now.replace(tzinfo=None) if state.engine.clock.now.tzinfo else state.engine.clock.now
+        sim = await db.get(Simulation, sim_id)
+        if sim and sim.current_time:
+            return sim.current_time.replace(tzinfo=None) if sim.current_time.tzinfo else sim.current_time
+    except Exception:
+        pass
+    return _naive_now()
 
 
 def _enum_val(v: Any) -> str:
@@ -195,21 +210,14 @@ async def validate_reorder(
         }
 
     # 2. Check stock on hand (unexpired)
-    now = _naive_now()
-    try:
-        from backend.services.simulation.scenarios import get_simulation_state
-        state = get_simulation_state(active_sim_id)
-        if state and state.engine and state.engine.clock:
-            now = state.engine.clock.now.replace(tzinfo=None) if state.engine.clock.now.tzinfo else state.engine.clock.now
-    except Exception:
-        pass
+    sim_now = await _get_sim_now(db)
 
     batch_res = await db.execute(
         select(func.coalesce(func.sum(Batch.quantity), 0)).where(
             Batch.store_id == store_id,
             Batch.product_id == product_id,
             Batch.quantity > 0,
-            Batch.expires_at > now,
+            Batch.expires_at > sim_now,
         )
     )
     unexpired_batch_qty = batch_res.scalar() or 0
@@ -246,37 +254,34 @@ async def validate_reorder(
         .limit(1)
     )
     dest_fc = fc_res.scalar_one_or_none()
-    if dest_fc:
-        dest_demand_24h = dest_fc.predicted_demand
-        dest_demand_48h = dest_demand_24h * 2.0
-        hourly_demand = dest_demand_24h / 24.0
-        shelf_life_hours = product.shelf_life_hours if product and product.shelf_life_hours else 72
-        max_shelf_life_demand = hourly_demand * shelf_life_hours
-        target_stock = min(dest_demand_48h, max_shelf_life_demand)
+    if not dest_fc:
+        return {
+            "feasible": False,
+            "reason": "missing_demand_forecast",
+            "reorder_quantity": 0,
+        }
 
-        needed = max(0, int(round(target_stock - on_hand_unexpired - shipment_sum)))
-        if needed <= 0:
-            return {
-                "feasible": False,
-                "reason": "no_order_needed",
-                "reorder_quantity": 0,
-                "on_hand": on_hand_unexpired,
-                "target": target_stock,
-            }
-        reorder_qty = min(rec.quantity, needed) if rec.quantity > 0 else needed
-    else:
-        if rec.quantity <= 0 or on_hand_unexpired >= 500:
-            return {
-                "feasible": False,
-                "reason": "no_order_needed",
-                "reorder_quantity": 0,
-            }
-        reorder_qty = rec.quantity
+    dest_demand_24h = dest_fc.predicted_demand
+    dest_demand_48h = dest_demand_24h * 2.0
+    hourly_demand = dest_demand_24h / 24.0
+    shelf_life_hours = product.shelf_life_hours if product and product.shelf_life_hours else 72
+    max_shelf_life_demand = hourly_demand * shelf_life_hours
+    target_stock = min(dest_demand_48h, max_shelf_life_demand)
+
+    reorder_qty = max(0, int(round(target_stock - on_hand_unexpired - shipment_sum)))
+    if reorder_qty <= 0:
+        return {
+            "feasible": False,
+            "reason": "no_order_needed",
+            "reorder_quantity": 0,
+            "on_hand": on_hand_unexpired,
+            "target": target_stock,
+        }
 
     return {
         "feasible": True,
         "reason": "ok",
-        "reorder_quantity": reorder_qty,
+        "reorder_quantity": min(rec.quantity, reorder_qty) if rec.quantity > 0 else reorder_qty,
     }
 
 
@@ -328,7 +333,7 @@ async def create_transfer(
     product_id = risk.product_id
 
     transfer_qty = rec.quantity
-    now = _naive_now()
+    now = await _get_sim_now(db)
 
     # Transition linked Action to EXECUTING if present
     act_res = await db.execute(
@@ -440,7 +445,7 @@ async def create_reorder(
         }
 
     reorder_qty = rec.quantity
-    now = _naive_now()
+    now = await _get_sim_now(db)
 
     # Transition linked Action to EXECUTING if present
     act_res = await db.execute(
