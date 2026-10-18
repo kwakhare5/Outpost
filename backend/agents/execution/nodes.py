@@ -19,6 +19,7 @@ from backend.agents.execution.tools import (
     get_recommendation,
     get_inventory,
     validate_transfer,
+    validate_reorder,
     create_transfer,
     create_reorder,
     apply_discount,
@@ -115,7 +116,22 @@ async def node_pre_check(state: AgentState) -> dict:
                 "events": events,
             }
 
-    # reorder, discount, hold: pre_check always passes (world changes don't invalidate these)
+    if action_type == "reorder":
+        result = await validate_reorder(db, rec_id)
+        if not result["feasible"]:
+            events.append({
+                "node": "pre_check",
+                "result": "failed",
+                "reason": result.get("reason", "unknown"),
+            })
+            return {
+                "pre_check_passed": False,
+                "stale_inventory": True,
+                "pre_check_error": result.get("reason", "pre_check_failed"),
+                "events": events,
+            }
+
+    # discount, hold: pre_check passes (world changes don't invalidate these)
     events.append({"node": "pre_check", "result": "ok", "action_type": action_type})
     return {
         "pre_check_passed": True,

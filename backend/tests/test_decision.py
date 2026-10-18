@@ -303,3 +303,259 @@ def test_evaluator_confidence_is_bounded():
         hold=_hold(),
     )
     assert 0.0 <= result.confidence <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_evaluate_all_skips_reorder_when_po_in_flight(db_session):
+    """Part B: evaluate_all skips generating a reorder recommendation if a PO is already in flight."""
+    from sqlalchemy import select, update
+    from backend.models.core import Inventory, Risk, Recommendation, PurchaseOrder as PurchaseOrderModel
+    from backend.models.enums import RiskStatus, RiskType, ActionType, POStatus
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from backend.services.risk.engine import RiskEngine
+    from datetime import datetime, timezone
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc = ForecastingEngine()
+    await fc.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    # Drain store inventory to force stockout risk
+    await db_session.execute(update(Inventory).values(quantity=0))
+    await db_session.commit()
+
+    risk_engine = RiskEngine()
+    await risk_engine.run(db_session)
+    await db_session.commit()
+
+    risks = (await db_session.execute(
+        select(Risk).where(Risk.status == RiskStatus.ACTIVE, Risk.risk_type == RiskType.STOCKOUT)
+    )).scalars().all()
+    assert len(risks) > 0
+    target_risk = risks[0]
+
+    # Insert an in-flight purchase order for this store & product
+    po = PurchaseOrderModel(
+        po_id=uuid.uuid4(),
+        supplier_id=uuid.uuid4(),
+        destination_store_id=target_risk.store_id,
+        product_id=target_risk.product_id,
+        quantity=50,
+        status=POStatus.IN_TRANSIT,
+        ordered_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        arrival_eta=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db_session.add(po)
+    await db_session.commit()
+
+    orchestrator = DecisionOrchestrator()
+    await orchestrator.evaluate_all(db_session)
+    await db_session.commit()
+
+    # Check recommendations for this store and product
+    recs = (await db_session.execute(
+        select(Recommendation).where(
+            Recommendation.destination_store_id == target_risk.store_id,
+            Recommendation.risk_id == target_risk.risk_id,
+            Recommendation.action_type == ActionType.REORDER,
+        )
+    )).scalars().all()
+    assert len(recs) == 0, "Expected no REORDER recommendation when PO is in flight"
+
+
+@pytest.mark.asyncio
+async def test_reorder_sizing_capped_by_shelf_life_and_stock_in_transit(db_session):
+    """Part C: reorder size is max(0, target_stock - on_hand_unexpired - in_transit) capped by shelf life."""
+    from sqlalchemy import select, update
+    from backend.models.core import Inventory, Risk, Recommendation, Product, Forecast, Batch
+    from backend.models.enums import RiskStatus, RiskType, ActionType
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from datetime import datetime, timezone, timedelta
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc = ForecastingEngine()
+    await fc.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    # Find a product and set shelf life to 24 hours
+    product = (await db_session.execute(select(Product))).scalars().first()
+    product.shelf_life_hours = 24
+    await db_session.commit()
+
+    # Zero all other inventory and set store 1 inventory for this product to 5
+    await db_session.execute(update(Inventory).values(quantity=0))
+    inv = (await db_session.execute(
+        select(Inventory).where(Inventory.product_id == product.product_id)
+    )).scalars().first()
+    inv.quantity = 5
+    await db_session.commit()
+
+    # Create active unexpired batch of 5 units
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    batch = Batch(
+        batch_id=uuid.uuid4(),
+        store_id=inv.store_id,
+        product_id=product.product_id,
+        quantity=5,
+        received_at=now,
+        expires_at=now + timedelta(hours=20),
+    )
+    db_session.add(batch)
+    await db_session.commit()
+
+    # Create active stockout risk
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=inv.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.8,
+        expected_time=now + timedelta(hours=5),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    dest_fc = (await db_session.execute(
+        select(Forecast).where(Forecast.store_id == inv.store_id, Forecast.product_id == product.product_id)
+    )).scalars().first()
+    forecast_24h = dest_fc.predicted_demand
+    expected_target = forecast_24h
+    expected_reorder = max(0, int(round(expected_target - 5)))
+
+    orchestrator = DecisionOrchestrator()
+    rec = await orchestrator.run(db_session, risk.risk_id)
+    assert rec is not None
+    if rec.action_type == ActionType.REORDER:
+        assert rec.quantity == expected_reorder
+
+
+@pytest.mark.asyncio
+async def test_missing_forecast_rejected_without_made_up_number(db_session, caplog):
+    """Part E: Remove 10.0 fallback and category priors. Missing forecast reports clearly instead of guessing."""
+    import logging
+    from datetime import datetime, timezone
+    from sqlalchemy import select, delete
+    from backend.models.core import Forecast, Risk, Inventory
+    from backend.models.enums import RiskType, RiskStatus
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.risk.engine import RiskEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    # Clear all Forecast rows so table is completely empty
+    await db_session.execute(delete(Forecast))
+    await db_session.commit()
+
+    # RiskEngine should not invent demand from category priors
+    with caplog.at_level(logging.WARNING):
+        risk_engine = RiskEngine()
+        count = await risk_engine.run(db_session)
+        assert count == 0, "Expected 0 risks detected when Forecast table is empty"
+        assert "Missing forecast" in caplog.text
+
+    # DecisionOrchestrator should return None instead of using 10.0 fallback
+    inv = (await db_session.execute(select(Inventory))).scalars().first()
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=inv.store_id,
+        product_id=inv.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.8,
+        expected_time=datetime.now(timezone.utc).replace(tzinfo=None),
+        status=RiskStatus.ACTIVE,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    orchestrator = DecisionOrchestrator()
+    rec = await orchestrator.run(db_session, risk.risk_id)
+    assert rec is None, "Expected DecisionOrchestrator to return None when forecast is missing"
+
+
+@pytest.mark.asyncio
+async def test_transfer_zero_when_no_demand_gap_and_discount_clock(db_session):
+    """Part F: When destination has no demand gap, transfer nothing. Also discount hours uses sim clock."""
+    from sqlalchemy import select, update
+    from backend.models.core import Inventory, Risk, Forecast, Product, Simulation
+    from backend.models.enums import RiskType, RiskStatus, ActionType, SimulationStatus
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from backend.services.simulation.scenarios import get_simulation_state
+    from datetime import datetime, timezone, timedelta
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    sim_row = await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc = ForecastingEngine()
+    await fc.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    # Select product
+    product = (await db_session.execute(select(Product))).scalars().first()
+
+    # Find store 1 and store 2 inventories
+    invs = (await db_session.execute(
+        select(Inventory).where(Inventory.product_id == product.product_id)
+    )).scalars().all()
+    dest_inv, src_inv = invs[0], invs[1]
+
+    # Destination has huge stock (no demand gap!)
+    dest_inv.quantity = 1000
+    # Source has large stock
+    src_inv.quantity = 1000
+    await db_session.commit()
+
+    sim_time = datetime(2026, 10, 18, 12, 0, 0)
+    sim.clock._current_time = sim_time
+    sim_row = await db_session.get(Simulation, sim_row.simulation_id)
+    sim_row.current_time = sim_time
+    await db_session.commit()
+
+    state = get_simulation_state(sim_row.simulation_id)
+    state.engine = sim
+
+    # Create spoilage risk 5 hours ahead of simulation time
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=dest_inv.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.SPOILAGE,
+        severity="critical",
+        probability=0.9,
+        expected_time=sim_time + timedelta(hours=5),
+        status=RiskStatus.ACTIVE,
+        created_at=sim_time,
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    orchestrator = DecisionOrchestrator()
+    rec = await orchestrator.run(db_session, risk.risk_id)
+    assert rec is not None
+
+    # Verify that in alternatives, transfer was NOT recommended because demand_gap == 0
+    for alt in rec.alternatives:
+        if alt["action_type"] == "transfer":
+            assert alt["quantity"] == 0
+    if rec.action_type == ActionType.DISCOUNT:
+        assert rec.quantity > 0

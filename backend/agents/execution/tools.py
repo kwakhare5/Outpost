@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Recommendation, Inventory, Risk, Store, Batch, Product, Action
@@ -151,11 +151,133 @@ async def validate_reorder(
     db: AsyncSession,
     recommendation_id: uuid.UUID,
 ) -> dict:
-    """Read-only validation: check reorder is still relevant."""
+    """Read-only validation: check stock on hand and in-flight orders.
+
+    Returns not feasible when no order is needed.
+    """
     rec = await db.get(Recommendation, recommendation_id)
     if rec is None:
         return {"feasible": False, "reason": "recommendation_not_found"}
-    return {"feasible": True, "reason": "ok", "reorder_quantity": rec.quantity}
+
+    risk = await db.get(Risk, rec.risk_id)
+    if risk is None:
+        return {"feasible": False, "reason": "linked_risk_not_found"}
+
+    store_id = rec.destination_store_id or risk.store_id
+    product_id = risk.product_id
+
+    product = await db.get(Product, product_id)
+
+    from backend.models.core import Inventory, Batch, Forecast, PurchaseOrder as PurchaseOrderModel, Shipment
+    from backend.models.enums import POStatus, ShipmentStatus
+    from backend.services.simulation.supplier import get_active_pos
+    from backend.services.simulation.scenarios import get_active_simulation_id
+
+    active_sim_id = await get_active_simulation_id(db)
+
+    # 1. In-flight purchase orders
+    in_flight_db = (await db.execute(
+        select(PurchaseOrderModel).where(
+            PurchaseOrderModel.destination_store_id == store_id,
+            PurchaseOrderModel.product_id == product_id,
+            PurchaseOrderModel.status == POStatus.IN_TRANSIT,
+        )
+    )).scalars().all()
+    in_flight_mem = [
+        p for p in get_active_pos(active_sim_id)
+        if p.store_id == store_id and p.product_id == product_id and p.status in ('in_transit', 'delayed')
+    ]
+    if in_flight_db or in_flight_mem:
+        return {
+            "feasible": False,
+            "reason": "order_already_in_flight",
+            "reorder_quantity": 0,
+        }
+
+    # 2. Check stock on hand (unexpired)
+    now = _naive_now()
+    try:
+        from backend.services.simulation.scenarios import get_simulation_state
+        state = get_simulation_state(active_sim_id)
+        if state and state.engine and state.engine.clock:
+            now = state.engine.clock.now.replace(tzinfo=None) if state.engine.clock.now.tzinfo else state.engine.clock.now
+    except Exception:
+        pass
+
+    batch_res = await db.execute(
+        select(func.coalesce(func.sum(Batch.quantity), 0)).where(
+            Batch.store_id == store_id,
+            Batch.product_id == product_id,
+            Batch.quantity > 0,
+            Batch.expires_at > now,
+        )
+    )
+    unexpired_batch_qty = batch_res.scalar() or 0
+    total_batches = (await db.execute(
+        select(func.count(Batch.batch_id)).where(
+            Batch.store_id == store_id,
+            Batch.product_id == product_id,
+        )
+    )).scalar() or 0
+
+    if total_batches > 0:
+        on_hand_unexpired = unexpired_batch_qty
+    else:
+        inv = (await db.execute(
+            select(Inventory).where(Inventory.store_id == store_id, Inventory.product_id == product_id)
+        )).scalar_one_or_none()
+        on_hand_unexpired = inv.quantity if inv else 0
+
+    # In-transit shipments
+    shipment_res = await db.execute(
+        select(func.coalesce(func.sum(Shipment.quantity), 0)).where(
+            Shipment.destination_store_id == store_id,
+            Shipment.product_id == product_id,
+            Shipment.status.in_([ShipmentStatus.DISPATCHED, ShipmentStatus.IN_TRANSIT]),
+        )
+    )
+    shipment_sum = shipment_res.scalar() or 0
+
+    # 3. Check demand / target
+    fc_res = await db.execute(
+        select(Forecast)
+        .where(Forecast.store_id == store_id, Forecast.product_id == product_id)
+        .order_by(Forecast.created_at.desc())
+        .limit(1)
+    )
+    dest_fc = fc_res.scalar_one_or_none()
+    if dest_fc:
+        dest_demand_24h = dest_fc.predicted_demand
+        dest_demand_48h = dest_demand_24h * 2.0
+        hourly_demand = dest_demand_24h / 24.0
+        shelf_life_hours = product.shelf_life_hours if product and product.shelf_life_hours else 72
+        max_shelf_life_demand = hourly_demand * shelf_life_hours
+        target_stock = min(dest_demand_48h, max_shelf_life_demand)
+
+        needed = max(0, int(round(target_stock - on_hand_unexpired - shipment_sum)))
+        if needed <= 0:
+            return {
+                "feasible": False,
+                "reason": "no_order_needed",
+                "reorder_quantity": 0,
+                "on_hand": on_hand_unexpired,
+                "target": target_stock,
+            }
+        reorder_qty = min(rec.quantity, needed) if rec.quantity > 0 else needed
+    else:
+        if rec.quantity <= 0 or on_hand_unexpired >= 500:
+            return {
+                "feasible": False,
+                "reason": "no_order_needed",
+                "reorder_quantity": 0,
+            }
+        reorder_qty = rec.quantity
+
+    return {
+        "feasible": True,
+        "reason": "ok",
+        "reorder_quantity": reorder_qty,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +412,33 @@ async def create_reorder(
     product_id = risk.product_id
     store_id = rec.destination_store_id or risk.store_id
 
+    # Part B: skip a reorder if a purchase order for the same store and product is already in flight
+    from backend.models.core import PurchaseOrder as PurchaseOrderModel
+    from backend.models.enums import POStatus
+    from backend.services.simulation.supplier import get_active_pos
+    from backend.services.simulation.scenarios import get_active_simulation_id
+
+    active_sim_id = await get_active_simulation_id(db)
+    inflight_po_res = await db.execute(
+        select(PurchaseOrderModel).where(
+            PurchaseOrderModel.destination_store_id == store_id,
+            PurchaseOrderModel.product_id == product_id,
+            PurchaseOrderModel.status == POStatus.IN_TRANSIT,
+        )
+    )
+    in_flight_db = inflight_po_res.scalars().all()
+    in_flight_mem = [
+        p for p in get_active_pos(active_sim_id)
+        if p.store_id == store_id and p.product_id == product_id and p.status in ('in_transit', 'delayed')
+    ]
+    if in_flight_db or in_flight_mem:
+        return {
+            "success": False,
+            "skipped": True,
+            "error": "purchase_order_already_in_flight",
+            "reason": "purchase_order_already_in_flight",
+        }
+
     reorder_qty = rec.quantity
     now = _naive_now()
 
@@ -303,9 +452,7 @@ async def create_reorder(
         await db.flush()
 
     # Route reorder through create_purchase_order (Regional Fulfilment Centre PO)
-    from backend.services.simulation.scenarios import get_active_simulation_id
     from backend.services.simulation.supplier import create_purchase_order
-    active_sim_id = await get_active_simulation_id(db)
 
     product = await db.get(Product, product_id)
     if not product:

@@ -85,6 +85,11 @@ async def run_replay(
     # =========================================================================
     engine = SimulationEngine(seed=seed, historical_days=historical_days, policy="baseline")
     sim_baseline = await engine.initialize(db, policy="baseline")
+    from backend.services.forecasting.engine import ForecastingEngine
+    fc_engine = ForecastingEngine()
+    await fc_engine.run(db, horizons=[6, 12, 24, 48])
+    await db.commit()
+
     start_time_baseline = engine.clock.now
 
     hours_left = window_hours
@@ -119,6 +124,8 @@ async def run_replay(
     # RESET: Clear generated data and registries
     # =========================================================================
     await engine.reset(db, sim_baseline.simulation_id)
+    await fc_engine.run(db, horizons=[6, 12, 24, 48])
+    await db.commit()
 
     # =========================================================================
     # PASS 2: Outpost Policy (Full risk, decision, approval, and execution loop)

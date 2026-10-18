@@ -317,6 +317,77 @@ async def test_create_reorder_applies_reorder_successfully(db_session):
     assert result["reordered_quantity"] == 50
 
 
+async def test_create_reorder_skips_when_po_in_flight(db_session):
+    """Part B: create_reorder skips if PO for same store and product is already in flight."""
+    from backend.models.core import PurchaseOrder as PurchaseOrderModel
+    from backend.models.enums import POStatus
+    from datetime import datetime, timezone
+
+    scenario = await _seed_reorder_scenario(db_session)
+    rec = scenario["rec"]
+    risk = scenario["risk"]
+    store_id = rec.destination_store_id or risk.store_id
+
+    po_row = PurchaseOrderModel(
+        po_id=uuid.uuid4(),
+        supplier_id=scenario["supplier"].supplier_id,
+        destination_store_id=store_id,
+        product_id=risk.product_id,
+        quantity=30,
+        status=POStatus.IN_TRANSIT,
+        ordered_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        arrival_eta=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db_session.add(po_row)
+    await db_session.flush()
+
+    result = await create_reorder(db_session, rec.recommendation_id)
+    assert result["success"] is False
+    assert result.get("skipped") is True
+
+
+async def test_validate_reorder_real_checks(db_session):
+    """Part D: validate_reorder checks stock on hand & in-flight orders, returning not feasible when no order needed."""
+    from backend.agents.execution.tools import validate_reorder
+    from backend.models.core import PurchaseOrder as PurchaseOrderModel, Inventory
+    from backend.models.enums import POStatus
+    from datetime import datetime, timezone
+
+    # 1. Base scenario: low stock (quantity=5), no in-flight PO -> feasible is True
+    scenario = await _seed_reorder_scenario(db_session)
+    rec = scenario["rec"]
+    result = await validate_reorder(db_session, rec.recommendation_id)
+    assert result["feasible"] is True
+
+    # 2. Case: in-flight PO exists -> feasible is False
+    po_row = PurchaseOrderModel(
+        po_id=uuid.uuid4(),
+        supplier_id=scenario["supplier"].supplier_id,
+        destination_store_id=rec.destination_store_id or scenario["risk"].store_id,
+        product_id=scenario["risk"].product_id,
+        quantity=30,
+        status=POStatus.IN_TRANSIT,
+        ordered_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        arrival_eta=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db_session.add(po_row)
+    await db_session.flush()
+
+    res_inflight = await validate_reorder(db_session, rec.recommendation_id)
+    assert res_inflight["feasible"] is False
+    assert res_inflight["reason"] == "order_already_in_flight"
+
+    # 3. Case: remove PO, but set on-hand stock to very high (abundant stock, no order needed)
+    await db_session.delete(po_row)
+    inv = await db_session.get(Inventory, scenario["inv"].id)
+    inv.quantity = 1000
+    await db_session.flush()
+
+    res_abundant = await validate_reorder(db_session, rec.recommendation_id)
+    assert res_abundant["feasible"] is False
+    assert res_abundant["reason"] == "no_order_needed"
+
+
 async def test_apply_discount_rejects_non_approved_rec(db_session):
     pending_rec = await _seed_pending_rec(db_session)
     with pytest.raises(PermissionError, match="approved"):

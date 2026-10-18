@@ -11,8 +11,11 @@ Orchestrates risk detection across inventory, forecasts, and batch states:
 from __future__ import annotations
 
 import uuid
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,8 +82,8 @@ class RiskEngine:
             if h_key not in forecasts_by_scope_horizon:
                 forecasts_by_scope_horizon[h_key] = fc
 
-        def get_demand_and_confidence(store_id: uuid.UUID, product_id: uuid.UUID, category: Optional[str] = None) -> tuple[float, float, float]:
-            """Returns (demand_24h, demand_48h, confidence) with multi-horizon interpolation & cold-start fallback."""
+        def get_demand_and_confidence(store_id: uuid.UUID, product_id: uuid.UUID, category: Optional[str] = None) -> Optional[tuple[float, float, float]]:
+            """Returns (demand_24h, demand_48h, confidence) with multi-horizon interpolation. Returns None if missing."""
             fc_24 = forecasts_by_scope_horizon.get((store_id, product_id, 24))
             fc_48 = forecasts_by_scope_horizon.get((store_id, product_id, 48))
             fc_12 = forecasts_by_scope_horizon.get((store_id, product_id, 12))
@@ -102,17 +105,11 @@ class RiskEngine:
                 d48 = fc_48.predicted_demand if fc_48 else d24 * 2.0
                 return d24, d48, conf
             else:
-                # Cold-start seed priors based on category velocity
-                cat_priors = {
-                    "dairy": 16.0,
-                    "bakery": 14.0,
-                    "produce": 12.0,
-                    "staples": 8.0,
-                    "packaged": 10.0,
-                }
-                d24 = cat_priors.get(category.lower() if category else "", 12.0)
-                d48 = d24 * 2.0
-                return d24, d48, 0.3  # Low confidence prior
+                logger.warning(
+                    "Missing forecast for store %s product %s; cannot evaluate risk without real demand forecast",
+                    store_id, product_id,
+                )
+                return None
 
         # 3. Load all Inventory items
         inv_result = await db.execute(select(Inventory))
@@ -142,7 +139,10 @@ class RiskEngine:
             product, supplier = prod_supp
 
             cat_val = product.category.value if hasattr(product.category, "value") else str(product.category)
-            demand_24h, demand_48h, confidence = get_demand_and_confidence(inv.store_id, inv.product_id, cat_val)
+            demand_info = get_demand_and_confidence(inv.store_id, inv.product_id, cat_val)
+            if demand_info is None:
+                continue
+            demand_24h, demand_48h, confidence = demand_info
 
             stockout_in = StockoutInput(
                 store_id=inv.store_id,
@@ -201,18 +201,28 @@ class RiskEngine:
                         persist=True,
                     )
                 count += 1
+            else:
+                existing = existing_active_risks.get((inv.store_id, inv.product_id, RiskType.STOCKOUT))
+                if existing:
+                    await self.resolve(db, existing.risk_id)
+                    existing_active_risks.pop((inv.store_id, inv.product_id, RiskType.STOCKOUT), None)
 
         # 7. Evaluate Spoilage Risk
+        active_spoilage_evaluated: set[tuple[uuid.UUID, uuid.UUID]] = set()
         for (store_id, product_id), batches in batches_by_key.items():
             if not batches:
                 continue
             prod_supp = products_map.get(product_id)
             if not prod_supp:
                 continue
+            active_spoilage_evaluated.add((store_id, product_id))
             product, _ = prod_supp
 
             cat_val = product.category.value if hasattr(product.category, "value") else str(product.category)
-            demand_24h, _, confidence = get_demand_and_confidence(store_id, product_id, cat_val)
+            demand_info = get_demand_and_confidence(store_id, product_id, cat_val)
+            if demand_info is None:
+                continue
+            demand_24h, _, confidence = demand_info
             hourly_demand = demand_24h / 24.0
 
             batch_infos = [
@@ -281,6 +291,16 @@ class RiskEngine:
                         persist=True,
                     )
                 count += 1
+            else:
+                existing = existing_active_risks.get((store_id, product_id, RiskType.SPOILAGE))
+                if existing:
+                    await self.resolve(db, existing.risk_id)
+                    existing_active_risks.pop((store_id, product_id, RiskType.SPOILAGE), None)
+
+        for (store_id, product_id, r_type), existing in list(existing_active_risks.items()):
+            if r_type == RiskType.SPOILAGE and (store_id, product_id) not in active_spoilage_evaluated:
+                await self.resolve(db, existing.risk_id)
+                existing_active_risks.pop((store_id, product_id, r_type), None)
 
         return count
 

@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import uuid
 import math
+import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from backend.models.core import (
     Risk, Inventory, Forecast, Recommendation, Store, Product, Supplier,
+    Batch, PurchaseOrder as PurchaseOrderModel, Shipment, Simulation,
 )
-from backend.models.enums import RecommendationStatus, ActionType
+from backend.models.enums import RecommendationStatus, ActionType, SimulationStatus
 from backend.events.audit import audit_log
 from backend.services.decision.models import (
     DEFAULT_WEIGHTS,
@@ -31,6 +35,21 @@ from backend.services.decision.models import (
 
 def _naive_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+async def _get_sim_now(db: AsyncSession) -> datetime:
+    try:
+        from backend.services.simulation.scenarios import get_active_simulation_id, get_simulation_state
+        sim_id = await get_active_simulation_id(db)
+        state = get_simulation_state(sim_id)
+        if state and state.engine and state.engine.clock:
+            return state.engine.clock.now.replace(tzinfo=None) if state.engine.clock.now.tzinfo else state.engine.clock.now
+        sim = await db.get(Simulation, sim_id)
+        if sim and sim.current_time:
+            return sim.current_time.replace(tzinfo=None) if sim.current_time.tzinfo else sim.current_time
+    except Exception:
+        pass
+    return _naive_now()
 
 
 class DecisionOrchestrator:
@@ -56,6 +75,7 @@ class DecisionOrchestrator:
         if risk is None:
             return None
 
+        sim_now = await _get_sim_now(db)
         store_id   = risk.store_id
         product_id = risk.product_id
 
@@ -88,7 +108,13 @@ class DecisionOrchestrator:
             .limit(1)
         )
         dest_fc = fc_result.scalar_one_or_none()
-        dest_demand_24h = dest_fc.predicted_demand if dest_fc else 10.0
+        if not dest_fc:
+            logger.warning(
+                "Missing forecast for destination store %s product %s; cannot evaluate decisions without demand forecast",
+                store_id, product_id,
+            )
+            return None
+        dest_demand_24h = dest_fc.predicted_demand
         dest_demand_48h = dest_demand_24h * 2.0
 
         # 5. Build stockout hours for hold context
@@ -122,7 +148,13 @@ class DecisionOrchestrator:
                 .limit(1)
             )
             src_fc = src_fc_result.scalar_one_or_none()
-            src_demand_24h = src_fc.predicted_demand if src_fc else 10.0
+            if not src_fc:
+                logger.warning(
+                    "Missing forecast for source store %s product %s; skipping candidate transfer",
+                    src_inv.store_id, product_id,
+                )
+                continue
+            src_demand_24h = src_fc.predicted_demand
 
             # Compute approx distance (Euclidean; real would use Haversine)
             dest_store_result = await db.execute(select(Store).where(Store.store_id == store_id))
@@ -138,7 +170,7 @@ class DecisionOrchestrator:
             excess_calc = SafeExcessCalculator(self._weights)
             src_excess = excess_calc.compute(src_inv.quantity, src_demand_24h)
             demand_gap = max(0, int(dest_demand_24h) - dest_qty)
-            proposed_qty = min(src_excess, demand_gap) if demand_gap > 0 else src_excess
+            proposed_qty = min(src_excess, demand_gap) if demand_gap > 0 else 0
 
             if proposed_qty <= 0:
                 continue
@@ -160,17 +192,74 @@ class DecisionOrchestrator:
             ))
 
         # 8. Reorder candidate
-        reorder_qty = max(int(dest_demand_48h), 1)
-        reorders = [ReorderInput(
-            store_id=store_id,
-            product_id=product_id,
-            supplier_lead_time_hours=supplier.lead_time_hours,
-            hours_to_stockout=hours_to_stockout,
-            current_quantity=dest_qty,
-            forecast_demand_24h=dest_demand_24h,
-            reorder_quantity=reorder_qty,
-            stockout_probability=risk.probability,
-        )]
+        # Part C: size the order as max(0, target_stock - on_hand_unexpired - in_transit)
+        # Target must be capped by demand that can be sold before shelf life ends using real shelf life
+        shelf_life_hours = product.shelf_life_hours if product and product.shelf_life_hours else 72
+        max_shelf_life_demand = hourly_demand * shelf_life_hours
+        target_stock = min(dest_demand_48h, max_shelf_life_demand)
+
+        # On-hand unexpired stock
+        active_batch_res = await db.execute(
+            select(func.coalesce(func.sum(Batch.quantity), 0)).where(
+                Batch.store_id == store_id,
+                Batch.product_id == product_id,
+                Batch.quantity > 0,
+                Batch.expires_at > sim_now,
+            )
+        )
+        batch_unexpired = active_batch_res.scalar() or 0
+        has_batches_res = await db.execute(
+            select(func.count(Batch.batch_id)).where(
+                Batch.store_id == store_id,
+                Batch.product_id == product_id,
+            )
+        )
+        total_batches_count = has_batches_res.scalar() or 0
+        on_hand_unexpired = batch_unexpired if total_batches_count > 0 else dest_qty
+
+        # In-transit purchase orders and shipments
+        from backend.models.enums import POStatus, ShipmentStatus
+        from backend.services.simulation.supplier import get_active_pos
+        from backend.services.simulation.scenarios import get_active_simulation_id
+
+        active_sim_id = await get_active_simulation_id(db)
+        po_in_transit_res = await db.execute(
+            select(func.coalesce(func.sum(PurchaseOrderModel.quantity), 0)).where(
+                PurchaseOrderModel.destination_store_id == store_id,
+                PurchaseOrderModel.product_id == product_id,
+                PurchaseOrderModel.status == POStatus.IN_TRANSIT,
+            )
+        )
+        po_in_transit_db = po_in_transit_res.scalar() or 0
+        po_in_transit_mem = sum(
+            po.quantity for po in get_active_pos(active_sim_id)
+            if po.store_id == store_id and po.product_id == product_id and po.status in ('in_transit', 'delayed')
+        )
+        po_in_transit = max(po_in_transit_db, po_in_transit_mem)
+
+        shipment_in_transit_res = await db.execute(
+            select(func.coalesce(func.sum(Shipment.quantity), 0)).where(
+                Shipment.destination_store_id == store_id,
+                Shipment.product_id == product_id,
+                Shipment.status.in_([ShipmentStatus.DISPATCHED, ShipmentStatus.IN_TRANSIT]),
+            )
+        )
+        shipment_in_transit = shipment_in_transit_res.scalar() or 0
+        in_transit = po_in_transit + shipment_in_transit
+
+        reorder_qty = max(0, int(round(target_stock - on_hand_unexpired - in_transit)))
+        reorders = []
+        if reorder_qty > 0 and po_in_transit == 0:
+            reorders = [ReorderInput(
+                store_id=store_id,
+                product_id=product_id,
+                supplier_lead_time_hours=supplier.lead_time_hours,
+                hours_to_stockout=hours_to_stockout,
+                current_quantity=dest_qty,
+                forecast_demand_24h=dest_demand_24h,
+                reorder_quantity=reorder_qty,
+                stockout_probability=risk.probability,
+            )]
 
         # 9. Discount candidate (only for spoilage risk)
         discounts: list[DiscountInput] = []
@@ -178,7 +267,7 @@ class DecisionOrchestrator:
         if risk.risk_type == RiskType.SPOILAGE:
             hours_remaining = max(
                 0.0,
-                (risk.expected_time - _naive_now()).total_seconds() / 3600.0
+                (risk.expected_time - sim_now).total_seconds() / 3600.0
             )
             from backend.services.risk.models import discount_tier_for_hours, DiscountTier
             tier = discount_tier_for_hours(hours_remaining)
@@ -294,12 +383,32 @@ class DecisionOrchestrator:
         )
         pending_risk_ids = {r.risk_id for r in rec_result.scalars().all()}
 
+        from backend.models.core import PurchaseOrder as PurchaseOrderModel
+        from backend.models.enums import POStatus
+        from backend.services.simulation.supplier import get_active_pos
+        from backend.services.simulation.scenarios import get_active_simulation_id
+
+        active_sim_id = await get_active_simulation_id(db)
+        inflight_po_res = await db.execute(
+            select(PurchaseOrderModel).where(
+                PurchaseOrderModel.status == POStatus.IN_TRANSIT
+            )
+        )
+        inflight_pos = {(po.destination_store_id, po.product_id) for po in inflight_po_res.scalars().all()}
+        for po in get_active_pos(active_sim_id):
+            inflight_pos.add((po.store_id, po.product_id))
+
         count = 0
         for risk in active_risks:
             if risk.risk_id in pending_risk_ids:
                 continue
             rec = await self.run(db, risk.risk_id)
             if rec:
+                dest_store = rec.destination_store_id or risk.store_id
+                if rec.action_type == ActionType.REORDER and (dest_store, risk.product_id) in inflight_pos:
+                    await db.delete(rec)
+                    await db.flush()
+                    continue
                 count += 1
 
         return count

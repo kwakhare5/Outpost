@@ -343,3 +343,47 @@ async def test_risk_engine_resolve_marks_risk_resolved(db_session):
 
     resolved = await db_session.get(Risk, risk_id)
     assert resolved.status == RiskStatus.RESOLVED
+
+
+@pytest.mark.asyncio
+async def test_risk_engine_auto_resolves_when_risk_drops_below_threshold(db_session):
+    """Part A: RiskEngine auto-resolves an ACTIVE risk when its probability/severity falls below threshold."""
+    from sqlalchemy import select, update
+    from backend.models.core import Inventory, Risk
+    from backend.models.enums import RiskStatus, RiskType
+    from backend.services.risk.engine import RiskEngine
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc_engine = ForecastingEngine()
+    await fc_engine.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    # 1. Force near-stockout so risks are created
+    await db_session.execute(update(Inventory).values(quantity=1))
+    await db_session.commit()
+
+    risk_engine = RiskEngine()
+    await risk_engine.run(db_session)
+    await db_session.commit()
+
+    active_stockout_risks = (await db_session.execute(
+        select(Risk).where(Risk.risk_type == RiskType.STOCKOUT, Risk.status == RiskStatus.ACTIVE)
+    )).scalars().all()
+    assert len(active_stockout_risks) > 0, "Precondition failed: Expected active stockout risks"
+    risk_id = active_stockout_risks[0].risk_id
+
+    # 2. Replenish inventory so stockout risk disappears
+    await db_session.execute(update(Inventory).values(quantity=500))
+    await db_session.commit()
+
+    # 3. Next cycle of risk_engine.run() should auto-resolve the active risk
+    await risk_engine.run(db_session)
+    await db_session.commit()
+
+    updated_risk = await db_session.get(Risk, risk_id)
+    assert updated_risk.status == RiskStatus.RESOLVED
