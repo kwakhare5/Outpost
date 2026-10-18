@@ -132,7 +132,80 @@ class DecisionOrchestrator:
         )
         source_candidates = all_inv_result.all()
 
-        # 7. Load forecasts for source stores
+        # Fix 1 & 2: Calculate on-hand unexpired stock and incoming units from BOTH POs and transfers
+        shelf_life_hours = float(product.shelf_life_hours) if product and product.shelf_life_hours else 72.0
+
+        active_batch_res = await db.execute(
+            select(func.coalesce(func.sum(Batch.quantity), 0)).where(
+                Batch.store_id == store_id,
+                Batch.product_id == product_id,
+                Batch.quantity > 0,
+                Batch.expires_at > sim_now,
+            )
+        )
+        batch_unexpired = active_batch_res.scalar() or 0
+        has_batches_res = await db.execute(
+            select(func.count(Batch.batch_id)).where(
+                Batch.store_id == store_id,
+                Batch.product_id == product_id,
+            )
+        )
+        total_batches_count = has_batches_res.scalar() or 0
+        if total_batches_count > 0:
+            on_hand_unexpired = min(dest_qty, batch_unexpired)
+        else:
+            on_hand_unexpired = dest_qty
+
+        from backend.models.enums import POStatus, ShipmentStatus
+        from backend.services.simulation.supplier import get_active_pos
+        from backend.services.simulation.transfer import get_active_transfers
+        from backend.services.simulation.scenarios import get_active_simulation_id
+
+        active_sim_id = await get_active_simulation_id(db)
+        po_in_transit_res = await db.execute(
+            select(func.coalesce(func.sum(PurchaseOrderModel.quantity), 0)).where(
+                PurchaseOrderModel.destination_store_id == store_id,
+                PurchaseOrderModel.product_id == product_id,
+                PurchaseOrderModel.status == POStatus.IN_TRANSIT,
+            )
+        )
+        po_in_transit_db = po_in_transit_res.scalar() or 0
+        po_in_transit_mem = sum(
+            po.quantity for po in get_active_pos(active_sim_id)
+            if po.store_id == store_id and po.product_id == product_id and po.status in ('in_transit', 'delayed')
+        )
+        po_in_transit = max(po_in_transit_db, po_in_transit_mem)
+
+        shipment_in_transit_res = await db.execute(
+            select(func.coalesce(func.sum(Shipment.quantity), 0)).where(
+                Shipment.destination_store_id == store_id,
+                Shipment.product_id == product_id,
+                Shipment.status.in_([ShipmentStatus.DISPATCHED, ShipmentStatus.IN_TRANSIT]),
+            )
+        )
+        shipment_in_transit_db = shipment_in_transit_res.scalar() or 0
+        transfer_in_transit_mem = sum(
+            t.quantity for t in get_active_transfers(active_sim_id)
+            if t.destination_store_id == store_id and t.product_id == product_id and t.status == 'in_transit'
+        )
+        transfers_in_transit = max(shipment_in_transit_db, transfer_in_transit_mem)
+        total_in_transit = po_in_transit + transfers_in_transit
+
+        # Pending refill recommendations in DB for this destination store and product
+        pending_refill_res = await db.execute(
+            select(func.coalesce(func.sum(Recommendation.quantity), 0))
+            .join(Risk, Recommendation.risk_id == Risk.risk_id)
+            .where(
+                Recommendation.status == RecommendationStatus.PENDING,
+                Recommendation.action_type.in_([ActionType.TRANSFER, ActionType.REORDER]),
+                Risk.product_id == product_id,
+                (Recommendation.destination_store_id == store_id) | ((Recommendation.destination_store_id == None) & (Risk.store_id == store_id)),
+            )
+        )
+        pending_incoming = pending_refill_res.scalar() or 0
+        total_incoming = total_in_transit + pending_incoming
+
+        # 7. Load forecasts for source stores and evaluate Transfer candidates
         transfers: list[TransferInput] = []
         for src_row in source_candidates:
             src_inv: Inventory = src_row.Inventory
@@ -160,16 +233,24 @@ class DecisionOrchestrator:
             dest_store_result = await db.execute(select(Store).where(Store.store_id == store_id))
             dest_store = dest_store_result.scalar_one_or_none()
             distance_km = 5.0  # default fallback
-            if dest_store:
+            if dest_store and src_store:
                 dlat = src_store.latitude  - dest_store.latitude
                 dlon = src_store.longitude - dest_store.longitude
                 distance_km = math.sqrt(dlat**2 + dlon**2) * 111.0  # rough km conversion
 
-            # Proposed transfer quantity = safe excess capped at destination gap
+            # Fix 1 & 2: Shelf-life cap and incoming in-transit deduction
+            transit_time_hours = distance_km / 25.0
+            usable_hours_transfer = shelf_life_hours - transit_time_hours
+            if usable_hours_transfer <= 0:
+                continue
+
+            target_hours_transfer = min(48.0, usable_hours_transfer)
+            target_stock_transfer = hourly_demand * target_hours_transfer
+            demand_gap = max(0, int(round(target_stock_transfer - on_hand_unexpired - total_incoming)))
+
             from backend.services.decision.models import SafeExcessCalculator
             excess_calc = SafeExcessCalculator(self._weights)
             src_excess = excess_calc.compute(src_inv.quantity, src_demand_24h)
-            demand_gap = max(0, int(dest_demand_24h) - dest_qty)
             proposed_qty = min(src_excess, demand_gap) if demand_gap > 0 else 0
 
             if proposed_qty <= 0:
@@ -192,74 +273,26 @@ class DecisionOrchestrator:
             ))
 
         # 8. Reorder candidate
-        # Part C: size the order as max(0, target_stock - on_hand_unexpired - in_transit)
-        # Target must be capped by demand that can be sold before shelf life ends using real shelf life
-        shelf_life_hours = product.shelf_life_hours if product and product.shelf_life_hours else 72
-        max_shelf_life_demand = hourly_demand * shelf_life_hours
-        target_stock = min(dest_demand_48h, max_shelf_life_demand)
+        # Fix 1 & 2: Shelf-life cap and incoming in-transit deduction
+        lead_time_hours = float(supplier.lead_time_hours) if supplier and supplier.lead_time_hours else 0.0
+        usable_hours_reorder = shelf_life_hours - lead_time_hours
 
-        # On-hand unexpired stock
-        active_batch_res = await db.execute(
-            select(func.coalesce(func.sum(Batch.quantity), 0)).where(
-                Batch.store_id == store_id,
-                Batch.product_id == product_id,
-                Batch.quantity > 0,
-                Batch.expires_at > sim_now,
-            )
-        )
-        batch_unexpired = active_batch_res.scalar() or 0
-        has_batches_res = await db.execute(
-            select(func.count(Batch.batch_id)).where(
-                Batch.store_id == store_id,
-                Batch.product_id == product_id,
-            )
-        )
-        total_batches_count = has_batches_res.scalar() or 0
-        on_hand_unexpired = batch_unexpired if total_batches_count > 0 else dest_qty
-
-        # In-transit purchase orders and shipments
-        from backend.models.enums import POStatus, ShipmentStatus
-        from backend.services.simulation.supplier import get_active_pos
-        from backend.services.simulation.scenarios import get_active_simulation_id
-
-        active_sim_id = await get_active_simulation_id(db)
-        po_in_transit_res = await db.execute(
-            select(func.coalesce(func.sum(PurchaseOrderModel.quantity), 0)).where(
-                PurchaseOrderModel.destination_store_id == store_id,
-                PurchaseOrderModel.product_id == product_id,
-                PurchaseOrderModel.status == POStatus.IN_TRANSIT,
-            )
-        )
-        po_in_transit_db = po_in_transit_res.scalar() or 0
-        po_in_transit_mem = sum(
-            po.quantity for po in get_active_pos(active_sim_id)
-            if po.store_id == store_id and po.product_id == product_id and po.status in ('in_transit', 'delayed')
-        )
-        po_in_transit = max(po_in_transit_db, po_in_transit_mem)
-
-        shipment_in_transit_res = await db.execute(
-            select(func.coalesce(func.sum(Shipment.quantity), 0)).where(
-                Shipment.destination_store_id == store_id,
-                Shipment.product_id == product_id,
-                Shipment.status.in_([ShipmentStatus.DISPATCHED, ShipmentStatus.IN_TRANSIT]),
-            )
-        )
-        shipment_in_transit = shipment_in_transit_res.scalar() or 0
-        in_transit = po_in_transit + shipment_in_transit
-
-        reorder_qty = max(0, int(round(target_stock - on_hand_unexpired - in_transit)))
         reorders = []
-        if reorder_qty > 0 and po_in_transit == 0:
-            reorders = [ReorderInput(
-                store_id=store_id,
-                product_id=product_id,
-                supplier_lead_time_hours=supplier.lead_time_hours,
-                hours_to_stockout=hours_to_stockout,
-                current_quantity=dest_qty,
-                forecast_demand_24h=dest_demand_24h,
-                reorder_quantity=reorder_qty,
-                stockout_probability=risk.probability,
-            )]
+        if usable_hours_reorder > 0:
+            target_hours_reorder = min(48.0, usable_hours_reorder)
+            target_stock_reorder = hourly_demand * target_hours_reorder
+            reorder_qty = max(0, int(round(target_stock_reorder - on_hand_unexpired - total_incoming)))
+            if reorder_qty > 0 and po_in_transit == 0 and transfers_in_transit == 0 and pending_incoming == 0:
+                reorders = [ReorderInput(
+                    store_id=store_id,
+                    product_id=product_id,
+                    supplier_lead_time_hours=int(lead_time_hours),
+                    hours_to_stockout=hours_to_stockout,
+                    current_quantity=dest_qty,
+                    forecast_demand_24h=dest_demand_24h,
+                    reorder_quantity=reorder_qty,
+                    stockout_probability=risk.probability,
+                )]
 
         # 9. Discount candidate (only for spoilage risk)
         discounts: list[DiscountInput] = []
@@ -348,6 +381,32 @@ class DecisionOrchestrator:
         db.add(rec_row)
         await db.flush()
 
+        # Fix 2: If a pending recommendation already exists for this store and product
+        # with a conflicting refill action (TRANSFER vs REORDER), keep only the higher score.
+        if rec_row.action_type in (ActionType.TRANSFER, ActionType.REORDER):
+            dest_st = rec_row.destination_store_id or store_id
+            conflict_res = await db.execute(
+                select(Recommendation)
+                .join(Risk, Recommendation.risk_id == Risk.risk_id)
+                .where(
+                    Recommendation.status == RecommendationStatus.PENDING,
+                    Recommendation.recommendation_id != rec_row.recommendation_id,
+                    Recommendation.action_type.in_([ActionType.TRANSFER, ActionType.REORDER]),
+                    Risk.product_id == product_id,
+                    (Recommendation.destination_store_id == dest_st) | ((Recommendation.destination_store_id == None) & (Risk.store_id == dest_st)),
+                )
+            )
+            conflicting_recs = conflict_res.scalars().all()
+            for prev_rec in conflicting_recs:
+                if prev_rec.action_type != rec_row.action_type:
+                    if rec_row.score > prev_rec.score:
+                        await db.delete(prev_rec)
+                        await db.flush()
+                    else:
+                        await db.delete(rec_row)
+                        await db.flush()
+                        return prev_rec
+
         await audit_log.publish(
             db,
             "DECISION_MADE",
@@ -383,9 +442,10 @@ class DecisionOrchestrator:
         )
         pending_risk_ids = {r.risk_id for r in rec_result.scalars().all()}
 
-        from backend.models.core import PurchaseOrder as PurchaseOrderModel
-        from backend.models.enums import POStatus
+        from backend.models.core import PurchaseOrder as PurchaseOrderModel, Shipment
+        from backend.models.enums import POStatus, ShipmentStatus
         from backend.services.simulation.supplier import get_active_pos
+        from backend.services.simulation.transfer import get_active_transfers
         from backend.services.simulation.scenarios import get_active_simulation_id
 
         active_sim_id = await get_active_simulation_id(db)
@@ -394,10 +454,24 @@ class DecisionOrchestrator:
                 PurchaseOrderModel.status == POStatus.IN_TRANSIT
             )
         )
-        inflight_pos = {(po.destination_store_id, po.product_id) for po in inflight_po_res.scalars().all()}
+        inflight_incoming = {(po.destination_store_id, po.product_id) for po in inflight_po_res.scalars().all()}
         for po in get_active_pos(active_sim_id):
-            inflight_pos.add((po.store_id, po.product_id))
+            if po.status in ('in_transit', 'delayed'):
+                inflight_incoming.add((po.store_id, po.product_id))
 
+        shipment_in_transit_res = await db.execute(
+            select(Shipment).where(
+                Shipment.status.in_([ShipmentStatus.DISPATCHED, ShipmentStatus.IN_TRANSIT])
+            )
+        )
+        for s in shipment_in_transit_res.scalars().all():
+            inflight_incoming.add((s.destination_store_id, s.product_id))
+
+        for t in get_active_transfers(active_sim_id):
+            if t.status == 'in_transit':
+                inflight_incoming.add((t.destination_store_id, t.product_id))
+
+        cycle_refills: dict[tuple[uuid.UUID, uuid.UUID], Recommendation] = {}
         count = 0
         for risk in active_risks:
             if risk.risk_id in pending_risk_ids:
@@ -405,10 +479,41 @@ class DecisionOrchestrator:
             rec = await self.run(db, risk.risk_id)
             if rec:
                 dest_store = rec.destination_store_id or risk.store_id
-                if rec.action_type == ActionType.REORDER and (dest_store, risk.product_id) in inflight_pos:
-                    await db.delete(rec)
-                    await db.flush()
-                    continue
+                prod_id = risk.product_id
+
+                # Fix 2: In-flight check and cycle-level conflict resolution between TRANSFER and REORDER
+                if rec.action_type in (ActionType.TRANSFER, ActionType.REORDER):
+                    refill_key = (dest_store, prod_id)
+                    if refill_key in inflight_incoming:
+                        await db.delete(rec)
+                        await db.flush()
+                        continue
+
+                    if refill_key in cycle_refills:
+                        prev_rec = cycle_refills[refill_key]
+                        if prev_rec.action_type != rec.action_type:
+                            if rec.score > prev_rec.score:
+                                await db.delete(prev_rec)
+                                await db.flush()
+                                cycle_refills[refill_key] = rec
+                                continue
+                            else:
+                                await db.delete(rec)
+                                await db.flush()
+                                continue
+                        else:
+                            if rec.score > prev_rec.score:
+                                await db.delete(prev_rec)
+                                await db.flush()
+                                cycle_refills[refill_key] = rec
+                                continue
+                            else:
+                                await db.delete(rec)
+                                await db.flush()
+                                continue
+                    else:
+                        cycle_refills[refill_key] = rec
+
                 count += 1
 
         return count

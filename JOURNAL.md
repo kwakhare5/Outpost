@@ -1,5 +1,13 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-18: Shelf-Life Demand Capping & In-Transit Double-Refill Prevention
+
+### Work Card: Shelf-Life Demand Capping & In-Transit Double-Refill Prevention
+- **Problem / tension:** Replay seed 42 over 168h showed Outpost waste exceeding baseline (2156 vs 2062 units) due to targeting 48h demand even when usable shelf life upon arrival was shorter (e.g. Pav Buns: 36h shelf life - 12h lead time = 24h usable life), and repeatedly creating duplicate transfers and reorders into the same store and product across adjacent hours without subtracting in-transit and pending replenishment.
+- **Change / decision:** In `backend/services/decision/engine.py`, capped refill targets by `hourly_demand * min(48.0, usable_hours)` where `usable_hours = shelf_life - arrival_time` (lead time for reorders, transit time for transfers) with zero refill action if `usable_hours <= 0`; subtracted all incoming in-transit POs, in-transit transfers, and pending recommendations; and enforced cycle-level conflict resolution retaining only the higher-scoring action between transfer and reorder for the same store and product. Added 3 new tests in `backend/tests/test_decision.py`.
+- **Proof:** `pytest backend/tests` passed 145/145 tests in 72.65s (zero failures, zero skips); same-seed replay (seed 42, 168h) completed with status 200 in 162.58s; reorders dropped from 26 to 11 across the full run; Outpost waste dropped from 2156 to 2106 units with rupee loss reduced from 90,204 to 88,629; and availability improved to 91.99% vs baseline 90.61%.
+- **Still broken / unproven:** Demand forecast over-predicts (e.g. 43.7 units predicted vs 0-5 real units over 48h windows for Pav Buns), leaving residual waste above baseline to be addressed in forecast calibration (Slice B).
+
 ## 2026-10-18: Sequential Replay Pre-Pass Cleanup, Forecast FK Deletion & Discount Verification Fix
 
 ### Work Card: Sequential Replay Pre-Pass Cleanup, Forecast FK Deletion & Discount Verification Fix

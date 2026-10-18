@@ -559,3 +559,276 @@ async def test_transfer_zero_when_no_demand_gap_and_discount_clock(db_session):
             assert alt["quantity"] == 0
     if rec.action_type == ActionType.DISCOUNT:
         assert rec.quantity > 0
+
+
+@pytest.mark.asyncio
+async def test_double_refill_prevented_tomato_sequence(db_session):
+    """Reproduces tomato sequence (transfer, then reorder, then transfer into one store)
+    and asserts only one action is created and total incoming never exceeds the capped target.
+    """
+    from sqlalchemy import select, update, delete
+    from backend.models.core import Inventory, Risk, Recommendation, Product, Forecast, Supplier, Store, PurchaseOrder as PurchaseOrderModel, Shipment
+    from backend.models.enums import RiskStatus, RiskType, ActionType, RecommendationStatus
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from backend.services.simulation.supplier import clear_active_pos
+    from backend.services.simulation.transfer import clear_active_transfers
+    from datetime import datetime, timezone, timedelta
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc = ForecastingEngine()
+    await fc.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    prods = (await db_session.execute(select(Product))).scalars().all()
+    product = prods[0]
+    product.shelf_life_hours = 96
+    supplier = await db_session.get(Supplier, product.supplier_id)
+    supplier.lead_time_hours = 12
+    await db_session.commit()
+
+    stores = (await db_session.execute(select(Store))).scalars().all()
+    dest_store = stores[0]
+    src_store_1 = stores[1]
+    src_store_2 = stores[2]
+
+    await db_session.execute(update(Inventory).where(Inventory.product_id == product.product_id).values(quantity=0))
+    d_inv = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == dest_store.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one()
+    d_inv.quantity = 0
+
+    s1_inv = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == src_store_1.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one()
+    s1_inv.quantity = 100
+
+    s2_inv = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == src_store_2.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one()
+    s2_inv.quantity = 100
+
+    await db_session.execute(delete(PurchaseOrderModel))
+    await db_session.execute(delete(Shipment))
+    clear_active_pos()
+    clear_active_transfers()
+    await db_session.commit()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    dest_fc = (await db_session.execute(
+        select(Forecast)
+        .where(Forecast.store_id == dest_store.store_id, Forecast.product_id == product.product_id)
+        .order_by(Forecast.created_at.desc())
+    )).scalars().first()
+    hourly_demand = dest_fc.predicted_demand / 24.0
+    capped_target = hourly_demand * 48.0
+    max_needed = max(0, int(round(capped_target)))
+
+    orchestrator = DecisionOrchestrator()
+
+    # Sequence step 1: Transfer
+    risk1 = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=dest_store.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.9,
+        expected_time=now + timedelta(hours=3),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk1)
+    await db_session.commit()
+
+    rec1 = await orchestrator.run(db_session, risk1.risk_id)
+    assert rec1 is not None
+    assert rec1.action_type in (ActionType.TRANSFER, ActionType.REORDER)
+    assert rec1.quantity <= max_needed
+
+    # Sequence step 2: Reorder attempt into same store and product
+    risk2 = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=dest_store.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.85,
+        expected_time=now + timedelta(hours=4),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk2)
+    await db_session.commit()
+
+    rec2 = await orchestrator.run(db_session, risk2.risk_id)
+    assert rec2 is not None
+
+    # Sequence step 3: Another transfer attempt into same store and product
+    risk3 = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=dest_store.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.80,
+        expected_time=now + timedelta(hours=5),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk3)
+    await db_session.commit()
+
+    rec3 = await orchestrator.run(db_session, risk3.risk_id)
+    assert rec3 is not None
+
+    await orchestrator.evaluate_all(db_session)
+    await db_session.commit()
+
+    recs = (await db_session.execute(
+        select(Recommendation)
+        .join(Risk, Recommendation.risk_id == Risk.risk_id)
+        .where(
+            Recommendation.status == RecommendationStatus.PENDING,
+            Recommendation.action_type.in_([ActionType.TRANSFER, ActionType.REORDER]),
+            Risk.product_id == product.product_id,
+            (Recommendation.destination_store_id == dest_store.store_id) | ((Recommendation.destination_store_id == None) & (Risk.store_id == dest_store.store_id)),
+        )
+    )).scalars().all()
+
+    assert len(recs) == 1, f"Expected exactly 1 refill action for store, got {len(recs)}: {[r.action_type for r in recs]}"
+    total_incoming = sum(r.quantity for r in recs)
+    assert total_incoming <= max_needed, f"Total incoming {total_incoming} exceeds capped target gap {max_needed}"
+
+
+@pytest.mark.asyncio
+async def test_shelf_life_cap_targets_usable_hours_not_48h(db_session):
+    """Asserts that with shelf life 36h and lead time 12h, the target is demand over 24h not 48h."""
+    from sqlalchemy import select, update, delete
+    from backend.models.core import Inventory, Risk, Product, Forecast, Supplier
+    from backend.models.enums import RiskStatus, RiskType, ActionType
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from datetime import datetime, timezone, timedelta
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc = ForecastingEngine()
+    await fc.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    product = (await db_session.execute(select(Product))).scalars().first()
+    product.shelf_life_hours = 36
+    supplier = await db_session.get(Supplier, product.supplier_id)
+    supplier.lead_time_hours = 12
+    await db_session.commit()
+
+    await db_session.execute(update(Inventory).values(quantity=0))
+    inv = (await db_session.execute(
+        select(Inventory).where(Inventory.product_id == product.product_id)
+    )).scalars().first()
+    inv.quantity = 0
+
+    from backend.models.core import PurchaseOrder as PurchaseOrderModel, Shipment
+    from backend.services.simulation.supplier import clear_active_pos
+    from backend.services.simulation.transfer import clear_active_transfers
+    await db_session.execute(delete(PurchaseOrderModel))
+    await db_session.execute(delete(Shipment))
+    clear_active_pos()
+    clear_active_transfers()
+    await db_session.commit()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=inv.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.9,
+        expected_time=now + timedelta(hours=2),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    dest_fc = (await db_session.execute(
+        select(Forecast).where(Forecast.store_id == inv.store_id, Forecast.product_id == product.product_id)
+    )).scalars().first()
+    forecast_24h = dest_fc.predicted_demand
+    hourly_demand = forecast_24h / 24.0
+
+    expected_target = hourly_demand * 24.0
+    expected_reorder_qty = int(round(expected_target))
+
+    orchestrator = DecisionOrchestrator()
+    rec = await orchestrator.run(db_session, risk.risk_id)
+    assert rec is not None
+    assert rec.action_type == ActionType.REORDER
+    assert rec.quantity == expected_reorder_qty, (
+        f"Expected reorder quantity to be 24h demand ({expected_reorder_qty}), but got {rec.quantity}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_usable_hours_zero_creates_no_action(db_session):
+    """Asserts that where usable hours is 0 (shelf life <= lead time), no refill action is created."""
+    from sqlalchemy import select, update
+    from backend.models.core import Inventory, Risk, Product, Supplier
+    from backend.models.enums import RiskStatus, RiskType, ActionType
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from datetime import datetime, timezone, timedelta
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    fc = ForecastingEngine()
+    await fc.run(db_session, horizon_hours=24)
+    await db_session.commit()
+
+    product = (await db_session.execute(select(Product))).scalars().first()
+    product.shelf_life_hours = 12
+    supplier = await db_session.get(Supplier, product.supplier_id)
+    supplier.lead_time_hours = 12
+    await db_session.commit()
+
+    await db_session.execute(update(Inventory).values(quantity=0))
+    inv = (await db_session.execute(
+        select(Inventory).where(Inventory.product_id == product.product_id)
+    )).scalars().first()
+    inv.quantity = 0
+    await db_session.commit()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=inv.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.9,
+        expected_time=now + timedelta(hours=2),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    orchestrator = DecisionOrchestrator()
+    rec = await orchestrator.run(db_session, risk.risk_id)
+    assert rec is not None
+    assert rec.action_type == ActionType.HOLD, (
+        f"Expected HOLD because usable hours is 0, but got {rec.action_type}"
+    )
