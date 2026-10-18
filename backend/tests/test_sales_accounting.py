@@ -51,8 +51,8 @@ async def test_full_fulfillment_sales_accounting(db_session):
         store_id=store_id,
         product_id=product_id,
         quantity=50,
-        received_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=5),
+        received_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        expires_at=(datetime.now(timezone.utc) + timedelta(days=5)).replace(tzinfo=None),
     )
     inv = Inventory(id=uuid.uuid4(), store_id=store_id, product_id=product_id, quantity=50)
     db_session.add(batch)
@@ -88,8 +88,8 @@ async def test_partial_fulfillment_sales_accounting(db_session):
         store_id=store_id,
         product_id=product_id,
         quantity=7,
-        received_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=5),
+        received_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        expires_at=(datetime.now(timezone.utc) + timedelta(days=5)).replace(tzinfo=None),
     )
     inv = Inventory(id=uuid.uuid4(), store_id=store_id, product_id=product_id, quantity=7)
     db_session.add(batch)

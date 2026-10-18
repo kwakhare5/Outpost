@@ -38,7 +38,7 @@ class AuditLog:
             row = Event(
                 event_id=uuid.uuid4(),
                 event_type=event_type,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
                 entity_type=entity_type,
                 entity_id=uuid.UUID(str(entity_id)),
                 payload=payload,

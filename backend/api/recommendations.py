@@ -25,6 +25,7 @@ from backend.api.schemas import (
     RecommendationBatchEvaluateResponse,
     RecommendationApproveResponse,
     RecommendationRejectResponse,
+    ExplanationResponse,
 )
 from backend.services.decision.engine import DecisionOrchestrator
 
@@ -101,6 +102,37 @@ async def get_recommendation(
     if rec is None:
         raise HTTPException(status_code=404, detail="Recommendation not found")
     return _to_response(rec)
+
+
+@router.get("/{recommendation_id}/explanation", response_model=ExplanationResponse)
+async def get_recommendation_explanation(
+    recommendation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ExplanationResponse:
+    """Get natural language explanation for a recommendation."""
+    from backend.services.explain.gemini import CACHE, explain
+    from backend.services.explain.facts import build_facts
+
+    rec_id_str = str(recommendation_id)
+    if rec_id_str in CACHE:
+        text, source = CACHE[rec_id_str]
+        return ExplanationResponse(text=text, source=source)
+
+    rec = await db.get(Recommendation, recommendation_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+
+    facts = await build_facts(db, rec)
+
+    # Do not hold the DB session during the HTTP call: read facts first, close, then call
+    await db.close()
+
+    text, source = await explain(facts)
+
+    if source == "gemini":
+        CACHE[rec_id_str] = (text, source)
+
+    return ExplanationResponse(text=text, source=source)
 
 
 @router.post("/{recommendation_id}/approve", response_model=RecommendationApproveResponse)

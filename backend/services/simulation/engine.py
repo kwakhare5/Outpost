@@ -15,13 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import (
     Store, Product, Customer, Supplier, Order, OrderItem,
-    Inventory, Batch, Simulation, Scenario, Event,
+    Inventory, Batch, Forecast, Simulation, Scenario, Event,
     Shipment, PurchaseOrder, ReceiptConfirmation,
     Risk, Recommendation, Action, OutcomeRecord,
 )
 from backend.models.enums import (
     StoreStatus, ProductCategory, OrderStatus, SupplierStatus,
-    SimulationStatus,
+    SimulationStatus, ActionType,
 )
 from backend.services.simulation.seed_data import (
     STORES, SUPPLIERS, PRODUCTS, CUSTOMERS,
@@ -108,6 +108,34 @@ class SimulationClock:
         return self._current_time
 
 
+async def clear_simulation_data(db: AsyncSession, simulation_id: uuid.UUID | None = None) -> None:
+    """Clear all operational and simulation data in dependency order."""
+    await db.execute(delete(Action))
+    await db.execute(delete(Recommendation))
+    await db.execute(delete(Risk))
+    await db.execute(delete(OutcomeRecord))
+    await db.execute(delete(ReceiptConfirmation))
+    await db.execute(delete(Shipment))
+    await db.execute(delete(PurchaseOrder))
+    await db.execute(delete(OrderItem))
+    await db.execute(delete(Order))
+    await db.execute(delete(Event))
+    await db.execute(delete(Batch))
+    await db.execute(delete(Inventory))
+    await db.execute(delete(Forecast))
+    await db.execute(delete(Customer))
+    await db.execute(delete(Product))
+    await db.execute(delete(Supplier))
+    await db.execute(delete(Store))
+    await db.execute(delete(Simulation))
+    await db.commit()
+
+    clear_active_transfers(simulation_id)
+    clear_active_pos(simulation_id)
+    if simulation_id is not None:
+        set_current_scenario("normal", sim_id=simulation_id)
+
+
 class SimulationEngine:
     """Core simulation engine for Outpost.
 
@@ -148,7 +176,7 @@ class SimulationEngine:
         state.policy = self.policy
 
         # 1. Calculate timeline
-        sim_start = datetime.now(timezone.utc) - timedelta(days=self.historical_days)
+        sim_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.historical_days)
         self.clock = SimulationClock(sim_start, self.seed)
 
         # 2. Seed stores, suppliers, products, customers
@@ -272,7 +300,7 @@ class SimulationEngine:
         if self.policy != "outpost":
             return {"risks": 0, "recommendations": 0, "executed": 0}
 
-        now = current_time or (self.clock.now if self.clock else datetime.now(timezone.utc))
+        now = current_time or (self.clock.now if self.clock else datetime.now(timezone.utc).replace(tzinfo=None))
         from backend.services.risk.engine import RiskEngine
         from backend.services.decision.engine import DecisionOrchestrator
         from backend.agents.execution.runner import ExecutionRunner
@@ -295,6 +323,8 @@ class SimulationEngine:
         runner = ExecutionRunner()
         executed_count = 0
         for rec in pending_recs:
+            if rec.action_type == ActionType.DISCOUNT:
+                rec.source_store_id = None
             approved = await orchestrator.approve(db, rec.recommendation_id, approver="autonomous_replay")
             if approved:
                 run_res = await runner.run(db, rec.recommendation_id)
@@ -312,36 +342,13 @@ class SimulationEngine:
         """Reset simulation: clear generated data, re-seed, restart clock."""
         saved_policy = self.policy
 
-        # Delete in dependency order
-        await db.execute(delete(Action))
-        await db.execute(delete(Recommendation))
-        await db.execute(delete(Risk))
-        await db.execute(delete(OutcomeRecord))
-        await db.execute(delete(ReceiptConfirmation))
-        await db.execute(delete(Shipment))
-        await db.execute(delete(PurchaseOrder))
-        await db.execute(delete(OrderItem))
-        await db.execute(delete(Order))
-        await db.execute(delete(Event))
-        await db.execute(delete(Batch))
-        await db.execute(delete(Inventory))
-        await db.execute(delete(Customer))
-        await db.execute(delete(Product))
-        await db.execute(delete(Supplier))
-        await db.execute(delete(Store))
-        await db.execute(delete(Simulation))
-        await db.commit()
-
-        # Clear in-flight transfers and purchase orders
-        clear_active_transfers(simulation_id)
-        clear_active_pos(simulation_id)
+        await clear_simulation_data(db, simulation_id)
 
         # Re-initialize RNG and scenario state
         self.rng = random.Random(self.seed)
         self.clock = None
         self.active_scenario = "normal"
         self.active_scenario_config = get_scenario_config("normal")
-        set_current_scenario("normal", sim_id=simulation_id)
         self.simulation_id = None
 
         # Re-seed and regenerate with preserved policy
@@ -354,7 +361,6 @@ class SimulationEngine:
             'policy': self.policy,
             'current_time': self.clock.now.isoformat() if self.clock else None,
         }
-
 
     # ---- PRIVATE METHODS ----
 

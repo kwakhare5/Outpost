@@ -80,7 +80,7 @@ class ForecastingEngine:
                     predicted_demand=round(predicted, 4),
                     confidence=confidence,
                     model_name=model_name,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
                 db.add(row)
                 await db.flush()

@@ -1,5 +1,13 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-18: Sequential Replay Pre-Pass Cleanup, Forecast FK Deletion & Discount Verification Fix
+
+### Work Card: Sequential Replay Pre-Pass Cleanup, Forecast FK Deletion & Discount Verification Fix
+- **Problem / tension:** Calling `POST /api/simulations/replay` on an already seeded database crashed with `UniqueViolationError: store_pkey` because Pass 1 initialized without resetting prior stores; Pass 1 reset also failed to delete `Forecast` before `Store` and `Product` violating foreign key constraints; and autonomous replay execution of discount recommendations failed on PostgreSQL with datatype mismatch.
+- **Change / decision:** Added `clear_simulation_data()` deleting all simulation tables in dependency order including `Forecast`, clearing transfers and POs; invoked `clear_simulation_data()` at the start of `run_replay()` before Pass 1 and in `SimulationEngine.reset()`; cleared stale `_engines` registry in the replay route; and prevented invalid inventory verification queries on discount actions in `run_outpost_cycle()`. Added `test_replay_sequential.py` testing replay twice sequentially and against pre-seeded databases.
+- **Proof:** `pytest backend/tests` passed 142/142 tests in 64.82s; `POST /api/simulations/replay` (168h, seed 42) succeeded with status 200 in 146.87s against PostgreSQL container `outpost-db-1` with 96 HOLD and 4 DISCOUNT recommendations generated.
+- **Still broken / unproven:** None. Replay runs cleanly and idempotently on fresh or pre-seeded databases.
+
 ## 2026-10-08: Decision-First Usability Overhaul, 1-to-1 File Renaming & Redundancy Purge
 
 ### Work Card: Decision-First Usability Overhaul, 1-to-1 File Renaming & Redundancy Purge
@@ -1271,3 +1279,39 @@ pm run build): Compiled successfully in 1.8s (3/3 static pages).
 - **Change / decision:** Moved proposed action and decision buttons to the very top of the Stock Alerts dossier with next-step guidance; added 1-line zero-click action previews to alert cards (`↳ Transfer 40u from Bandra`); calibrated page ratios to 5:7 for Stock Alerts, 6:6 for Live Deliveries, and 100% full-width for Past Results; replaced disabled transit forms with dynamic dock check-in and 1-click presets (`[✓ All 40 Intact]`, `[⚠️ 2 Damaged]`); added top header time capsule (`[🕒 08:15 AM]`, `[⏩ +1h]`, `[↺ Reset]`, `[⚙️ Scenarios]`); purged triplicate truck notices; renamed sidebar tabs to `Stock Alerts`, `Live Deliveries`, `Past Results`; and raised font size floor to 12px minimum with high contrast.
 - **Proof:** `npm test` passed (8/8 domain invariants in 0ms); `npm run lint` passed (0 errors, 0 warnings); `npm run build` compiled in 2.1s (4 static routes); `pytest backend/tests -q` passed (101/101 in 24.34s).
 - **Still broken / unproven:** None. Clean responsive layout, verified terminal proof.
+
+## 2026-10-18: Phase 3 - Frontend Wiring and Results Screen
+- **Problem / tension:** Frontend screens were wired to canned mock data and fake endpoints, Undo buttons allowed unhistorical rollback, CSV upload tab referenced deleted endpoints, and the results screen showed hardcoded metrics.
+- **Change / decision:** Rewrote `lib/api.ts` to call real FastAPI routes with honest error handling; mapped backend UUIDs and models to UI props via `lib/mapper.ts`; updated `app/page.tsx` to refetch on all actions and derive time from the simulation clock; deleted `lib/mockData.ts` as a data source; removed CSV tab and listed real routes in `ScenariosModal.tsx`; updated `ResultsScreen.tsx` to display real RunRecord rows, before/after deltas, live outcomes, and the synthetic rupee price assumption; added read-only `GET /api/simulations/runs/latest`.
+- **Proof:** `npm run build` compiled 4/4 static routes cleanly in 2.9s; `pytest backend/tests` passed 120/120 tests in 44.32s; `git diff --check` clean.
+- **Still broken / unproven:** None.
+
+## 2026-10-18: Phase 3b - Purge Invented Numbers, Scope Runs/Latest, Visible Errors & Honest Results Text
+- **Problem / tension:** Mock metrics (fake moneySaved, hardcoded van costs, delivery IDs, arrival times) leaked into UI; runs/latest paired unmatched seeds without limit; fetch errors were swallowed by .catch silently rendering empty UI; and ResultsScreen lacked honest non-claim delta text.
+- **Change / decision:** Deleted all fake money (`moneySaved`, `moneyAtRisk`) and invented defaults across mapper and screens; hid unmeasured fields; scoped `/api/simulations/runs/latest` with `.limit(1)` and matching seed/window; added tests in `test_runs_latest.py`; removed error swallowers in `page.tsx` and `ResultsScreen.tsx` adding reachable error banners; aligned replay window to 168h; and added honest delta-driven summary box without savings claims.
+- **Proof:** `pytest backend/tests/test_runs_latest.py` passed 3/3; full `pytest backend/tests` passed 100%; `npm run build` compiled 0 errors; `git diff --check` clean.
+- **Still broken / unproven:** None. UI displays verified simulation facts only, with zero synthetic revenue claims.
+
+## 2026-10-18: Phase 3c - Purge Remaining Invented Values, Real Stores and Markdown Tier
+- **Problem / tension:** Mock artifacts remained in the frontend (synthetic DemandChart, typed 20% discount percentages, hardcoded store dropdown options, arbitrary capacity/order defaults in mapper, and hardcoded clock defaults).
+- **Change / decision:** Deleted `DemandChart.tsx`; built store dropdown dynamically from real store API data; dropped typed 20% from discount labels; eliminated invented fallbacks (capacity 150, activeOrders, minExpiryHours, vanId, Mumbai/RFC placeholders); skipped alerts missing product in destination inventory; removed Western Express Highway; removed hardcoded outcomes count and 08:15/ALERT-01 defaults; rounded runsOutInHours to 1 decimal; restricted "Zero shelf runouts" subtitle to true 0 lost sales; and added Retry button to ResultsScreen error banner.
+- **Proof:** `grep -rn "20%\|VAN-MUM\|08:15\|Andheri\|Mumbai" app components lib` returned 0 hits; `npx tsc --noEmit` exited 0; full `pytest backend/tests` passed 123/123; `npm run build` compiled 4/4 static routes cleanly.
+- **Still broken / unproven:** None. Completely grounded in real API data.
+
+## 2026-10-18: Phase 4A - Explain Layer from Real Numbers with Safe Gemini Fallback
+- **Problem / tension:** Operators need plain English explanations of recommendations without LLM hallucination or coupling explainer logic to the core decision/advance pipelines.
+- **Change / decision:** Added `GEMINI_API_KEY`, `GEMINI_MODEL`, and `GEMINI_TIMEOUT_SECONDS` to `backend/config.py` (which reads `.env` relative to execution working directory); created `backend/services/explain/` (`facts.py` reading only real DB fields and excluding constants like 48.0h/0.95/0.80/Rs 15/Rs 25/5.0km, `fallback.py` generating deterministic text, `gemini.py` with strict number validation and in-memory cache); added `GET /api/recommendations/{id}/explanation`; wired frontend `fetchExplanation` in `lib/api.ts` and `StockAlertsScreen.tsx` with "AI-written from real numbers" / "Auto-generated" labels and loading/error states; and added 6 comprehensive test seams in `backend/tests/test_explain.py`.
+- **Proof:** `pytest backend/tests/test_explain.py` passed 6/6; full `pytest` passed 129/129 in 44.17s; `npm test` passed 8/8; `npm run build` compiled 4/4 static routes cleanly.
+- **Still broken / unproven:** Stale frontend text across alert switches, missing rows default to zero rather than unknown, word-form numbers leak past guardrails, and key leakage risk in error logs.
+
+## 2026-10-18: Phase 4A-FIX - Stale Text, Unknown Not Zero, Stricter Output Guard, Safe Logging
+- **Problem / tension:** Frontend rendered stale explanations during alert transitions; missing DB rows defaulted to 0 or "none" rather than unknown; number words (e.g. "ten") leaked past number checks; responses with >3 sentences or non-STOP finishReason were not rejected; error logs risked leaking secrets; and cache was uncapped.
+- **Change / decision:** Stored alert id in frontend explanation state and cleared state on alert switch or fetch failure; defaulted missing risk and inventory rows to `None` and instructed prompt that omitted facts are unknown; added output guards rejecting number words (one..twenty, thirty, forty, fifty, hundred, thousand, dozen, half, double, twice, triple), >3 sentences (ignoring decimals), and finishReason != STOP; raised maxOutputTokens to 512; added safe warning logging with only exception class or HTTP status code and recommendation_id; capped in-memory cache at 500 entries (FIFO eviction); and added 6 new test seams.
+- **Proof:** `pytest backend/tests/test_explain.py` passed 12/12; full `pytest` passed 135/135 in 45.70s; `npm test` passed 8/8; `npm run build` compiled 4/4 static routes cleanly.
+- **Still broken / unproven:** Only numbers and number words are checked; the text can still be wrong about meaning.
+
+## 2026-10-18: Naive UTC Datetimes Everywhere for PostgreSQL asyncpg Seeding
+- **Problem / tension:** PostgreSQL with asyncpg rejected seed data inserts (`INSERT INTO batch`) with `can't subtract offset-naive and offset-aware datetimes` because simulation and events wrote timezone-aware datetimes into naive `TIMESTAMP WITHOUT TIME ZONE` columns; automated tests ran solely on SQLite so PostgreSQL dialect bindings were never exercised.
+- **Change / decision:** Standardized on naive UTC across `backend/services/simulation/engine.py`, `backend/events/audit.py`, `backend/services/forecasting/engine.py`, `backend/services/simulation/scenarios.py`, and `backend/services/explain/facts.py`; created `UTCDateTime(TypeDecorator)` converting aware datetimes to naive UTC on bind and applied to all 20 datetime model columns in `backend/models/core.py`; configured PostgreSQL session timezone to UTC via `connect_args={"server_settings": {"timezone": "UTC"}}` in `backend/database/__init__.py`; updated tests in `test_sales_accounting.py` and `test_outcomes.py`; and added `test_datetime_utc.py` verifying aware offset conversion (+05:30 to naive UTC), naive preservation, and `tzinfo=None` simulation clock start.
+- **Proof:** `pytest backend/tests` passed 140/140 tests in 44.83s (including 5 new datetime tests); `npm run build` compiled 4/4 static routes cleanly in 1.9s.
+- **Still broken / unproven:** None. PostgreSQL and SQLite now accept datetime inputs consistently.

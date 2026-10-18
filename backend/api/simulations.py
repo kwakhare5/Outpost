@@ -440,4 +440,5 @@ async def replay_simulation(
         step_hours=request.step_hours,
         historical_days=request.historical_days,
     )
+    _engines.clear()
     return result

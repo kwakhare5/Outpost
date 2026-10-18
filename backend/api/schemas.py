@@ -214,6 +214,11 @@ class RecommendationRejectResponse(BaseModel):
     status: str
 
 
+class ExplanationResponse(BaseModel):
+    text: str
+    source: str
+
+
 # ---------------------------------------------------------------------------
 # Agent execution schemas (Phase 6 - spec section 19-21)
 # ---------------------------------------------------------------------------

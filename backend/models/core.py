@@ -1,8 +1,23 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any
-from sqlalchemy import Float, Numeric, DateTime, Text, JSON, ForeignKey, func, UniqueConstraint, Integer
+from sqlalchemy import Float, Numeric, DateTime, Text, JSON, ForeignKey, func, UniqueConstraint, Integer, TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+class UTCDateTime(TypeDecorator):
+    """DateTime type that converts time-zone-aware datetimes to naive UTC on bind."""
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: Optional[datetime], dialect: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if hasattr(value, "tzinfo") and value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+NaiveUTCDateTime = UTCDateTime
+
 
 from backend.database import Base
 from backend.models.enums import (
@@ -63,7 +78,7 @@ class Order(Base):
     order_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('customer.customer_id'))
     store_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('store.store_id'))
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     status: Mapped[OrderStatus]
     
     customer: Mapped[Customer] = relationship(back_populates="orders")
@@ -101,8 +116,8 @@ class Batch(Base):
     store_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('store.store_id'))
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
     quantity: Mapped[int]
-    received_at: Mapped[datetime] = mapped_column(DateTime)
-    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    received_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 class Forecast(Base):
     __tablename__ = 'forecast'
@@ -114,7 +129,7 @@ class Forecast(Base):
     predicted_demand: Mapped[float] = mapped_column(Float)
     confidence: Mapped[float] = mapped_column(Float)
     model_name: Mapped[str]
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 class Risk(Base):
     __tablename__ = 'risk'
@@ -125,9 +140,9 @@ class Risk(Base):
     risk_type: Mapped[RiskType]
     severity: Mapped[RiskSeverity]
     probability: Mapped[float] = mapped_column(Float)
-    expected_time: Mapped[datetime] = mapped_column(DateTime)
+    expected_time: Mapped[datetime] = mapped_column(UTCDateTime)
     status: Mapped[RiskStatus]
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     
     recommendations: Mapped[list["Recommendation"]] = relationship(back_populates="risk")
 
@@ -145,7 +160,7 @@ class Recommendation(Base):
     reason_codes: Mapped[Any] = mapped_column(JSON)
     alternatives: Mapped[Any] = mapped_column(JSON)
     status: Mapped[RecommendationStatus]
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     
     risk: Mapped[Risk] = relationship(back_populates="recommendations")
 
@@ -156,8 +171,8 @@ class Action(Base):
     recommendation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('recommendation.recommendation_id'))
     action_type: Mapped[ActionType]
     approved_by: Mapped[Optional[str]]
-    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime)
     status: Mapped[ActionStatus]
     failure_reason: Mapped[Optional[str]] = mapped_column(Text)
 
@@ -166,7 +181,7 @@ class Event(Base):
     
     event_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     event_type: Mapped[str]
-    timestamp: Mapped[datetime] = mapped_column(DateTime)
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime)
     entity_type: Mapped[str]
     entity_id: Mapped[uuid.UUID]
     payload: Mapped[Any] = mapped_column(JSON)
@@ -185,7 +200,7 @@ class Simulation(Base):
     simulation_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     scenario_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey('scenario.scenario_id'))
     seed: Mapped[int]
-    current_time: Mapped[datetime] = mapped_column(DateTime)
+    current_time: Mapped[datetime] = mapped_column(UTCDateTime)
     status: Mapped[SimulationStatus]
     configuration: Mapped[Any] = mapped_column(JSON)
 
@@ -199,9 +214,9 @@ class Shipment(Base):
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
     quantity: Mapped[int] = mapped_column(Integer)
     status: Mapped[ShipmentStatus] = mapped_column(default=ShipmentStatus.DISPATCHED)
-    dispatched_at: Mapped[datetime] = mapped_column(DateTime)
-    arrival_eta: Mapped[datetime] = mapped_column(DateTime)
-    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    dispatched_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    arrival_eta: Mapped[datetime] = mapped_column(UTCDateTime)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     batch_records: Mapped[Any] = mapped_column(JSON)
     distance_km: Mapped[float] = mapped_column(Float, default=0.0)
     traffic_multiplier: Mapped[float] = mapped_column(Float, default=1.0)
@@ -217,9 +232,9 @@ class PurchaseOrder(Base):
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('product.product_id'))
     quantity: Mapped[int] = mapped_column(Integer)
     status: Mapped[POStatus] = mapped_column(default=POStatus.IN_TRANSIT)
-    ordered_at: Mapped[datetime] = mapped_column(DateTime)
-    arrival_eta: Mapped[datetime] = mapped_column(DateTime)
-    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    ordered_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    arrival_eta: Mapped[datetime] = mapped_column(UTCDateTime)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
 
 class ReceiptConfirmation(Base):
     __tablename__ = 'receipt_confirmation'
@@ -231,7 +246,7 @@ class ReceiptConfirmation(Base):
     discrepancy_units: Mapped[int] = mapped_column(Integer, default=0)
     discrepancy_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    confirmed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    confirmed_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 class OutcomeRecord(Base):
     __tablename__ = 'outcome_record'
@@ -249,7 +264,7 @@ class OutcomeRecord(Base):
     waste_units: Mapped[int] = mapped_column(Integer, default=0)
     waste_value_inr: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(Text, default="")
-    evaluated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    evaluated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 class RunRecord(Base):
     __tablename__ = 'run_record'
@@ -263,4 +278,4 @@ class RunRecord(Base):
     waste_units: Mapped[int] = mapped_column(Integer, default=0)
     rupee_loss: Mapped[float] = mapped_column(Float, default=0.0)
     availability_pct: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
