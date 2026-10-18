@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
 import type { DeckTab, AlertItem, StoreHub } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge, Button } from "@/components/ui";
+import { fetchExplanation, type RawExplanation } from "@/lib/api";
 
 interface StockAlertsScreenProps {
   alerts: AlertItem[];
@@ -56,6 +57,42 @@ export function StockAlertsScreen({
   const senderSafeMargin = selectedAlert && selectedAlert.senderLocalDemand !== undefined
     ? Math.max(0, senderPostStock - selectedAlert.senderLocalDemand)
     : 0;
+
+  const [explanation, setExplanation] = useState<RawExplanation | null>(null);
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState<boolean>(false);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const targetId = selectedAlert?.recommendationId || selectedAlert?.id;
+    if (!targetId) {
+      setExplanation(null);
+      setExplanationError(null);
+      setIsLoadingExplanation(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingExplanation(true);
+    setExplanationError(null);
+
+    fetchExplanation(targetId)
+      .then((data) => {
+        if (!cancelled) {
+          setExplanation(data);
+          setIsLoadingExplanation(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setExplanationError(err?.message || "Failed to load explanation");
+          setIsLoadingExplanation(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAlert?.id, selectedAlert?.recommendationId]);
 
   const getStatusBadge = (status: AlertItem["status"]) => {
     switch (status) {
@@ -421,8 +458,22 @@ export function StockAlertsScreen({
             <div className="p-4 bg-[#FAF8F5] border border-[#EAE6DF] rounded-xl space-y-2">
               <span className="text-xs font-bold text-[#57534E] uppercase tracking-wider block">Routine Reorder Status</span>
               <p className="text-xs text-[#57534E]">
-                {selectedAlert.simpleDescription}
+                {isLoadingExplanation || !explanation
+                  ? selectedAlert.simpleDescription
+                  : explanation.text}
               </p>
+              {explanation && !isLoadingExplanation && (
+                <div className="pt-0.5">
+                  <span className="inline-flex items-center text-[10px] font-semibold text-[#57534E] bg-[#EAE6DF]/70 px-2 py-0.5 rounded">
+                    {explanation.source === "gemini" ? "AI-written from real numbers" : "Auto-generated"}
+                  </span>
+                </div>
+              )}
+              {explanationError && (
+                <p className="text-xs text-rose-600 font-medium">
+                  Explanation error: {explanationError}
+                </p>
+              )}
               {selectedAlert.status !== "Acknowledged" && (
                 <Button
                   variant="secondary"

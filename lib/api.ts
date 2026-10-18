@@ -405,6 +405,18 @@ export async function runReplay(
   return handleResponse<ReplayResponse>(res);
 }
 
+export interface RawExplanation {
+  text: string;
+  source: "gemini" | "fallback" | string;
+}
+
+export async function fetchExplanation(id: string): Promise<RawExplanation> {
+  const res = await fetch(`${BACKEND_URL}/api/recommendations/${id}/explanation`, {
+    headers: { Accept: "application/json" },
+  });
+  return handleResponse<RawExplanation>(res);
+}
+
 // Aliases for compatibility
 export const fetchLiveStores = fetchStores;
 export const fetchHistoryOutcomes = fetchOutcomes;
