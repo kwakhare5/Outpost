@@ -16,8 +16,8 @@ import pytest
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.core import Store, Product, Supplier, Inventory, Batch, Risk, Recommendation, Action, Event
-from backend.models.enums import StoreStatus, SupplierStatus, ProductCategory, RiskType, RiskSeverity, RiskStatus, RecommendationStatus, ActionType, ActionStatus
+from backend.models.core import Store, Product, Supplier, Inventory, Batch, Risk, Recommendation, Action, Event, Simulation
+from backend.models.enums import StoreStatus, SupplierStatus, ProductCategory, RiskType, RiskSeverity, RiskStatus, RecommendationStatus, ActionType, ActionStatus, SimulationStatus
 from backend.agents.execution.tools import create_transfer, create_reorder
 from backend.agents.execution.runner import ExecutionRunner
 from backend.services.simulation.transfer import (
@@ -74,7 +74,14 @@ async def _setup_rfc_and_stores(db: AsyncSession):
         longitude=72.8697,
         operating_status=StoreStatus.ACTIVE,
     )
-    db.add_all([store_a, store_b])
+    sim = Simulation(
+        simulation_id=uuid.uuid4(),
+        status=SimulationStatus.RUNNING,
+        current_time=now,
+        seed=42,
+        configuration={"scenario": "normal"},
+    )
+    db.add_all([store_a, store_b, sim])
     await db.flush()
     return rfc, product, store_a, store_b
 

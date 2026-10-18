@@ -55,11 +55,11 @@ from backend.agents.execution.nodes import (
 )
 from backend.agents.execution.runner import ExecutionRunner
 from backend.models.core import (
-    Recommendation, Inventory, Risk, Store, Supplier, Product, Batch,
+    Recommendation, Inventory, Risk, Store, Supplier, Product, Batch, Simulation,
 )
 from backend.models.enums import (
     RecommendationStatus, ActionType, ActionStatus, RiskType, RiskSeverity,
-    RiskStatus, StoreStatus, SupplierStatus, ProductCategory,
+    RiskStatus, StoreStatus, SupplierStatus, ProductCategory, SimulationStatus,
 )
 from datetime import datetime, timezone, timedelta
 
@@ -148,6 +148,14 @@ async def _seed_transfer_scenario(db_session):
         status=RecommendationStatus.APPROVED,
         created_at=now,
     )
+    sim = Simulation(
+        simulation_id=uuid.uuid4(),
+        status=SimulationStatus.RUNNING,
+        current_time=now,
+        seed=42,
+        configuration={"scenario": "normal"},
+    )
+    db_session.add(sim)
     db_session.add(rec)
     await db_session.commit()
 
@@ -160,6 +168,7 @@ async def _seed_transfer_scenario(db_session):
         "src_inv": src_inv,
         "dst_inv": dst_inv,
         "rec": rec,
+        "sim": sim,
     }
 
 
@@ -225,10 +234,18 @@ async def _seed_reorder_scenario(db_session):
         status=RecommendationStatus.APPROVED,
         created_at=now,
     )
+    sim = Simulation(
+        simulation_id=uuid.uuid4(),
+        status=SimulationStatus.RUNNING,
+        current_time=now,
+        seed=42,
+        configuration={"scenario": "normal"},
+    )
+    db_session.add(sim)
     db_session.add(rec)
     await db_session.commit()
 
-    return {"supplier": supplier, "product": product, "store": store, "risk": risk, "inv": inv, "rec": rec}
+    return {"supplier": supplier, "product": product, "store": store, "risk": risk, "inv": inv, "rec": rec, "sim": sim}
 
 
 async def _seed_pending_rec(db_session):

@@ -81,6 +81,12 @@ async def create_purchase_order(
         status='delayed' if effective_delay > 0 else 'in_transit',
         delay_hours=effective_delay,
     )
+    if sim_id is None:
+        from backend.services.simulation.scenarios import get_active_simulation_id
+        try:
+            sim_id = await get_active_simulation_id(db)
+        except RuntimeError:
+            pass
     state = get_simulation_state(sim_id)
     state.active_pos.append(po)
 

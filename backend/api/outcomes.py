@@ -57,8 +57,8 @@ async def list_outcomes(
 ) -> OutcomesSummaryResponse:
     """Retrieve outcome records and evaluation metrics.
     
-    If database history is empty, provides seeded synthetic benchmark outcomes
-    from Spec Section 7.2 (milk rescue, dahi markdown, egg arrival, rejected banana, bread transfer).
+    If database history is empty, returns empty records and an honest disclaimer
+    indicating no outcomes have been measured yet.
     """
     res = await db.execute(select(OutcomeRecord).order_by(OutcomeRecord.evaluated_at.desc()))
     records = res.scalars().all()
@@ -84,8 +84,8 @@ async def list_outcomes(
         OutcomeItemResponse(
             outcome_id=r.outcome_id,
             exception_title=r.exception_title,
-            store_name=store_map.get(r.store_id, "Andheri West"),
-            product_name=prod_map.get(r.product_id, "Amul Taaza Milk 500ml"),
+            store_name=store_map.get(r.store_id) or (str(r.store_id) if r.store_id else "unknown"),
+            product_name=prod_map.get(r.product_id) or (str(r.product_id) if r.product_id else "unknown"),
             action_taken=r.action_taken,
             outcome_status=r.outcome_status,
             expected_lost_sales_units=r.expected_lost_sales_units,

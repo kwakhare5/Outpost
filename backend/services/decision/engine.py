@@ -1,7 +1,7 @@
 """Outpost Decision Engine -- DB orchestration layer.
 
 Loads risk + inventory + forecast state from DB, calls PureDecisionEvaluator,
-persists a Recommendation row, and emits DECISION_MADE event via EventBus.
+persists a Recommendation row, and emits DECISION_MADE event via audit log.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from backend.models.core import (
     Risk, Inventory, Forecast, Recommendation, Store, Product, Supplier,
 )
 from backend.models.enums import RecommendationStatus, ActionType
-from backend.events.audit import audit_log as bus
+from backend.events.audit import audit_log
 from backend.services.decision.models import (
     DEFAULT_WEIGHTS,
     ScoringWeights,
@@ -259,7 +259,7 @@ class DecisionOrchestrator:
         db.add(rec_row)
         await db.flush()
 
-        await bus.publish(
+        await audit_log.publish(
             db,
             "DECISION_MADE",
             "recommendation",
@@ -330,7 +330,7 @@ class DecisionOrchestrator:
         db.add(action)
         await db.flush()
 
-        await bus.publish(
+        await audit_log.publish(
             db,
             "RECOMMENDATION_APPROVED",
             "recommendation",
@@ -358,7 +358,7 @@ class DecisionOrchestrator:
             return None
         rec.status = RecommendationStatus.REJECTED
         await db.flush()
-        await bus.publish(
+        await audit_log.publish(
             db,
             "RECOMMENDATION_REJECTED",
             "recommendation",

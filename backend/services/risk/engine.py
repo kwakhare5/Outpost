@@ -5,7 +5,7 @@ Orchestrates risk detection across inventory, forecasts, and batch states:
   2. Compute stockout risk with StockoutCalculator (spec Section 5.1).
   3. Scan perishable batches and compute spoilage risk with SpoilageCalculator (spec Section 5.2).
   4. Persist Risk records to DB (spec Section 29.10).
-  5. Emit RISK_DETECTED events via in-process EventBus (spec Section 30).
+  5. Emit RISK_DETECTED events via in-process audit log (spec Section 30).
   6. Support risk resolution and status transitions (ACTIVE -> RESOLVED).
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Risk, Inventory, Batch, Product, Supplier, Forecast
 from backend.models.enums import RiskType, RiskSeverity, RiskStatus
-from backend.events.audit import audit_log as bus
+from backend.events.audit import audit_log
 from backend.services.risk.models import (
     RiskConfig,
     BatchInfo,
@@ -184,7 +184,7 @@ class RiskEngine:
                     db.add(risk_row)
                     existing_active_risks[(inv.store_id, inv.product_id, RiskType.STOCKOUT)] = risk_row
 
-                    await bus.publish(
+                    await audit_log.publish(
                         db,
                         "RISK_DETECTED",
                         "risk",
@@ -262,7 +262,7 @@ class RiskEngine:
                     db.add(risk_row)
                     existing_active_risks[(store_id, product_id, RiskType.SPOILAGE)] = risk_row
 
-                    await bus.publish(
+                    await audit_log.publish(
                         db,
                         "RISK_DETECTED",
                         "risk",
@@ -294,7 +294,7 @@ class RiskEngine:
         risk.status = RiskStatus.RESOLVED
         await db.flush()
 
-        await bus.publish(
+        await audit_log.publish(
             db,
             "RISK_RESOLVED",
             "risk",

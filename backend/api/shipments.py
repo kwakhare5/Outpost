@@ -108,6 +108,12 @@ async def confirm_receipt(
     Credits destination inventory only upon committed receipt.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    from backend.services.simulation.scenarios import get_active_simulation_id
+    try:
+        active_sim_id = await get_active_simulation_id(db)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     try:
         result = await confirm_shipment_receipt(
             db=db,
@@ -115,6 +121,7 @@ async def confirm_receipt(
             received_quantity=payload.received_units,
             current_time=now,
             notes=payload.notes,
+            sim_id=active_sim_id,
         )
         await db.commit()
         return ReceiptConfirmationResponse(**result)

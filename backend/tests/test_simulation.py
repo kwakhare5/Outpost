@@ -186,3 +186,156 @@ def test_two_simulations_hold_different_scenarios_independently() -> None:
     assert cfg1.name == "demand_spike"
     assert cfg2.name == "network_imbalance"
     assert cfg1.demand_multiplier_by_category != cfg2.demand_multiplier_by_category
+
+
+@pytest.mark.asyncio
+async def test_reset_deletes_transfers_and_pos_and_rebuild_is_empty(db_session: AsyncSession) -> None:
+    """Reset deletes Shipments and POs, clears memory, and rebuild from DB stays empty."""
+    from backend.services.simulation.transfer import dispatch_transfer, get_active_transfers
+    from backend.services.simulation.supplier import create_purchase_order, get_active_pos
+    from backend.services.simulation.scenarios import clear_simulation_states
+    from backend.api.simulations import _engines, _get_or_restore_engine
+
+    engine = SimulationEngine(seed=42, historical_days=0)
+    sim = await engine.initialize(db_session)
+
+    # Pick an active batch with sufficient unexpired quantity
+    now_naive = engine.clock.now.replace(tzinfo=None) if engine.clock.now.tzinfo else engine.clock.now
+    active_batch = (await db_session.execute(
+        select(Batch).where(
+            Batch.quantity >= 5,
+            Batch.expires_at > now_naive,
+        )
+    )).scalars().first()
+    assert active_batch is not None
+
+    source_store_id = active_batch.store_id
+    product_id = active_batch.product_id
+
+    stores = (await db_session.execute(select(Store).where(Store.store_id != source_store_id))).scalars().all()
+    dest_store_id = stores[0].store_id
+    supp = (await db_session.execute(select(Supplier).limit(1))).scalar_one()
+
+    # Dispatch transfer and create purchase order
+    await dispatch_transfer(
+        db=db_session,
+        source_store_id=source_store_id,
+        destination_store_id=dest_store_id,
+        product_id=product_id,
+        quantity=5,
+        current_time=engine.clock.now,
+        sim_id=sim.simulation_id,
+    )
+    await create_purchase_order(
+        db=db_session,
+        supplier_id=supp.supplier_id,
+        store_id=source_store_id,
+        product_id=product_id,
+        quantity=10,
+        current_time=engine.clock.now,
+        sim_id=sim.simulation_id,
+    )
+    await db_session.commit()
+
+    # Verify both are active before reset
+    assert len(get_active_transfers(sim.simulation_id)) == 1
+    assert len(get_active_pos(sim.simulation_id)) == 1
+
+    # Reset
+    reset_res = await engine.reset(db_session, sim.simulation_id)
+    new_sim_id = uuid.UUID(reset_res["simulation_id"])
+    await db_session.commit()
+
+    # Clear memory cache
+    clear_simulation_states()
+    _engines.clear()
+
+    # Rebuild from DB
+    await _get_or_restore_engine(db_session, new_sim_id)
+
+    # Assert both lists are empty
+    assert len(get_active_transfers(new_sim_id)) == 0
+    assert len(get_active_pos(new_sim_id)) == 0
+
+
+@pytest.mark.asyncio
+async def test_agent_dispatched_transfer_appears_after_rebuild_from_db(db_session: AsyncSession) -> None:
+    """An agent-dispatched transfer appears in that simulation's state after a rebuild from the DB."""
+    from datetime import timedelta
+    from backend.agents.execution.tools import create_transfer
+    from backend.services.simulation.transfer import get_active_transfers
+    from backend.services.simulation.scenarios import clear_simulation_states
+    from backend.api.simulations import _engines, _get_or_restore_engine
+    from backend.models.core import Recommendation, Risk
+    from backend.models.enums import RecommendationStatus, ActionType, RiskType, RiskStatus, RiskSeverity
+
+    engine = SimulationEngine(seed=42, historical_days=1)
+    sim = await engine.initialize(db_session)
+    sim.status = SimulationStatus.RUNNING
+    await db_session.commit()
+
+    # Pick an active batch with sufficient unexpired quantity
+    now_naive = engine.clock.now.replace(tzinfo=None) if engine.clock.now.tzinfo else engine.clock.now
+    active_batch = (await db_session.execute(
+        select(Batch).where(
+            Batch.quantity >= 5,
+            Batch.expires_at > now_naive,
+        )
+    )).scalars().first()
+    assert active_batch is not None
+
+    source_store_id = active_batch.store_id
+    product_id = active_batch.product_id
+
+    stores = (await db_session.execute(select(Store).where(Store.store_id != source_store_id))).scalars().all()
+    dest_store_id = stores[0].store_id
+
+    # Create risk and approved recommendation for the agent
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=dest_store_id,
+        product_id=product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity=RiskSeverity.CRITICAL,
+        probability=0.85,
+        expected_time=now_naive + timedelta(hours=4),
+        status=RiskStatus.ACTIVE,
+        created_at=now_naive,
+    )
+    db_session.add(risk)
+    await db_session.flush()
+
+    rec = Recommendation(
+        recommendation_id=uuid.uuid4(),
+        risk_id=risk.risk_id,
+        action_type=ActionType.TRANSFER,
+        source_store_id=source_store_id,
+        destination_store_id=dest_store_id,
+        quantity=5,
+        score=0.85,
+        confidence=0.90,
+        reason_codes=["EMERGENCY_REBALANCE"],
+        alternatives=[],
+        status=RecommendationStatus.APPROVED,
+        created_at=now_naive,
+    )
+    db_session.add(rec)
+    await db_session.commit()
+
+    # Agent dispatches transfer
+    res = await create_transfer(db_session, rec.recommendation_id)
+    assert res["success"] is True
+    transfer_id = uuid.UUID(res["transfer_id"])
+    await db_session.commit()
+
+    # Clear memory cache
+    clear_simulation_states()
+    _engines.clear()
+
+    # Rebuild from DB
+    restored_engine = await _get_or_restore_engine(db_session, sim.simulation_id)
+    assert restored_engine is not None
+
+    # Assert agent-dispatched transfer appears in that simulation's state
+    restored_transfers = get_active_transfers(sim.simulation_id)
+    assert any(t.transfer_id == transfer_id and t.quantity == 5 for t in restored_transfers)

@@ -19,6 +19,7 @@ from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Store, Product, Inventory, Batch, Event, Simulation
+from backend.models.enums import SimulationStatus
 from backend.services.simulation.seed_data import STORES, PRODUCTS
 
 SCENARIO_NAMES = [
@@ -117,6 +118,30 @@ def clear_simulation_states() -> None:
     _default_state.active_pos.clear()
     _default_state.scenario = "normal"
     _default_state.engine = None
+
+
+async def get_active_simulation_id(db: AsyncSession) -> uuid.UUID:
+    """Retrieve the ID of the active simulation from the database.
+
+    Checks for a RUNNING simulation, or falls back to the most recent simulation.
+    Raises RuntimeError if no active simulation exists in the database.
+    """
+    stmt = (
+        select(Simulation.simulation_id)
+        .where(Simulation.status == SimulationStatus.RUNNING)
+        .order_by(Simulation.current_time.desc())
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    sim_id = res.scalar_one_or_none()
+    if not sim_id:
+        stmt_any = select(Simulation.simulation_id).order_by(Simulation.current_time.desc()).limit(1)
+        res_any = await db.execute(stmt_any)
+        sim_id = res_any.scalar_one_or_none()
+    if not sim_id:
+        raise RuntimeError("No active simulation found")
+    return sim_id
+
 
 
 async def restore_simulation_state_from_db(

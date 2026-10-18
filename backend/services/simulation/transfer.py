@@ -201,6 +201,12 @@ async def dispatch_transfer(
         distance_km=dist_km,
         traffic_multiplier=traffic_multiplier,
     )
+    if sim_id is None:
+        from backend.services.simulation.scenarios import get_active_simulation_id
+        try:
+            sim_id = await get_active_simulation_id(db)
+        except RuntimeError:
+            pass
     state = get_simulation_state(sim_id)
     state.active_transfers.append(transfer)
 
@@ -367,6 +373,12 @@ async def confirm_shipment_receipt(
     4. Discrepancy (sent - received) is recorded as transit shrinkage/damage loss.
     """
     shipment = await db.get(Shipment, shipment_id)
+    if sim_id is None:
+        from backend.services.simulation.scenarios import get_active_simulation_id
+        try:
+            sim_id = await get_active_simulation_id(db)
+        except RuntimeError:
+            pass
     state = get_simulation_state(sim_id)
     transfer = next((t for t in state.active_transfers if t.transfer_id == shipment_id), None)
 

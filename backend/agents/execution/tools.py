@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.core import Recommendation, Inventory, Risk, Store, Batch, Product, Action
 from backend.models.enums import RecommendationStatus, ActionType, ActionStatus
 from backend.services.decision.models import SafeExcessCalculator, DEFAULT_WEIGHTS
-from backend.events.audit import audit_log as bus
+from backend.events.audit import audit_log
 
 
 def _naive_now() -> datetime:
@@ -218,7 +218,10 @@ async def create_transfer(
         await db.flush()
 
     # Route transfer through dispatch_transfer service (Spec Section 4.B)
+    from backend.services.simulation.scenarios import get_active_simulation_id
     from backend.services.simulation.transfer import dispatch_transfer
+    active_sim_id = await get_active_simulation_id(db)
+
     try:
         transfer = await dispatch_transfer(
             db=db,
@@ -227,6 +230,7 @@ async def create_transfer(
             product_id=product_id,
             quantity=transfer_qty,
             current_time=now,
+            sim_id=active_sim_id,
         )
     except ValueError as exc:
         err_msg = str(exc)
@@ -237,7 +241,7 @@ async def create_transfer(
         }
 
     # Emit event
-    await bus.publish(
+    await audit_log.publish(
         db,
         "TRANSFER_EXECUTED",
         "recommendation",
@@ -299,7 +303,10 @@ async def create_reorder(
         await db.flush()
 
     # Route reorder through create_purchase_order (Regional Fulfilment Centre PO)
+    from backend.services.simulation.scenarios import get_active_simulation_id
     from backend.services.simulation.supplier import create_purchase_order
+    active_sim_id = await get_active_simulation_id(db)
+
     product = await db.get(Product, product_id)
     if not product:
         return {"success": False, "error": "product_not_found"}
@@ -312,12 +319,13 @@ async def create_reorder(
             product_id=product_id,
             quantity=reorder_qty,
             current_time=now,
+            sim_id=active_sim_id,
         )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
     # Inventory is NOT increased now; it increases upon arrival after lead time (Spec Section 4.B)
-    await bus.publish(
+    await audit_log.publish(
         db,
         "REORDER_EXECUTED",
         "recommendation",
@@ -353,7 +361,7 @@ async def apply_discount(
     """MUTATION: Apply discount (simulated: emits DISCOUNT_APPLIED event, no price mutation).
 
     In a real system this would push price override to the POS / app.
-    In the simulator we record the intent via the event bus.
+    In the simulator we record the intent via the audit log.
     """
     rec = await db.get(Recommendation, recommendation_id)
     if rec is None:
@@ -379,7 +387,7 @@ async def apply_discount(
 
     discount_pct = 0.20
 
-    await bus.publish(
+    await audit_log.publish(
         db,
         "DISCOUNT_APPLIED",
         "recommendation",
@@ -422,6 +430,6 @@ async def log_agent_event(
     entity_id: uuid.UUID,
     payload: dict,
 ) -> dict:
-    """Write an audit event to the EventBus."""
-    await bus.publish(db, event_type, "agent", entity_id, payload, persist=True)
+    """Write an audit event to the audit log."""
+    await audit_log.publish(db, event_type, "agent", entity_id, payload, persist=True)
     return {"event_type": event_type, "entity_id": str(entity_id)}

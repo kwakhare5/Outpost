@@ -204,6 +204,7 @@ def holt_linear_predict(
     Pure mathematical time-series model (not machine learning).
     Falls back to baseline_predict when there are too few points.
     Returns total predicted demand over *horizon_hours*.
+    The Holt horizon is rounded to whole days and sub-day horizons return one day.
     """
     if len(series) < _MIN_SERIES_FOR_ES:
         return baseline_predict(series, horizon_hours)

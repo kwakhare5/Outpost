@@ -48,6 +48,3 @@ class AuditLog:
 
 
 audit_log = AuditLog()
-# Backward-compatibility aliases
-EventBus = AuditLog
-bus = audit_log

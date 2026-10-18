@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Order, OrderItem, Forecast
-from backend.events.audit import audit_log as bus
+from backend.events.audit import audit_log
 from backend.services.simulation.seed_data import PRODUCTS
 from backend.services.forecasting.models import (
     DemandPoint,
@@ -86,7 +86,7 @@ class ForecastingEngine:
                 await db.flush()
 
                 # Emit event for each forecast (persisted=True writes Event row)
-                await bus.publish(
+                await audit_log.publish(
                     db,
                     "FORECAST_UPDATED",
                     "forecast",

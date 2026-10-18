@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.core import (
     Store, Product, Customer, Supplier, Order, OrderItem,
     Inventory, Batch, Simulation, Scenario, Event,
+    Shipment, PurchaseOrder, ReceiptConfirmation,
 )
 from backend.models.enums import (
     StoreStatus, ProductCategory, OrderStatus, SupplierStatus,
@@ -159,7 +160,6 @@ class SimulationEngine:
         # 6. Ensure active batches exist at simulation present time
         await self._expire_batches(db, self.clock.now)
         await process_supplier_deliveries(db, self.clock.now, sim_id=self.simulation_id)
-        await evaluate_reorder_policy(db, self.clock.now, sim_id=self.simulation_id)
 
         # 7. Create Simulation record
         simulation = Simulation(
@@ -244,6 +244,9 @@ class SimulationEngine:
     async def reset(self, db: AsyncSession, simulation_id: uuid.UUID) -> dict[str, Any]:
         """Reset simulation: clear generated data, re-seed, restart clock."""
         # Delete in dependency order
+        await db.execute(delete(ReceiptConfirmation))
+        await db.execute(delete(Shipment))
+        await db.execute(delete(PurchaseOrder))
         await db.execute(delete(OrderItem))
         await db.execute(delete(Order))
         await db.execute(delete(Event))
@@ -270,6 +273,8 @@ class SimulationEngine:
 
         # Re-seed and regenerate
         simulation = await self.initialize(db)
+        clear_active_transfers(simulation.simulation_id)
+        clear_active_pos(simulation.simulation_id)
         return {
             'simulation_id': str(simulation.simulation_id),
             'status': 'reset_complete',
