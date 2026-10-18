@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -109,7 +109,7 @@ async def build_facts(
         hourly_demand = predicted_demand / 24.0
         hours_to_stockout = round(destination_stock / hourly_demand, 1)
     elif risk and (risk.risk_type == RiskType.STOCKOUT or str(risk.risk_type).lower() == "stockout") and risk.expected_time:
-        ref_time = rec.created_at or risk.created_at or datetime.utcnow()
+        ref_time = rec.created_at or risk.created_at or datetime.now(timezone.utc).replace(tzinfo=None)
         ref = ref_time.replace(tzinfo=None) if hasattr(ref_time, "tzinfo") and ref_time.tzinfo else ref_time
         exp = risk.expected_time.replace(tzinfo=None) if hasattr(risk.expected_time, "tzinfo") and risk.expected_time.tzinfo else risk.expected_time
         hours_to_stockout = round(max(0.0, (exp - ref).total_seconds() / 3600.0), 1)
@@ -148,7 +148,7 @@ async def build_facts(
                 .limit(1)
             )
             earliest_batch = batch_res.scalar_one_or_none()
-            ref_time = rec.created_at or (risk.created_at if risk else None) or datetime.utcnow()
+            ref_time = rec.created_at or (risk.created_at if risk else None) or datetime.now(timezone.utc).replace(tzinfo=None)
             ref = ref_time.replace(tzinfo=None) if hasattr(ref_time, "tzinfo") and ref_time.tzinfo else ref_time
             if earliest_batch and earliest_batch.expires_at:
                 exp = earliest_batch.expires_at.replace(tzinfo=None) if hasattr(earliest_batch.expires_at, "tzinfo") and earliest_batch.expires_at.tzinfo else earliest_batch.expires_at

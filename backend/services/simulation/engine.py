@@ -148,7 +148,7 @@ class SimulationEngine:
         state.policy = self.policy
 
         # 1. Calculate timeline
-        sim_start = datetime.now(timezone.utc) - timedelta(days=self.historical_days)
+        sim_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.historical_days)
         self.clock = SimulationClock(sim_start, self.seed)
 
         # 2. Seed stores, suppliers, products, customers
@@ -272,7 +272,7 @@ class SimulationEngine:
         if self.policy != "outpost":
             return {"risks": 0, "recommendations": 0, "executed": 0}
 
-        now = current_time or (self.clock.now if self.clock else datetime.now(timezone.utc))
+        now = current_time or (self.clock.now if self.clock else datetime.now(timezone.utc).replace(tzinfo=None))
         from backend.services.risk.engine import RiskEngine
         from backend.services.decision.engine import DecisionOrchestrator
         from backend.agents.execution.runner import ExecutionRunner

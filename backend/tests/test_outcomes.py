@@ -44,7 +44,7 @@ async def test_get_outcomes_returns_records(client: AsyncClient, db_session: Asy
         waste_units=0,
         waste_value_inr=0.0,
         notes="Verified delivery",
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db_session.add(rec)
     await db_session.commit()

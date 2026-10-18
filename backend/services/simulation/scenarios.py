@@ -286,8 +286,8 @@ async def apply_scenario(
             sim.configuration = cfg
             await db.flush()
 
-    now = engine.clock.now if (engine and getattr(engine, 'clock', None)) else datetime.now(timezone.utc)
-    now_naive = now.replace(tzinfo=None) if now.tzinfo else now
+    now = engine.clock.now if (engine and getattr(engine, 'clock', None)) else datetime.now(timezone.utc).replace(tzinfo=None)
+    now_naive = now if now.tzinfo is None else now.replace(tzinfo=None)
 
     if scenario_name == 'network_imbalance':
         # Drain Andheri milk to <= 4 units and inflate Bandra milk to >= 80 units
