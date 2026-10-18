@@ -148,6 +148,68 @@ async def get_active_simulation(
     }
 
 
+@router.get('/runs/latest')
+async def get_latest_runs(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retrieve latest RunRecord rows for baseline and outpost policies, deltas, and rupee assumption."""
+    from backend.models.core import RunRecord
+    from backend.services.metrics import RUPEE_PRICE_ASSUMPTION
+    from backend.services.simulation.replay import DETERMINISTIC_NOTE
+
+    stmt = select(RunRecord).order_by(RunRecord.created_at.desc())
+    res = await db.execute(stmt)
+    records = res.scalars().all()
+
+    baseline = next((r for r in records if r.policy == "baseline"), None)
+    outpost = next((r for r in records if r.policy == "outpost"), None)
+
+    if not baseline or not outpost:
+        return {
+            "has_runs": False,
+            "rupee_price_assumption": RUPEE_PRICE_ASSUMPTION,
+            "baseline": None,
+            "outpost": None,
+            "deltas": None,
+        }
+
+    deltas = {
+        "lost_sales_units_delta": outpost.lost_sales_units - baseline.lost_sales_units,
+        "waste_units_delta": outpost.waste_units - baseline.waste_units,
+        "rupee_loss_delta": round(outpost.rupee_loss - baseline.rupee_loss, 2),
+        "availability_pct_delta": round(outpost.availability_pct - baseline.availability_pct, 2),
+    }
+
+    return {
+        "has_runs": True,
+        "seed": outpost.seed,
+        "window_hours": outpost.window_hours,
+        "deterministic_note": DETERMINISTIC_NOTE,
+        "rupee_price_assumption": RUPEE_PRICE_ASSUMPTION,
+        "baseline": {
+            "run_id": str(baseline.run_id),
+            "simulation_id": str(baseline.simulation_id),
+            "policy": baseline.policy,
+            "lost_sales_units": baseline.lost_sales_units,
+            "waste_units": baseline.waste_units,
+            "rupee_loss": baseline.rupee_loss,
+            "availability_pct": baseline.availability_pct,
+            "created_at": baseline.created_at.isoformat() if baseline.created_at else None,
+        },
+        "outpost": {
+            "run_id": str(outpost.run_id),
+            "simulation_id": str(outpost.simulation_id),
+            "policy": outpost.policy,
+            "lost_sales_units": outpost.lost_sales_units,
+            "waste_units": outpost.waste_units,
+            "rupee_loss": outpost.rupee_loss,
+            "availability_pct": outpost.availability_pct,
+            "created_at": outpost.created_at.isoformat() if outpost.created_at else None,
+        },
+        "deltas": deltas,
+    }
+
+
 @router.get('/{simulation_id}')
 async def get_simulation(
     simulation_id: str,

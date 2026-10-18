@@ -83,6 +83,18 @@ export function DeliveriesScreen({
   const onTheRoadCount = transfers.filter((t) => t.status !== "Completed" && (t.currentStep || 4) < 5).length;
   const atDockCount = transfers.filter((t) => t.status !== "Completed" && (t.currentStep || 4) === 5).length;
 
+  if (!selectedTransfer || transfers.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-white border border-[#EAE6DF] rounded-2xl text-center space-y-3">
+        <Truck className="h-10 w-10 text-[#78716C]" />
+        <h3 className="text-sm font-bold text-[#1C1917]">No Shipments In Flight</h3>
+        <p className="text-xs text-[#57534E] max-w-md">
+          When lateral transfers are approved in the Stock Alerts queue or supplier reorders are placed, active in-transit vans will appear here.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* 1. Balanced 6 : 6 Grid (50% / 50%) */}

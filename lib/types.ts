@@ -1,8 +1,15 @@
+/**
+ * Outpost Domain & UI Types
+ *
+ * Implements Spec Sections 2, 3 (decisions 3, 10, 11), 5 and Phase 3 Step 3.
+ * Carries real backend UUIDs.
+ */
+
 export type HubStatusType = "critical" | "warning" | "surplus" | "normal";
 
 export interface StoreHub {
-  id: string;
-  code: string;
+  id: string; // Store UUID
+  code: string; // Store UUID
   name: string;
   locality: string;
   milkUnits: number;
@@ -16,11 +23,11 @@ export interface StoreHub {
 export type TransferStatus = "In Transit" | "Completed" | "Staged";
 
 export interface TransferRecord {
-  id: string;
+  id: string; // Shipment UUID
   sku: string;
-  fromCode: string;
+  fromCode: string; // Source Store UUID
   fromName: string;
-  toCode: string;
+  toCode: string; // Destination Store UUID
   toName: string;
   units: number;
   vanId: string;
@@ -30,6 +37,7 @@ export interface TransferRecord {
   currentStep: number; // 1 to 6
   etaPassed?: boolean;
   dispatchedAt?: string;
+  batchId?: string;
 }
 
 export type AlertUrgency = "urgent" | "moderate" | "low";
@@ -44,10 +52,10 @@ export type AlertStatus =
   | "Acknowledged";
 
 export interface AlertItem {
-  id: string;
+  id: string; // Recommendation UUID or Risk UUID
   productName: string;
   category: string;
-  storeCode: string;
+  storeCode: string; // Destination/Target Store UUID
   storeName: string;
   stockOnShelves: number;
   runsOutInHours: number;
@@ -56,7 +64,7 @@ export interface AlertItem {
   urgency: AlertUrgency;
   suggestedAction: string;
   status: AlertStatus;
-  sendingStoreCode: string;
+  sendingStoreCode: string; // Donor/Source Store UUID
   sendingStoreName: string;
   transferQuantity: number;
   senderStartingStock: number;
@@ -65,6 +73,8 @@ export interface AlertItem {
   moneySaved: number;
   simpleDescription: string;
   actionCategory: AlertActionCategory;
+  recommendationId?: string;
+  riskId?: string;
 }
 
 export type OutcomeStatus =
@@ -75,7 +85,7 @@ export type OutcomeStatus =
   | "Success";
 
 export interface OutcomeRecordItem {
-  id: string;
+  id: string; // Outcome UUID
   exceptionTitle: string;
   storeName: string;
   productName: string;
@@ -100,6 +110,37 @@ export interface HistorySummary {
   forecastMaeUnits: number;
   forecastWapePct: number;
   records: OutcomeRecordItem[];
+  disclaimer?: string;
+}
+
+export interface RunRecordData {
+  run_id: string;
+  simulation_id: string;
+  policy: string;
+  lost_sales_units: number;
+  waste_units: number;
+  rupee_loss: number;
+  availability_pct: number;
+  created_at?: string | null;
+}
+
+export interface RunRecordDeltas {
+  lost_sales_units_delta: number;
+  waste_units_delta: number;
+  rupee_loss_delta: number;
+  availability_pct_delta: number;
+}
+
+export interface ReplayComparison {
+  has_runs?: boolean;
+  seed?: number;
+  window_hours?: number;
+  deterministic_note?: string;
+  rupee_price_assumption: string;
+  baseline: RunRecordData | null;
+  outpost: RunRecordData | null;
+  deltas: RunRecordDeltas | null;
+  report?: string;
 }
 
 export interface LogEvent {

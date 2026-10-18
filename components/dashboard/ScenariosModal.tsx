@@ -5,7 +5,6 @@ import { Sliders, X, Cpu, ShieldCheck, Network } from "lucide-react";
 import { toast } from "sonner";
 import { StoreHub } from "@/lib/types";
 import { Badge, Button, SegmentedControl } from "@/components/ui";
-import { uploadStoresCsv, SAMPLE_DARKSTORE_CSV, SAMPLE_DEMAND_CSV } from "@/lib/api";
 
 interface ScenariosModalProps {
   isOpen: boolean;
@@ -29,9 +28,6 @@ export function ScenariosModal({
   const modalTab = userTab ?? initialTab;
   const [demandMultiplier, setDemandMultiplier] = useState<number>(2.5);
   const [delayHours, setDelayHours] = useState<number>(2);
-  const [csvType, setCsvType] = useState<"inventory" | "demand">("inventory");
-  const [csvContent, setCsvContent] = useState<string>("");
-  const [isUploading, setIsUploading] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -57,33 +53,6 @@ export function ScenariosModal({
     onClose();
   };
 
-  const handleCsvUpload = async () => {
-    if (!csvContent.trim()) {
-      toast.error("Please paste CSV data or load template first.");
-      return;
-    }
-
-    const header = csvContent.trim().split("\n")[0].toLowerCase();
-    if (csvType === "inventory" && !header.includes("store_id")) {
-      toast.error("Invalid Inventory CSV", { description: "Header row must include 'store_id'." });
-      return;
-    }
-    if (csvType === "demand" && !header.includes("requested_units")) {
-      toast.error("Invalid Demand CSV", { description: "Header row must include 'requested_units'." });
-      return;
-    }
-
-    setIsUploading(true);
-    const res = await uploadStoresCsv(csvContent);
-    setIsUploading(false);
-    if (res.success) {
-      toast.success(res.message);
-      onClose();
-    } else {
-      toast.error("CSV Ingestion Failed", { description: res.message });
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
       <div className="bg-white border border-[#EAE6DF] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-5">
@@ -98,7 +67,7 @@ export function ScenariosModal({
                 Simulation Controls &amp; Scenarios
               </h2>
               <p className="text-xs text-[#78716C]">
-                Configure operational scenarios or review system contracts
+                Configure operational scenarios or review system architecture
               </p>
             </div>
           </div>
@@ -169,6 +138,42 @@ export function ScenariosModal({
                     Adds highway transit delay to Bhiwandi regional warehouse trucks.
                   </p>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onTriggerScenario("expiry_wave");
+                    toast.warning("Scenario: Expiry Wave activated");
+                    onClose();
+                  }}
+                  className="p-3.5 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-[#D97706] transition-all text-left space-y-1.5 cursor-pointer shadow-2xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1C1917]">Expiry Wave</span>
+                    <Badge variant="warning" size="sm">Perishables</Badge>
+                  </div>
+                  <p className="text-xs text-[#57534E] leading-snug">
+                    Accelerates shelf life decay to trigger markdown and redistribution logic.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onTriggerScenario("stockout_cascade");
+                    toast.warning("Scenario: Stockout Cascade activated");
+                    onClose();
+                  }}
+                  className="p-3.5 rounded-xl border border-[#EAE6DF] bg-[#FAF8F5] hover:bg-white hover:border-[#DC2626] transition-all text-left space-y-1.5 cursor-pointer shadow-2xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1C1917]">Stockout Cascade</span>
+                    <Badge variant="urgent" size="sm">Cascade</Badge>
+                  </div>
+                  <p className="text-xs text-[#57534E] leading-snug">
+                    Simulates simultaneous depletion across donor and recipient dark stores.
+                  </p>
+                </button>
               </div>
             </div>
 
@@ -217,57 +222,6 @@ export function ScenariosModal({
                 </Button>
               </div>
             </div>
-
-            {/* Multi-Table CSV Ingestion */}
-            <div className="space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <h3 className="text-xs font-bold text-[#1C1917] uppercase tracking-wider">
-                  Multi-Table CSV Ingestion &amp; Replay
-                </h3>
-                <div className="flex items-center gap-2">
-                  <SegmentedControl
-                    items={[
-                      { id: "inventory", label: "Inventory" },
-                      { id: "demand", label: "Demand Stream" },
-                    ]}
-                    value={csvType}
-                    onChange={(val) => {
-                      const type = val as "inventory" | "demand";
-                      setCsvType(type);
-                      setCsvContent(type === "inventory" ? SAMPLE_DARKSTORE_CSV : SAMPLE_DEMAND_CSV);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setCsvContent(csvType === "inventory" ? SAMPLE_DARKSTORE_CSV : SAMPLE_DEMAND_CSV)}
-                    className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
-                  >
-                    Reset Template
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                value={csvContent}
-                onChange={(e) => setCsvContent(e.target.value)}
-                placeholder={csvType === "inventory" ? "Paste inventory CSV rows..." : "Paste demand history CSV rows..."}
-                className="w-full h-24 p-2.5 rounded-xl border border-[#EAE6DF] font-mono text-xs text-[#1C1917] bg-[#FAF8F5] focus:outline-hidden focus:ring-1 focus:ring-[#2563EB]"
-              />
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#78716C]">
-                <span className="font-mono">
-                  Schema: {csvType === "inventory" ? "store_id, store_name, locality, milk_inventory, capacity, burn" : "timestamp, store_id, sku, requested_units, fulfilled_units, stockout_flag"}
-                </span>
-                <Button
-                  variant="dark"
-                  size="sm"
-                  onClick={handleCsvUpload}
-                  disabled={isUploading || !csvContent.trim()}
-                >
-                  {isUploading ? "Uploading..." : `Replay ${csvType === "inventory" ? "Inventory" : "Demand"} CSV`}
-                </Button>
-              </div>
-            </div>
           </div>
         ) : (
           <div className="space-y-4 text-xs">
@@ -278,7 +232,7 @@ export function ScenariosModal({
                   <span>Deterministic Sizing</span>
                 </div>
                 <p className="text-[#57534E] leading-relaxed">
-                  Computes burn rates from active 10-minute demand orders and safety stock thresholds.
+                  Computes burn rates from active demand orders and safety stock thresholds.
                 </p>
               </div>
 
@@ -305,13 +259,22 @@ export function ScenariosModal({
 
             <div className="space-y-2 pt-2 border-t border-[#EAE6DF]">
               <span className="text-[#57534E] font-bold uppercase tracking-wider text-xs">
-                REST Telemetry Endpoints:
+                Active REST API Endpoints:
               </span>
               <div className="grid grid-cols-2 gap-2 font-mono text-xs text-[#44403C]">
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/simulations/active</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/simulations/{`{id}`}/advance</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/simulations/{`{id}`}/scenario</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/simulations/replay</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/simulations/runs/latest</div>
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/stores</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/stores/{`{id}`}/inventory</div>
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/risks</div>
-                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/recommendations</div>
-                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/agent/run</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/recommendations</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/recommendations/{`{id}`}/approve</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/recommendations/{`{id}`}/reject</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/agent/execute/{`{id}`}</div>
+                <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/shipments</div>
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">POST /api/shipments/{`{id}`}/confirm-receipt</div>
                 <div className="p-2 bg-[#FAF8F5] rounded-lg border border-[#EAE6DF]">GET /api/outcomes</div>
               </div>

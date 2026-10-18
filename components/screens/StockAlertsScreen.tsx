@@ -18,7 +18,6 @@ interface StockAlertsScreenProps {
   alerts: AlertItem[];
   onApproveTransfer: (alertId: string) => void;
   onRejectTransfer: (alertId: string) => void;
-  onUndoAlert?: (alertId: string) => void;
   onApplyDiscount: (alertId: string) => void;
   onAcknowledgeAlert: (alertId: string) => void;
   onNavigateTab: (tab: DeckTab) => void;
@@ -30,7 +29,6 @@ export function StockAlertsScreen({
   alerts,
   onApproveTransfer,
   onRejectTransfer,
-  onUndoAlert,
   onApplyDiscount,
   onAcknowledgeAlert,
   onNavigateTab,
@@ -51,8 +49,12 @@ export function StockAlertsScreen({
   });
 
   const selectedAlert = alerts.find((a) => a.id === selectedAlertId) || alerts[0];
-  const senderPostStock = Math.max(0, selectedAlert.senderStartingStock - selectedAlert.transferQuantity);
-  const senderSafeMargin = Math.max(0, senderPostStock - selectedAlert.senderLocalDemand);
+  const senderPostStock = selectedAlert
+    ? Math.max(0, selectedAlert.senderStartingStock - selectedAlert.transferQuantity)
+    : 0;
+  const senderSafeMargin = selectedAlert
+    ? Math.max(0, senderPostStock - selectedAlert.senderLocalDemand)
+    : 0;
 
   const getStatusBadge = (status: AlertItem["status"]) => {
     switch (status) {
@@ -98,6 +100,18 @@ export function StockAlertsScreen({
         return "Stock Alert";
     }
   };
+
+  if (!selectedAlert || alerts.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-white border border-[#EAE6DF] rounded-2xl text-center space-y-3">
+        <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+        <h3 className="text-sm font-bold text-[#1C1917]">No Stock Alerts Active</h3>
+        <p className="text-xs text-[#57534E] max-w-md">
+          All dark store nodes are operating within normal buffer parameters. As customer demand and batch expiration evolve, risk alerts will appear here for review.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full items-stretch">
@@ -304,20 +318,10 @@ export function StockAlertsScreen({
                     </div>
 
                     <div className="flex items-center gap-2 pt-1">
-                      {onUndoAlert && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="flex-1 justify-center"
-                          onClick={() => onUndoAlert(selectedAlert.id)}
-                        >
-                          Undo Approval
-                        </Button>
-                      )}
                       <Button
                         variant="dark"
                         size="sm"
-                        className="flex-1 justify-center"
+                        className="w-full justify-center"
                         onClick={() => onNavigateTab("inflight")}
                       >
                         Track in Live Deliveries
@@ -337,16 +341,6 @@ export function StockAlertsScreen({
                     <p className="text-xs text-[#57534E]">
                       Retained units at Bandra. Emergency purchase order queued for evening warehouse truck.
                     </p>
-                    {onUndoAlert && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="w-full justify-center mt-1"
-                        onClick={() => onUndoAlert(selectedAlert.id)}
-                      >
-                        Undo Rejection
-                      </Button>
-                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2.5">
@@ -419,16 +413,6 @@ export function StockAlertsScreen({
                       <Tag className="h-4 w-4 text-emerald-600" />
                       <span>20% Discount Active in App</span>
                     </div>
-                    {onUndoAlert && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="w-full justify-center"
-                        onClick={() => onUndoAlert(selectedAlert.id)}
-                      >
-                        Undo Discount
-                      </Button>
-                    )}
                   </div>
                 ) : (
                   <Button

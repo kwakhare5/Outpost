@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import type { DeckTab, StoreHub, TransferRecord, AlertItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { INITIAL_STORES, INITIAL_TRANSFERS, DEFAULT_ALERTS } from "@/lib/mockData";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { ScenariosModal } from "@/components/dashboard/ScenariosModal";
@@ -18,420 +17,248 @@ import {
   confirmShipmentReceipt,
   executeLiveTransfer,
   fetchLiveStores,
+  fetchStores,
+  fetchStoreInventory,
+  fetchRisks,
+  fetchRecommendations,
+  fetchShipments,
+  getActiveSimulation,
+  rejectRecommendation,
+  approveRecommendation,
+  resetLiveSimulation,
+  RawStoreInventory,
 } from "@/lib/api";
-
-function advanceClockString(currentTime: string, hoursToAdd: number = 1): string {
-  const match = currentTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return "09:15 AM";
-  let hour = parseInt(match[1], 10);
-  const minute = match[2];
-  let period = match[3].toUpperCase();
-
-  hour = hour + hoursToAdd;
-  if (hour >= 12) {
-    if (hour > 12) hour = hour - 12;
-    period = period === "AM" ? "PM" : "AM";
-  }
-  const formattedHour = hour.toString().padStart(2, "0");
-  return `${formattedHour}:${minute} ${period}`;
-}
+import {
+  formatClockTime,
+  mapStoresToHubs,
+  mapRecommendationsToAlerts,
+  mapShipmentsToTransfers,
+} from "@/lib/mapper";
 
 export default function OperationsDeckPage() {
-  const [stores, setStores] = useState<StoreHub[]>(INITIAL_STORES);
-  const [transfers, setTransfers] = useState<TransferRecord[]>(INITIAL_TRANSFERS);
-  const [alerts, setAlerts] = useState<AlertItem[]>(DEFAULT_ALERTS);
+  const [stores, setStores] = useState<StoreHub[]>([]);
+  const [transfers, setTransfers] = useState<TransferRecord[]>([]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [activeTab, setActiveTab] = useState<DeckTab>("queue");
   const [isSandboxModalOpen, setIsSandboxModalOpen] = useState(false);
   const [sandboxInitialTab, setSandboxInitialTab] = useState<"scenarios" | "architecture">("scenarios");
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
-  const [simTime, setSimTime] = useState<string>("08:15 AM");
+  const [simTime, setSimTime] = useState<string>("08:00 AM");
+  const [simulationId, setSimulationId] = useState<string | null>(null);
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>("");
   const [shrinkageUnits, setShrinkageUnits] = useState<number>(0);
 
-  // Poll backend health
-  useEffect(() => {
-    let mounted = true;
-    const probe = async () => {
-      const status = await checkBackendHealth();
-      if (mounted) {
-        setIsBackendOnline(status.online);
-        if (status.online) {
-          const liveStores = await fetchLiveStores();
-          if (mounted && liveStores && liveStores.length > 0) {
-            setStores(liveStores);
-          }
-        }
+  const refetchAll = useCallback(async () => {
+    try {
+      const health = await checkBackendHealth();
+      setIsBackendOnline(health.online);
+      if (!health.online) return;
+
+      const activeSim = await getActiveSimulation();
+      setSimulationId(activeSim.simulation_id);
+      if (activeSim.current_time) {
+        setSimTime(formatClockTime(activeSim.current_time));
       }
-    };
-    probe();
-    const interval = setInterval(probe, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
+
+      const [storesRaw, risksRaw, recsRaw, shipmentsRaw] = await Promise.all([
+        fetchStores().catch(() => []),
+        fetchRisks().catch(() => []),
+        fetchRecommendations().catch(() => []),
+        fetchShipments().catch(() => []),
+      ]);
+
+      const inventories = await Promise.all(
+        storesRaw.map((s) => fetchStoreInventory(s.store_id).catch(() => null))
+      );
+      const validInventories = inventories.filter(Boolean) as RawStoreInventory[];
+
+      const mappedStores = mapStoresToHubs(storesRaw, validInventories);
+      const mappedAlerts = mapRecommendationsToAlerts(recsRaw, risksRaw, storesRaw);
+      const mappedTransfers = mapShipmentsToTransfers(shipmentsRaw, activeSim.current_time);
+
+      setStores(mappedStores);
+      setAlerts(mappedAlerts);
+      setTransfers(mappedTransfers);
+    } catch (err: any) {
+      console.error("Refetch error:", err);
+    }
   }, []);
+
+  useEffect(() => {
+    refetchAll();
+    const interval = setInterval(refetchAll, 10000);
+    return () => clearInterval(interval);
+  }, [refetchAll]);
 
   const totalStock = stores.reduce((acc, s) => acc + s.milkUnits, 0);
 
   // 1. Approve Lateral Transfer (Level-2 Human Approval Gate)
   const handleApproveTransfer = async (alertId: string) => {
-    if (isBackendOnline) {
-      try {
-        await executeLiveTransfer("store-02", "store-01", 40);
-      } catch {
-        // Deterministic local fallback
-      }
+    const alert = alerts.find((a) => a.id === alertId);
+    try {
+      await executeLiveTransfer(alert?.recommendationId || alertId);
+      toast.success("Transfer Approved and Dispatched", {
+        description: "Units deducted from donor. Destination stock commits on dock receipt.",
+      });
+      await refetchAll();
+      setActiveTab("inflight");
+    } catch (err: any) {
+      toast.error("Transfer Approval Failed", {
+        description: err.message || "Failed to execute transfer recommendation",
+      });
     }
-
-    // Deduct 40 units strictly from Bandra (ST-02)
-    setStores((prev) =>
-      prev.map((s) => {
-        if (s.id === "store-02" || s.code === "ST-02") {
-          return {
-            ...s,
-            milkUnits: s.milkUnits - 40,
-            status: "Normal (Safe buffer retained: 72u)",
-            statusType: "normal",
-          };
-        }
-        if (s.id === "store-01" || s.code === "ST-01") {
-          return {
-            ...s,
-            status: "Van En Route (40u arriving ~10:15)",
-            statusType: "warning",
-          };
-        }
-        return s;
-      })
-    );
-
-    // Update alert status
-    setAlerts((prev) =>
-      prev.map((a) =>
-        a.id === alertId
-          ? {
-              ...a,
-              status: "Van on the Way" as const,
-              suggestedAction: "Van on the Way (Arriving 10:15 AM)",
-            }
-          : a
-      )
-    );
-
-    // Add van to in-flight transfers
-    setTransfers((prev) => [
-      {
-        id: "REC-4470-TR",
-        fromCode: "ST-02",
-        fromName: "Dark Store Bandra",
-        toCode: "ST-01",
-        toName: "Dark Store Andheri West",
-        units: 40,
-        vanId: "Van #MH-02 (Tata Ace)",
-        eta: "10:15 AM (35m via WEH)",
-        status: "In Transit",
-        corridor: "Bandra-Andheri Western Corridor",
-        batchId: "B-MUM-MILK-002",
-        sku: "Amul Taaza Milk 500ml",
-        currentStep: 4,
-        etaPassed: false,
-        dispatchedAt: simTime,
-      },
-      ...prev.filter((t) => t.id !== "REC-4470-TR"),
-    ]);
-
-    toast.success("Van Dispatched from Bandra Dark Store", {
-      description: "40 units deducted from Bandra. Destination stock unchanged until dock receipt.",
-    });
-
-    // Auto-navigate to in-flight deck to view live transit
-    setActiveTab("inflight");
   };
 
-  // 2. Reject Lateral Transfer (Domain Invariant 4: Routes to Bhiwandi RFC Emergency PO)
-  const handleRejectTransfer = (alertId: string) => {
-    setAlerts((prev) =>
-      prev.map((a) =>
-        a.id === alertId
-          ? {
-              ...a,
-              status: "Rejected" as const,
-              suggestedAction: "Emergency PO routed to Bhiwandi RFC (80u, +4h ETA)",
-            }
-          : a
-      )
-    );
-
-    // Create alternative emergency PO record
-    setTransfers((prev) => [
-      {
-        id: "PO-BHW-EMERGENCY",
-        fromCode: "RFC-BHW",
-        fromName: "Bhiwandi Regional Fulfillment Center",
-        toCode: "ST-01",
-        toName: "Dark Store Andheri West",
-        units: 80,
-        vanId: "Freight Truck #MH-04-RFC",
-        eta: "12:15 PM (+4h Highway Delivery)",
-        status: "In Transit",
-        corridor: "Thane-Bhiwandi Highway Express",
-        batchId: "B-RFC-MILK-990",
-        sku: "Amul Taaza Milk 500ml",
-        currentStep: 3,
-        etaPassed: false,
-        dispatchedAt: simTime,
-      },
-      ...prev.filter((t) => t.id !== "PO-BHW-EMERGENCY"),
-    ]);
-
-    toast.info("Transfer Rejected: Emergency PO Dispatched", {
-      description: "80 units ordered from Bhiwandi RFC (+Rs 450 transit surcharge). Track in In-Flight deck.",
-    });
-
-    // Auto-navigate to in-flight deck to view emergency order
-    setActiveTab("inflight");
+  // 2. Reject Lateral Transfer
+  const handleRejectTransfer = async (alertId: string) => {
+    const alert = alerts.find((a) => a.id === alertId);
+    try {
+      await rejectRecommendation(alert?.recommendationId || alertId);
+      toast.info("Transfer Recommendation Rejected", {
+        description: "Units retained at donor dark store.",
+      });
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Rejection Failed", {
+        description: err.message || "Failed to reject recommendation",
+      });
+    }
   };
 
-  // 3. Dynamic 20% Markdown on Perishables
-  const handleApplyDiscount = (alertId: string) => {
-    setAlerts((prev) =>
-      prev.map((a) =>
-        a.id === alertId
-          ? {
-              ...a,
-              status: "Discount Active" as const,
-              suggestedAction: "20% Flash Markdown Active in Customer App",
-              moneySaved: Math.round(a.moneySaved * 1.2),
-            }
-          : a
-      )
-    );
-
-    toast.success("20% Flash Markdown Published in App", {
-      description: "Price dropped on Dahi batches with <10h shelf life to accelerate velocity.",
-    });
+  // 3. Dynamic Markdown on Perishables
+  const handleApplyDiscount = async (alertId: string) => {
+    const alert = alerts.find((a) => a.id === alertId);
+    try {
+      await approveRecommendation(alert?.recommendationId || alertId);
+      toast.success("Discount Recommendation Approved", {
+        description: "20% markdown published in customer app.",
+      });
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Discount Approval Failed", {
+        description: err.message || "Failed to approve discount",
+      });
+    }
   };
 
   // 4. Acknowledge Alert & Routine Monitor
-  const handleAcknowledgeAlert = (alertId: string) => {
-    setAlerts((prev) =>
-      prev.map((a) =>
-        a.id === alertId
-          ? {
-              ...a,
-              status: "Acknowledged" as const,
-            }
-          : a
-      )
-    );
-
+  const handleAcknowledgeAlert = async (alertId: string) => {
     toast.info("Alert Acknowledged", {
-      description: "Exception acknowledged and queued for automated monitoring.",
+      description: "Exception queued for routine monitoring.",
     });
+    await refetchAll();
   };
 
-  // Reversible action handler for all alert types
-  const handleUndoAlert = (alertId: string) => {
-    const original = DEFAULT_ALERTS.find((a) => a.id === alertId);
-    if (!original) return;
-
-    if (alertId === "ALERT-01") {
-      setStores((prev) =>
-        prev.map((s) => {
-          if (s.id === "store-02" || s.code === "ST-02") {
-            return {
-              ...s,
-              milkUnits: 112,
-              status: "Surplus (Can spare 40 units)",
-              statusType: "surplus",
-            };
-          }
-          if (s.id === "store-01" || s.code === "ST-01") {
-            return {
-              ...s,
-              status: "Critical (Runs out in ~5.0h)",
-              statusType: "critical",
-            };
-          }
-          return s;
-        })
-      );
-      setTransfers((prev) =>
-        prev.filter((t) => t.id !== "REC-4470-TR" && t.id !== "PO-BHW-EMERGENCY")
-      );
+  // 5. Simulate Vehicle Dock Arrival (Advance simulation time toward ETA)
+  const handleSimulateArrival = async (shipmentId: string) => {
+    try {
+      await advanceSimulationTime(1, simulationId || undefined);
+      toast.info("Advanced Simulation Clock (+1h)", {
+        description: "Vehicle reached dock door. Count physical crates to restock.",
+      });
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Failed to advance time for arrival", {
+        description: err.message,
+      });
     }
-
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === alertId ? { ...original } : a))
-    );
-
-    toast.info("Action Reversed: Restored to Review Queue");
-  };
-
-  // 5. Simulate Vehicle Dock Arrival
-  const handleSimulateArrival = (shipmentId: string) => {
-    setTransfers((prev) =>
-      prev.map((t) =>
-        t.id === shipmentId
-          ? {
-              ...t,
-              currentStep: 5,
-              etaPassed: true,
-            }
-          : t
-      )
-    );
-
-    toast.info("Vehicle Arrived at Loading Dock Door", {
-      description: "Back-door receiving verification is now active. Verify physical units to restock.",
-    });
   };
 
   // 6. Dock Count Confirmation & Shelving
   const handleConfirmReceipt = async (
     shipmentId: string,
     receivedUnits: number,
-    notes?: string,
-    destCode?: string
+    notes?: string
   ) => {
-    if (isBackendOnline) {
-      try {
-        await confirmShipmentReceipt(shipmentId, receivedUnits, notes);
-      } catch {
-        // Fallback
+    try {
+      const res = await confirmShipmentReceipt(shipmentId, receivedUnits, notes);
+      if (res.discrepancy_units > 0) {
+        setShrinkageUnits((prev) => prev + res.discrepancy_units);
+        toast.warning(
+          `Count Confirmed with Discrepancy: ${res.received_units}/${res.sent_units} Shelved`,
+          {
+            description: `${res.discrepancy_units} units missing logged to transit loss ledger.`,
+          }
+        );
+      } else {
+        toast.success(`Count Confirmed: ${res.received_units} Units Shelved`, {
+          description: "Destination inventory credited. Conservation of mass verified.",
+        });
       }
-    }
-
-    const targetStoreCode = destCode || "ST-01";
-    const shipment = transfers.find((t) => t.id === shipmentId);
-    const manifestUnits = shipment ? shipment.units : receivedUnits;
-    const discrepancy = Math.max(0, manifestUnits - receivedUnits);
-
-    if (discrepancy > 0) {
-      setShrinkageUnits((prev) => prev + discrepancy);
-    }
-
-    // Shelf credit commits strictly now
-    setStores((prev) =>
-      prev.map((s) => {
-        if (s.id.toLowerCase() === targetStoreCode.toLowerCase() || s.code === targetStoreCode) {
-          return {
-            ...s,
-            milkUnits: s.milkUnits + receivedUnits,
-            status: "Restocked & Safe",
-            statusType: "normal",
-          };
-        }
-        return s;
-      })
-    );
-
-    setTransfers((prev) =>
-      prev.map((t) => (t.id === shipmentId ? { ...t, status: "Completed", currentStep: 6 } : t))
-    );
-
-    if (discrepancy > 0) {
-      toast.warning(`Count Confirmed with Discrepancy: ${receivedUnits}/${manifestUnits} Shelved`, {
-        description: `${discrepancy} units logged to transit shrinkage ledger. Conservation verified.`,
-      });
-    } else {
-      toast.success(`Count Confirmed: ${receivedUnits} Units Shelved`, {
-        description: `Store ${targetStoreCode} inventory credited. Conservation of mass verified.`,
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Receipt Confirmation Failed", {
+        description: err.message || "Failed to confirm shipment receipt",
       });
     }
   };
 
-  // 7. Simulation Controls
+  // 7. Advance Simulation Clock
   const handleAdvanceTime = async () => {
     try {
-      if (isBackendOnline) {
-        await advanceSimulationTime(1);
-      }
-      setSimTime((prev) => advanceClockString(prev, 1));
-      setStores((prev) =>
-        prev.map((s) => ({
-          ...s,
-          nextExpiryHours: Math.max(1, s.nextExpiryHours - 1),
-          activeOrders: Math.max(1, s.activeOrders + Math.floor(Math.random() * 3) - 1),
-        }))
-      );
-      // Advance active in-flight transits toward dock arrival (Section 12.1, 12.2)
-      setTransfers((prev) =>
-        prev.map((t) => {
-          if (t.status !== "Completed" && (t.currentStep === 4 || !t.currentStep || t.currentStep < 5)) {
-            return {
-              ...t,
-              currentStep: 5,
-              etaPassed: true,
-            };
-          }
-          return t;
-        })
-      );
+      await advanceSimulationTime(1, simulationId || undefined);
       toast.success("Clock Advanced: +1 Hour Elapsed", {
-        description: "Shelf life timers updated; in-flight vehicles advanced toward dock.",
+        description: "Batch shelf life timers updated; customer demand processed.",
       });
-    } catch {
-      setSimTime((prev) => advanceClockString(prev, 1));
-      setTransfers((prev) =>
-        prev.map((t) => {
-          if (t.status !== "Completed" && (t.currentStep === 4 || !t.currentStep || t.currentStep < 5)) {
-            return {
-              ...t,
-              currentStep: 5,
-              etaPassed: true,
-            };
-          }
-          return t;
-        })
-      );
-      toast.info("Time advanced (local simulation preview)");
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Advance Time Failed", {
+        description: err.message || "Could not advance simulation time",
+      });
     }
   };
 
-  const handleReset = () => {
-    setStores(INITIAL_STORES);
-    setTransfers(INITIAL_TRANSFERS);
-    setAlerts(DEFAULT_ALERTS);
-    setShrinkageUnits(0);
-    setSimTime("08:15 AM");
-    setSelectedStoreFilter("");
-    toast.info("Network Reset: Restored to standard 195-unit Mumbai 3-node equilibrium");
-  };
-
-  const handleTriggerScenario = (name: string) => {
-    if (isBackendOnline) {
-      applyLiveScenario(name).catch(() => {});
-    }
-
-    if (name === "demand_spike") {
-      setStores((prev) =>
-        prev.map((s) =>
-          s.id === "store-01" || s.code === "ST-01"
-            ? { ...s, activeOrders: 38, status: "Critical Surge Underway", statusType: "critical" }
-            : s
-        )
-      );
-      toast.warning("Scenario Activated: Andheri West Demand Surge (38 orders)");
-    } else if (name === "supplier_delay") {
-      toast.warning("Scenario Activated: Bhiwandi RFC Supply Delay (+4h ETA)");
-    } else {
-      handleReset();
+  // 8. Reset Simulation State
+  const handleReset = async () => {
+    try {
+      await resetLiveSimulation(simulationId || undefined);
+      setShrinkageUnits(0);
+      setSelectedStoreFilter("");
+      toast.info("Simulation Reset", {
+        description: "Restored to initial dark store network equilibrium.",
+      });
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Reset Failed", {
+        description: err.message || "Could not reset simulation state",
+      });
     }
   };
 
-  const handleApplyScenarioMultiplier = (demandMultiplier: number, delayHours: number) => {
-    if (demandMultiplier > 1) {
-      setStores((prev) =>
-        prev.map((s) => ({
-          ...s,
-          activeOrders: Math.round(s.activeOrders * demandMultiplier),
-        }))
-      );
-      toast.warning(`Demand Multiplier set to ${demandMultiplier}x`);
+  // 9. Operational Scenarios
+  const handleTriggerScenario = async (name: string) => {
+    try {
+      await applyLiveScenario(name, simulationId || undefined);
+      toast.warning(`Scenario Activated: ${name}`, {
+        description: "Network stress applied. Observe forecast shifts and risk alerts.",
+      });
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Failed to Apply Scenario", {
+        description: err.message || "Could not apply scenario to simulation",
+      });
     }
-    if (delayHours > 0) {
-      toast.warning(`Highway Delay: Warehouse Truck delayed by +${delayHours} hours`);
+  };
+
+  const handleApplyScenarioMultiplier = async (
+    demandMultiplier: number,
+    delayHours: number
+  ) => {
+    try {
+      if (demandMultiplier >= 2.0) {
+        await applyLiveScenario("demand_spike", simulationId || undefined);
+      }
+      if (delayHours > 0) {
+        await applyLiveScenario("supplier_delay", simulationId || undefined);
+      }
+      toast.warning("Parametric Shocks Applied", {
+        description: `Demand Multiplier: ${demandMultiplier}x | Supplier Delay: +${delayHours}h`,
+      });
+      await refetchAll();
+    } catch (err: any) {
+      toast.error("Failed to Apply Shock Multipliers", {
+        description: err.message,
+      });
     }
   };
 
@@ -481,7 +308,6 @@ export default function OperationsDeckPage() {
               alerts={alerts}
               onApproveTransfer={handleApproveTransfer}
               onRejectTransfer={handleRejectTransfer}
-              onUndoAlert={handleUndoAlert}
               onApplyDiscount={handleApplyDiscount}
               onAcknowledgeAlert={handleAcknowledgeAlert}
               onNavigateTab={(tab) => setActiveTab(tab)}
