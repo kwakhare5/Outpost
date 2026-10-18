@@ -29,7 +29,7 @@ export function Header({
   onSelectSandbox,
   onAdvanceTime,
   onResetDay,
-  simTime = "08:15 AM",
+  simTime = "--:--",
   isBackendOnline = false,
   shrinkageUnits = 0,
 }: HeaderProps) {
@@ -136,7 +136,7 @@ export function Header({
               <button
                 type="button"
                 onClick={onResetDay}
-                title="Reset simulation day to morning 08:15 baseline"
+                title="Reset simulation day to initial baseline"
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-[#57534E] hover:text-[#1C1917] hover:bg-white active:scale-95 transition-all cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3 text-[#78716C]" />

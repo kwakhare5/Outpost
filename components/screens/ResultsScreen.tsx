@@ -166,9 +166,20 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
       </section>
 
       {errorMsg && (
-        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{errorMsg}</span>
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={loadData}
+            className="shrink-0 font-bold"
+          >
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Retry
+          </Button>
         </div>
       )}
 
@@ -408,7 +419,7 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
             <MetricTile
               label="Stockouts Prevented"
               value={<span className="text-[#059669] font-mono text-lg">{outcomes.stockoutsPreventedCount}</span>}
-              subtitle="Zero shelf runouts"
+              subtitle={outcomes.totalLostSalesUnits === 0 ? "Zero shelf runouts" : undefined}
             />
             <MetricTile
               label="Forecast Error"

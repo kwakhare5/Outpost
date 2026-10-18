@@ -27,13 +27,13 @@ interface SidebarProps {
 export function Sidebar({
   activeTab,
   setActiveTab,
-  queueCount = 4,
-  inFlightCount = 3,
-  outcomesCount = 5,
+  queueCount,
+  inFlightCount,
+  outcomesCount,
   stores = [],
   selectedStoreCode,
   onSelectStore,
-  simTime = "08:15 AM",
+  simTime = "--:--",
 }: SidebarProps) {
   const navItems = [
     {
@@ -77,7 +77,7 @@ export function Sidebar({
               Outpost
             </span>
             <p className="text-xs text-[#57534E] font-medium mt-0.5">
-              Mumbai Network
+              Dark Store Network
             </p>
           </div>
         </div>
@@ -127,7 +127,7 @@ export function Sidebar({
           </nav>
         </div>
 
-        {/* Live Mumbai Stores Summary with Health Pills */}
+        {/* Dark Stores Summary with Health Pills */}
         <div>
           <div className="flex items-center justify-between px-3 mb-2">
             <p className="text-xs font-bold uppercase tracking-wider text-[#78716C]">

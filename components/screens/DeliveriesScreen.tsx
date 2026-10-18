@@ -185,8 +185,8 @@ export function DeliveriesScreen({
                           {t.fromName.replace("Dark Store ", "")} → {t.toName.replace("Dark Store ", "")}
                         </span>
                         <div className="flex items-center gap-2 font-mono">
-                          <span>{t.vanId}</span>
-                          <span>·</span>
+                          {t.vanId && <span>{t.vanId}</span>}
+                          {t.vanId && <span>·</span>}
                           <span>ETA: <strong className="text-[#1C1917]">{t.eta}</strong></span>
                         </div>
                       </div>
@@ -252,7 +252,7 @@ export function DeliveriesScreen({
                 Receive Delivery
               </h2>
               <p className="text-xs text-[#57534E]">
-                {selectedTransfer.toName} · Van {selectedTransfer.vanId}
+                {selectedTransfer.toName}{selectedTransfer.vanId ? ` · Van ${selectedTransfer.vanId}` : ""}
               </p>
             </div>
 
@@ -263,7 +263,7 @@ export function DeliveriesScreen({
                 <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-3">
                   <div className="flex items-center gap-2 font-bold text-blue-900 text-sm">
                     <Clock className="h-4 w-4 text-blue-700 shrink-0" />
-                    <span>Van is Traveling on Western Express Highway</span>
+                    <span>Van is in Transit</span>
                   </div>
                   <p className="text-xs text-blue-800 leading-relaxed">
                     Carrying <strong>{selectedTransfer.units} units of {selectedTransfer.sku}</strong>. The driver is currently in transit. Dock receiving unlocks once the driver reaches the bay door.

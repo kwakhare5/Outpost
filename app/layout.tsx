@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     "FastAPI",
     "Next.js",
     "deterministic simulation",
-    "Mumbai",
+    "inventory-optimization",
     "demand forecasting",
     "loss prevention",
   ],

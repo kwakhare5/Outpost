@@ -28,6 +28,7 @@ export interface RawStore {
   city?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  operating_status?: string | null;
 }
 
 export interface RawStoreInventoryItem {

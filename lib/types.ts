@@ -11,13 +11,13 @@ export interface StoreHub {
   id: string; // Store UUID
   code: string; // Store UUID
   name: string;
-  locality: string;
+  locality?: string;
   milkUnits: number;
-  capacity: number;
-  status: string;
-  statusType: HubStatusType;
-  nextExpiryHours: number;
-  activeOrders: number;
+  capacity?: number;
+  status?: string;
+  statusType?: HubStatusType;
+  nextExpiryHours?: number;
+  activeOrders?: number;
 }
 
 export type TransferStatus = "In Transit" | "Completed" | "Staged";
@@ -30,7 +30,7 @@ export interface TransferRecord {
   toCode: string; // Destination Store UUID
   toName: string;
   units: number;
-  vanId: string;
+  vanId?: string;
   eta: string;
   status: TransferStatus;
   corridor: string;

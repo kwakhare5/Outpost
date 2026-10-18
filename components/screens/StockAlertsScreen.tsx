@@ -9,13 +9,13 @@ import {
   Tag,
   XCircle,
 } from "lucide-react";
-import type { DeckTab, AlertItem } from "@/lib/types";
+import type { DeckTab, AlertItem, StoreHub } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge, Button } from "@/components/ui";
-import { DemandChart } from "./DemandChart";
 
 interface StockAlertsScreenProps {
   alerts: AlertItem[];
+  stores?: StoreHub[];
   onApproveTransfer: (alertId: string) => void;
   onRejectTransfer: (alertId: string) => void;
   onApplyDiscount: (alertId: string) => void;
@@ -27,6 +27,7 @@ interface StockAlertsScreenProps {
 
 export function StockAlertsScreen({
   alerts,
+  stores = [],
   onApproveTransfer,
   onRejectTransfer,
   onApplyDiscount,
@@ -38,7 +39,7 @@ export function StockAlertsScreen({
   const [localFilter, setLocalFilter] = useState<string>("ALL");
   const [urgentOnly, setUrgentOnly] = useState<boolean>(false);
   const activeStore = selectedStoreCode || localFilter;
-  const [selectedAlertId, setSelectedAlertId] = useState<string>("ALERT-01");
+  const [selectedAlertId, setSelectedAlertId] = useState<string>("");
 
   const filteredAlerts = alerts.filter((a) => {
     if (urgentOnly && a.urgency !== "urgent") return false;
@@ -48,7 +49,7 @@ export function StockAlertsScreen({
     return true;
   });
 
-  const selectedAlert = alerts.find((a) => a.id === selectedAlertId) || alerts[0];
+  const selectedAlert = alerts.find((a) => a.id === selectedAlertId) || filteredAlerts[0] || alerts[0];
   const senderPostStock = selectedAlert && selectedAlert.senderStartingStock !== undefined
     ? Math.max(0, selectedAlert.senderStartingStock - selectedAlert.transferQuantity)
     : 0;
@@ -80,7 +81,7 @@ export function StockAlertsScreen({
       return `Transfer ${item.transferQuantity}u from ${item.sendingStoreName.replace("Dark Store ", "")}`;
     }
     if (item.actionCategory === "DISCOUNT") {
-      return "Apply 20% in-app price markdown";
+      return "Apply in-app price markdown";
     }
     if (item.actionCategory === "PO_WAIT") {
       return "Track incoming warehouse delivery";
@@ -140,10 +141,12 @@ export function StockAlertsScreen({
                 }}
                 className="h-8 text-xs font-semibold bg-[#FAF8F5] border border-[#EAE6DF] rounded-lg px-2.5 py-1 text-[#1C1917] focus:outline-hidden focus:ring-2 focus:ring-[#2563EB]/20 cursor-pointer"
               >
-                <option value="ALL">All Stores (3)</option>
-                <option value="ST-01">Andheri West</option>
-                <option value="ST-02">Bandra</option>
-                <option value="ST-03">Powai</option>
+                <option value="ALL">All Stores ({stores.length})</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name.replace("Dark Store ", "")}
+                  </option>
+                ))}
               </select>
 
               <button
@@ -200,7 +203,7 @@ export function StockAlertsScreen({
                       )}
                       {item.stockOnShelves !== undefined && item.runsOutInHours !== undefined && <span>·</span>}
                       {item.runsOutInHours !== undefined && (
-                        <span>Runs out: <strong className="text-[#C2410C]">~{item.runsOutInHours}h</strong></span>
+                        <span>Runs out: <strong className="text-[#C2410C]">~{item.runsOutInHours.toFixed(1)}h</strong></span>
                       )}
                     </div>
                   </div>
@@ -258,7 +261,7 @@ export function StockAlertsScreen({
               {selectedAlert.runsOutInHours !== undefined && (
                 <div>
                   <span className="text-xs text-[#57534E] font-bold block">Runs Out In</span>
-                  <span className="text-lg font-bold text-[#C2410C] font-mono">~{selectedAlert.runsOutInHours} hrs</span>
+                  <span className="text-lg font-bold text-[#C2410C] font-mono">~{selectedAlert.runsOutInHours.toFixed(1)} hrs</span>
                 </div>
               )}
             </div>
@@ -289,7 +292,7 @@ export function StockAlertsScreen({
                   <span className="text-rose-700 font-bold shrink-0">✕ If You Deny:</span>
                   <span className="text-[#1C1917]">
                     {selectedAlert.runsOutInHours !== undefined
-                      ? `Shelves face stockout in ~${selectedAlert.runsOutInHours}h. `
+                      ? `Shelves face stockout in ~${selectedAlert.runsOutInHours.toFixed(1)}h. `
                       : "Stockout risk remains unmitigated. "}
                     {selectedAlert.senderStartingStock !== undefined
                       ? `${selectedAlert.sendingStoreName.replace("Dark Store ", "")} keeps all ${selectedAlert.senderStartingStock} units.`
@@ -372,7 +375,7 @@ export function StockAlertsScreen({
                 <div>
                   <span className="text-xs font-bold text-amber-900 uppercase tracking-wider block">Recommended Decision</span>
                   <p className="text-sm font-bold text-amber-950 mt-0.5">
-                    Apply 20% in-app price markdown to clear expiring stock
+                    Apply in-app price markdown to clear expiring stock
                   </p>
                 </div>
                 <Badge variant="warning" size="sm">DISCOUNT</Badge>
@@ -399,7 +402,7 @@ export function StockAlertsScreen({
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-center">
                     <div className="flex items-center justify-center gap-1.5 text-emerald-800 font-bold text-xs">
                       <Tag className="h-4 w-4 text-emerald-600" />
-                      <span>20% Discount Active in App</span>
+                      <span>Discount Active in App</span>
                     </div>
                   </div>
                 ) : (
@@ -409,7 +412,7 @@ export function StockAlertsScreen({
                     className="w-full justify-center text-sm font-bold active:scale-95"
                     onClick={() => onApplyDiscount(selectedAlert.id)}
                   >
-                    Apply 20% In-App Discount
+                    Apply In-App Markdown
                   </Button>
                 )}
               </div>
@@ -431,17 +434,6 @@ export function StockAlertsScreen({
                 </Button>
               )}
             </div>
-          )}
-
-          {/* Dynamic Hourly Demand Timeline & Depletion Chart (Supporting Evidence Below Decision) */}
-          {(selectedAlert.stockOnShelves !== undefined || selectedAlert.orderSpeedPerHour !== undefined) && (
-            <DemandChart
-              currentStock={selectedAlert.stockOnShelves}
-              burnRate={selectedAlert.orderSpeedPerHour}
-              productName={selectedAlert.productName}
-              runsOutAtTime={selectedAlert.runsOutAtTime}
-              runsOutInHours={selectedAlert.runsOutInHours}
-            />
           )}
 
           {/* Donor Balance Proof & Other Options Considered */}

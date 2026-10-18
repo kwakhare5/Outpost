@@ -117,7 +117,7 @@ export function ScenariosModal({
                     <Badge variant="urgent" size="sm">2.5x</Badge>
                   </div>
                   <p className="text-xs text-[#57534E] leading-snug">
-                    Simulates evening customer order surge across Mumbai dark stores.
+                    Simulates evening customer order surge across network dark stores.
                   </p>
                 </button>
 

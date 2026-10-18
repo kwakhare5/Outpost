@@ -1,9 +1,8 @@
 /**
  * Outpost API -> UI Mapper
  *
- * Implements Phase 3 & 3b:
- * Converts real backend API responses into UI props carrying real UUIDs.
- * Strictly zero invented numbers or hardcoded placeholders.
+ * Maps real backend API responses to presentation props carrying real UUIDs.
+ * Real API data only; unmeasured or missing fields are omitted.
  */
 
 import {
@@ -55,30 +54,19 @@ export function mapStoresToHubs(
     const minExpiryHours =
       storeInv?.batches && storeInv.batches.length > 0
         ? Math.min(...storeInv.batches.map((b) => b.hours_remaining))
-        : 36;
-
-    let statusType: StoreHub["statusType"] = "normal";
-    let statusText = "Normal";
-
-    if (totalUnits <= 30) {
-      statusType = "critical";
-      statusText = `Critical (${totalUnits} units remaining)`;
-    } else if (totalUnits >= 100) {
-      statusType = "surplus";
-      statusText = `Surplus (Can spare units)`;
-    }
+        : undefined;
 
     return {
       id: s.store_id,
       code: s.store_id,
       name: s.name,
-      locality: s.address || s.city || "Mumbai Dark Store",
+      locality: s.address || s.city || undefined,
       milkUnits: totalUnits,
-      capacity: 150,
-      status: statusText,
-      statusType,
-      nextExpiryHours: Math.round(minExpiryHours),
-      activeOrders: Math.max(1, Math.round(totalUnits * 0.1)),
+      capacity: undefined,
+      status: s.operating_status || undefined,
+      statusType: undefined,
+      nextExpiryHours: minExpiryHours !== undefined ? Math.round(minExpiryHours) : undefined,
+      activeOrders: undefined,
     };
   });
 }
@@ -95,7 +83,9 @@ export function mapRecommendationsToAlerts(
   const invMap = new Map(inventories.map((i) => [i.store_id, i]));
   const mappedRecRiskIds = new Set<string>();
 
-  const alerts: AlertItem[] = recs.map((rec) => {
+  const alerts: AlertItem[] = [];
+
+  for (const rec of recs) {
     mappedRecRiskIds.add(rec.risk_id);
     const risk = riskMap.get(rec.risk_id);
 
@@ -105,19 +95,25 @@ export function mapRecommendationsToAlerts(
     const destStore = storeMap.get(destStoreId);
     const srcStore = storeMap.get(srcStoreId);
 
-    const destName = destStore ? destStore.name : "Destination Dark Store";
-    const srcName = srcStore ? srcStore.name : "Regional Fulfillment Center";
+    const destName = destStore ? destStore.name : "";
+    const srcName = srcStore ? srcStore.name : "";
 
     // Lookup real product name and stock on shelves from destination store inventory
     const destInv = invMap.get(destStoreId);
     const targetProdId = risk?.product_id;
-    const destProdItem = targetProdId && destInv
-      ? destInv.inventory.find((i) => i.product_id === targetProdId)
-      : destInv?.inventory[0];
+    if (!targetProdId || !destInv) {
+      continue;
+    }
 
-    const productName = destProdItem?.product_name || "Perishable Stock";
-    const category = destProdItem?.category || "Inventory";
-    const stockOnShelves = destProdItem ? destProdItem.quantity : undefined;
+    const destProdItem = destInv.inventory.find((i) => i.product_id === targetProdId);
+    if (!destProdItem) {
+      // When product is not found in destination inventory, skip that alert per rule
+      continue;
+    }
+
+    const productName = destProdItem.product_name;
+    const category = destProdItem.category;
+    const stockOnShelves = destProdItem.quantity;
 
     // Lookup donor store stock if available
     const srcInv = invMap.get(srcStoreId);
@@ -145,9 +141,9 @@ export function mapRecommendationsToAlerts(
 
     let suggestedAction = "Monitor Inventory";
     if (rec.action_type === "TRANSFER") {
-      suggestedAction = `Transfer ${rec.quantity} units from ${srcName}`;
+      suggestedAction = srcName ? `Transfer ${rec.quantity} units from ${srcName}` : `Transfer ${rec.quantity} units`;
     } else if (rec.action_type === "DISCOUNT") {
-      suggestedAction = "Apply 20% Markdown on Perishables";
+      suggestedAction = "Apply Markdown on Perishables";
     } else if (rec.action_type === "REORDER") {
       suggestedAction = `Emergency Reorder (${rec.quantity} units)`;
     }
@@ -166,7 +162,7 @@ export function mapRecommendationsToAlerts(
       urgency = "low";
     }
 
-    return {
+    alerts.push({
       id: rec.recommendation_id,
       recommendationId: rec.recommendation_id,
       riskId: rec.risk_id,
@@ -192,17 +188,18 @@ export function mapRecommendationsToAlerts(
           : "Stockout projected by forecasting engine. Human approval required.",
       actionCategory: actionCat,
       alternatives: rec.alternatives && rec.alternatives.length > 0 ? rec.alternatives : undefined,
-    };
-  });
+    });
+  }
 
   // Also include active un-recommended risks as "Watching" alerts
-  risks.forEach((r) => {
+  for (const r of risks) {
     if (!mappedRecRiskIds.has(r.risk_id)) {
       const store = storeMap.get(r.store_id);
       const storeInv = invMap.get(r.store_id);
-      const prodItem = storeInv
-        ? storeInv.inventory.find((i) => i.product_id === r.product_id)
-        : undefined;
+      if (!storeInv) continue;
+
+      const prodItem = storeInv.inventory.find((i) => i.product_id === r.product_id);
+      if (!prodItem) continue;
 
       let runsOutInHours: number | undefined = undefined;
       let runsOutAtTime: string | undefined = undefined;
@@ -218,11 +215,11 @@ export function mapRecommendationsToAlerts(
       alerts.push({
         id: r.risk_id,
         riskId: r.risk_id,
-        productName: prodItem?.product_name || "Perishable Stock",
-        category: prodItem?.category || "Inventory",
+        productName: prodItem.product_name,
+        category: prodItem.category,
         storeCode: r.store_id,
-        storeName: store ? store.name : "Dark Store",
-        stockOnShelves: prodItem ? prodItem.quantity : undefined,
+        storeName: store ? store.name : "",
+        stockOnShelves: prodItem.quantity,
         runsOutInHours,
         runsOutAtTime,
         orderSpeedPerHour: undefined,
@@ -230,15 +227,13 @@ export function mapRecommendationsToAlerts(
         suggestedAction: "Analyzing inventory rebalancing alternatives...",
         status: "Watching",
         sendingStoreCode: "",
-        sendingStoreName: "None",
+        sendingStoreName: "",
         transferQuantity: 0,
-        senderStartingStock: undefined,
-        senderLocalDemand: undefined,
-        simpleDescription: `Active risk type: ${r.risk_type} (${r.severity} severity).`,
+        simpleDescription: `Risk detected: ${r.risk_type}. Probability: ${(r.probability * 100).toFixed(0)}%.`,
         actionCategory: "MONITOR",
       });
     }
-  });
+  }
 
   return alerts;
 }
@@ -268,14 +263,17 @@ export function mapShipmentsToTransfers(
       id: s.shipment_id,
       sku: s.product_name || "Transfer Item",
       fromCode: s.source_store_id,
-      fromName: s.source_store_name || "Source Store",
+      fromName: s.source_store_name || "",
       toCode: s.destination_store_id,
-      toName: s.destination_store_name || "Destination Store",
+      toName: s.destination_store_name || "",
       units: s.quantity,
-      vanId: s.van_id || "VAN-MUM-01",
+      vanId: s.van_id || undefined,
       eta: formatClockTime(s.arrival_eta),
       status,
-      corridor: `${s.source_store_name} -> ${s.destination_store_name}`,
+      corridor:
+        s.source_store_name && s.destination_store_name
+          ? `${s.source_store_name} -> ${s.destination_store_name}`
+          : "",
       currentStep,
       etaPassed: isAtDock || isCompleted,
       dispatchedAt: formatClockTime(s.dispatched_at),

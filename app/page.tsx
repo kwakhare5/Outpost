@@ -45,7 +45,7 @@ export default function OperationsDeckPage() {
   const [isSandboxModalOpen, setIsSandboxModalOpen] = useState(false);
   const [sandboxInitialTab, setSandboxInitialTab] = useState<"scenarios" | "architecture">("scenarios");
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
-  const [simTime, setSimTime] = useState<string>("08:00 AM");
+  const [simTime, setSimTime] = useState<string>("");
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>("");
   const [shrinkageUnits, setShrinkageUnits] = useState<number>(0);
@@ -145,7 +145,7 @@ export default function OperationsDeckPage() {
     try {
       await approveRecommendation(alert?.recommendationId || alertId);
       toast.success("Discount Recommendation Approved", {
-        description: "20% markdown published in customer app.",
+        description: "Markdown published in customer app.",
       });
       await refetchAll();
     } catch (err: any) {
@@ -284,7 +284,6 @@ export default function OperationsDeckPage() {
         setActiveTab={setActiveTab}
         queueCount={alerts.filter((a) => a.status === "Needs Your Approval").length}
         inFlightCount={transfers.filter((t) => t.status !== "Completed").length}
-        outcomesCount={5}
         stores={stores}
         selectedStoreCode={selectedStoreFilter}
         onSelectStore={(code) => setSelectedStoreFilter(code)}
@@ -346,6 +345,7 @@ export default function OperationsDeckPage() {
               {activeTab === "queue" && (
                 <StockAlertsScreen
                   alerts={alerts}
+                  stores={stores}
                   onApproveTransfer={handleApproveTransfer}
                   onRejectTransfer={handleRejectTransfer}
                   onApplyDiscount={handleApplyDiscount}
