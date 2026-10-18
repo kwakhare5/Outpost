@@ -45,10 +45,10 @@ async def build_facts(
     if rec.risk_id:
         risk = await db.get(Risk, rec.risk_id)
 
-    risk_probability = float(risk.probability) if risk and risk.probability is not None else 0.0
+    risk_probability = float(risk.probability) if risk and risk.probability is not None else None
     risk_severity = (
         risk.severity.value if risk and hasattr(risk.severity, "value")
-        else (str(risk.severity).lower() if risk and risk.severity is not None else "none")
+        else (str(risk.severity).lower() if risk and risk.severity is not None else None)
     )
     product_id = risk.product_id if risk else None
     risk_store_id = risk.store_id if risk else None
@@ -75,7 +75,7 @@ async def build_facts(
     source_store_name = src_store.name if src_store else None
 
     # 4. Destination Stock
-    destination_stock = 0
+    destination_stock: int | None = None
     if dest_store_id and product_id:
         inv_res = await db.execute(
             select(Inventory).where(
@@ -105,7 +105,7 @@ async def build_facts(
 
     # 6. Hours to Stockout
     hours_to_stockout: float | None = None
-    if predicted_demand is not None and predicted_demand > 0:
+    if destination_stock is not None and predicted_demand is not None and predicted_demand > 0:
         hourly_demand = predicted_demand / 24.0
         hours_to_stockout = round(destination_stock / hourly_demand, 1)
     elif risk and (risk.risk_type == RiskType.STOCKOUT or str(risk.risk_type).lower() == "stockout") and risk.expected_time:
@@ -158,6 +158,7 @@ async def build_facts(
                 batch_expiry_hours = round(max(0.0, (exp - ref).total_seconds() / 3600.0), 1)
 
     return {
+        "recommendation_id": str(rec.recommendation_id),
         "action_type": action_type,
         "quantity": quantity,
         "product_name": product_name,

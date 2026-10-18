@@ -15,23 +15,30 @@ def generate_fallback(facts: dict[str, Any]) -> str:
     dest_store = facts.get("destination_store_name") or "destination store"
     src_store = facts.get("source_store_name") or "source store"
     hours_to_stockout = facts.get("hours_to_stockout")
-    risk_prob = facts.get("risk_probability") or 0.0
+    risk_prob = facts.get("risk_probability")
     batch_expiry = facts.get("batch_expiry_hours")
     dist = facts.get("distance_km")
     lead_time = facts.get("supplier_lead_time_hours")
 
-    # What happened
-    if hours_to_stockout is not None and risk_prob >= 0.25:
+    # What happened: leave out sentence when risk facts are missing
+    what_happened: str | None = None
+    if hours_to_stockout is not None and risk_prob is not None and risk_prob >= 0.25:
         what_happened = (
             f"Projected demand depletes inventory in {hours_to_stockout:.1f}h "
             f"(stockout probability {risk_prob:.0%})"
         )
-    elif batch_expiry is not None and risk_prob >= 0.25:
+    elif hours_to_stockout is not None:
+        what_happened = f"Projected demand depletes inventory in {hours_to_stockout:.1f}h"
+    elif batch_expiry is not None and risk_prob is not None and risk_prob >= 0.25:
         what_happened = (
             f"Perishable inventory has batches expiring in {batch_expiry:.1f}h "
             f"(spoilage probability {risk_prob:.0%})"
         )
-    else:
+    elif batch_expiry is not None:
+        what_happened = f"Perishable inventory has batches expiring in {batch_expiry:.1f}h"
+    elif risk_prob is not None and risk_prob >= 0.25:
+        what_happened = f"Elevated risk detected (stockout probability {risk_prob:.0%})"
+    elif risk_prob is not None:
         what_happened = "Inventory levels and batch lifecycles are healthy within safety thresholds"
 
     # Why this action
@@ -54,4 +61,6 @@ def generate_fallback(facts: dict[str, Any]) -> str:
     else:
         why_this_action = "Holding status quo avoids unnecessary transport friction and procurement cost."
 
-    return f"{what_happened}. {why_this_action}"
+    if what_happened:
+        return f"{what_happened}. {why_this_action}"
+    return why_this_action
