@@ -151,7 +151,7 @@ export function Header({
           <button
             type="button"
             onClick={onSelectSandbox}
-            title="Open Scenarios & CSV Ingest"
+            title="Open Scenarios"
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-[#1C1917] hover:bg-white active:scale-95 transition-all cursor-pointer"
           >
             <Sliders className="w-3.5 h-3.5 text-[#57534E]" />

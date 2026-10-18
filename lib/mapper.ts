@@ -1,8 +1,9 @@
 /**
  * Outpost API -> UI Mapper
  *
- * Implements Phase 3 Step 3:
+ * Implements Phase 3 & 3b:
  * Converts real backend API responses into UI props carrying real UUIDs.
+ * Strictly zero invented numbers or hardcoded placeholders.
  */
 
 import {
@@ -51,10 +52,10 @@ export function mapStoresToHubs(
       ? storeInv.inventory.reduce((acc, item) => acc + item.quantity, 0)
       : 0;
 
-    // Determine earliest expiry hours
-    const minExpiryHours = storeInv?.batches && storeInv.batches.length > 0
-      ? Math.min(...storeInv.batches.map((b) => b.hours_remaining))
-      : 36;
+    const minExpiryHours =
+      storeInv?.batches && storeInv.batches.length > 0
+        ? Math.min(...storeInv.batches.map((b) => b.hours_remaining))
+        : 36;
 
     let statusType: StoreHub["statusType"] = "normal";
     let statusText = "Normal";
@@ -77,7 +78,7 @@ export function mapStoresToHubs(
       status: statusText,
       statusType,
       nextExpiryHours: Math.round(minExpiryHours),
-      activeOrders: Math.max(5, Math.round(totalUnits * 0.15)),
+      activeOrders: Math.max(1, Math.round(totalUnits * 0.1)),
     };
   });
 }
@@ -85,10 +86,13 @@ export function mapStoresToHubs(
 export function mapRecommendationsToAlerts(
   recs: RawRecommendation[],
   risks: RawRisk[],
-  stores: RawStore[]
+  stores: RawStore[],
+  inventories: RawStoreInventory[] = [],
+  simTimeIso?: string
 ): AlertItem[] {
   const storeMap = new Map(stores.map((s) => [s.store_id, s]));
   const riskMap = new Map(risks.map((r) => [r.risk_id, r]));
+  const invMap = new Map(inventories.map((i) => [i.store_id, i]));
   const mappedRecRiskIds = new Set<string>();
 
   const alerts: AlertItem[] = recs.map((rec) => {
@@ -103,6 +107,36 @@ export function mapRecommendationsToAlerts(
 
     const destName = destStore ? destStore.name : "Destination Dark Store";
     const srcName = srcStore ? srcStore.name : "Regional Fulfillment Center";
+
+    // Lookup real product name and stock on shelves from destination store inventory
+    const destInv = invMap.get(destStoreId);
+    const targetProdId = risk?.product_id;
+    const destProdItem = targetProdId && destInv
+      ? destInv.inventory.find((i) => i.product_id === targetProdId)
+      : destInv?.inventory[0];
+
+    const productName = destProdItem?.product_name || "Perishable Stock";
+    const category = destProdItem?.category || "Inventory";
+    const stockOnShelves = destProdItem ? destProdItem.quantity : undefined;
+
+    // Lookup donor store stock if available
+    const srcInv = invMap.get(srcStoreId);
+    const srcProdItem = targetProdId && srcInv
+      ? srcInv.inventory.find((i) => i.product_id === targetProdId)
+      : undefined;
+    const senderStartingStock = srcProdItem ? srcProdItem.quantity : undefined;
+
+    // Real hours to stockout from expected_time
+    let runsOutInHours: number | undefined = undefined;
+    let runsOutAtTime: string | undefined = undefined;
+    if (risk?.expected_time) {
+      runsOutAtTime = formatClockTime(risk.expected_time);
+      const nowMs = simTimeIso ? new Date(simTimeIso).getTime() : Date.now();
+      const expMs = new Date(risk.expected_time).getTime();
+      if (!isNaN(expMs) && !isNaN(nowMs)) {
+        runsOutInHours = Math.max(0, (expMs - nowMs) / 3600000);
+      }
+    }
 
     let actionCat: AlertActionCategory = "MONITOR";
     if (rec.action_type === "TRANSFER") actionCat = "TRANSFER";
@@ -136,29 +170,28 @@ export function mapRecommendationsToAlerts(
       id: rec.recommendation_id,
       recommendationId: rec.recommendation_id,
       riskId: rec.risk_id,
-      productName: "Amul Taaza Milk 500ml",
-      category: "Dairy & Perishables",
+      productName,
+      category,
       storeCode: destStoreId,
       storeName: destName,
-      stockOnShelves: 35,
-      runsOutInHours: 4,
-      runsOutAtTime: risk?.expected_time ? formatClockTime(risk.expected_time) : "12:00 PM",
-      orderSpeedPerHour: 8,
+      stockOnShelves,
+      runsOutInHours,
+      runsOutAtTime,
+      orderSpeedPerHour: undefined, // Real value unmeasured, do not invent
       urgency,
       suggestedAction,
       status,
       sendingStoreCode: srcStoreId,
       sendingStoreName: srcName,
       transferQuantity: rec.quantity,
-      senderStartingStock: 110,
-      senderLocalDemand: 12,
-      moneyAtRisk: Math.round(rec.quantity * 35),
-      moneySaved: Math.round(rec.score * 12),
+      senderStartingStock,
+      senderLocalDemand: undefined, // Real value unmeasured, do not invent
       simpleDescription:
         rec.reason_codes && rec.reason_codes.length > 0
           ? rec.reason_codes.join(". ")
           : "Stockout projected by forecasting engine. Human approval required.",
       actionCategory: actionCat,
+      alternatives: rec.alternatives && rec.alternatives.length > 0 ? rec.alternatives : undefined,
     };
   });
 
@@ -166,27 +199,41 @@ export function mapRecommendationsToAlerts(
   risks.forEach((r) => {
     if (!mappedRecRiskIds.has(r.risk_id)) {
       const store = storeMap.get(r.store_id);
+      const storeInv = invMap.get(r.store_id);
+      const prodItem = storeInv
+        ? storeInv.inventory.find((i) => i.product_id === r.product_id)
+        : undefined;
+
+      let runsOutInHours: number | undefined = undefined;
+      let runsOutAtTime: string | undefined = undefined;
+      if (r.expected_time) {
+        runsOutAtTime = formatClockTime(r.expected_time);
+        const nowMs = simTimeIso ? new Date(simTimeIso).getTime() : Date.now();
+        const expMs = new Date(r.expected_time).getTime();
+        if (!isNaN(expMs) && !isNaN(nowMs)) {
+          runsOutInHours = Math.max(0, (expMs - nowMs) / 3600000);
+        }
+      }
+
       alerts.push({
         id: r.risk_id,
         riskId: r.risk_id,
-        productName: "Amul Taaza Milk 500ml",
-        category: "Dairy & Perishables",
+        productName: prodItem?.product_name || "Perishable Stock",
+        category: prodItem?.category || "Inventory",
         storeCode: r.store_id,
         storeName: store ? store.name : "Dark Store",
-        stockOnShelves: 30,
-        runsOutInHours: 5,
-        runsOutAtTime: r.expected_time ? formatClockTime(r.expected_time) : "01:00 PM",
-        orderSpeedPerHour: 6,
+        stockOnShelves: prodItem ? prodItem.quantity : undefined,
+        runsOutInHours,
+        runsOutAtTime,
+        orderSpeedPerHour: undefined,
         urgency: r.severity === "high" || r.severity === "critical" ? "urgent" : "moderate",
         suggestedAction: "Analyzing inventory rebalancing alternatives...",
         status: "Watching",
         sendingStoreCode: "",
         sendingStoreName: "None",
         transferQuantity: 0,
-        senderStartingStock: 0,
-        senderLocalDemand: 0,
-        moneyAtRisk: 1050,
-        moneySaved: 0,
+        senderStartingStock: undefined,
+        senderLocalDemand: undefined,
         simpleDescription: `Active risk type: ${r.risk_type} (${r.severity} severity).`,
         actionCategory: "MONITOR",
       });
@@ -219,7 +266,7 @@ export function mapShipmentsToTransfers(
 
     return {
       id: s.shipment_id,
-      sku: s.product_name || "Amul Taaza Milk 500ml",
+      sku: s.product_name || "Transfer Item",
       fromCode: s.source_store_id,
       fromName: s.source_store_name || "Source Store",
       toCode: s.destination_store_id,

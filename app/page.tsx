@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { AlertTriangle, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import type { DeckTab, StoreHub, TransferRecord, AlertItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { ScenariosModal } from "@/components/dashboard/ScenariosModal";
@@ -47,12 +49,17 @@ export default function OperationsDeckPage() {
   const [simulationId, setSimulationId] = useState<string | null>(null);
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>("");
   const [shrinkageUnits, setShrinkageUnits] = useState<number>(0);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const refetchAll = useCallback(async () => {
     try {
+      setFetchError(null);
       const health = await checkBackendHealth();
       setIsBackendOnline(health.online);
-      if (!health.online) return;
+      if (!health.online) {
+        setFetchError("Backend service is offline (http://localhost:8000). Please start FastAPI.");
+        return;
+      }
 
       const activeSim = await getActiveSimulation();
       setSimulationId(activeSim.simulation_id);
@@ -61,19 +68,25 @@ export default function OperationsDeckPage() {
       }
 
       const [storesRaw, risksRaw, recsRaw, shipmentsRaw] = await Promise.all([
-        fetchStores().catch(() => []),
-        fetchRisks().catch(() => []),
-        fetchRecommendations().catch(() => []),
-        fetchShipments().catch(() => []),
+        fetchStores(),
+        fetchRisks(),
+        fetchRecommendations(),
+        fetchShipments(),
       ]);
 
       const inventories = await Promise.all(
-        storesRaw.map((s) => fetchStoreInventory(s.store_id).catch(() => null))
+        storesRaw.map((s) => fetchStoreInventory(s.store_id))
       );
       const validInventories = inventories.filter(Boolean) as RawStoreInventory[];
 
       const mappedStores = mapStoresToHubs(storesRaw, validInventories);
-      const mappedAlerts = mapRecommendationsToAlerts(recsRaw, risksRaw, storesRaw);
+      const mappedAlerts = mapRecommendationsToAlerts(
+        recsRaw,
+        risksRaw,
+        storesRaw,
+        validInventories,
+        activeSim.current_time
+      );
       const mappedTransfers = mapShipmentsToTransfers(shipmentsRaw, activeSim.current_time);
 
       setStores(mappedStores);
@@ -81,6 +94,7 @@ export default function OperationsDeckPage() {
       setTransfers(mappedTransfers);
     } catch (err: any) {
       console.error("Refetch error:", err);
+      setFetchError(err.message || "Failed to load operational data from backend");
     }
   }, []);
 
@@ -303,29 +317,57 @@ export default function OperationsDeckPage() {
             activeTab === "outcomes" ? "overflow-y-auto" : "overflow-y-auto lg:overflow-hidden"
           )}
         >
-          {activeTab === "queue" && (
-            <StockAlertsScreen
-              alerts={alerts}
-              onApproveTransfer={handleApproveTransfer}
-              onRejectTransfer={handleRejectTransfer}
-              onApplyDiscount={handleApplyDiscount}
-              onAcknowledgeAlert={handleAcknowledgeAlert}
-              onNavigateTab={(tab) => setActiveTab(tab)}
-              selectedStoreCode={selectedStoreFilter}
-              onSelectStore={(code) => setSelectedStoreFilter(code)}
-            />
-          )}
+          {fetchError ? (
+            <div className="flex flex-col items-center justify-center h-full p-8 bg-white border border-rose-200 rounded-2xl text-center space-y-4 shadow-xs">
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-full">
+                <AlertTriangle className="h-8 w-8" />
+              </div>
+              <div className="space-y-1.5 max-w-md">
+                <h3 className="text-sm font-bold text-[#1C1917]">Operational Load Error</h3>
+                <p className="text-xs text-rose-800 bg-rose-50 border border-rose-200 p-2.5 rounded-lg font-mono break-words">
+                  {fetchError}
+                </p>
+                <p className="text-xs text-[#57534E]">
+                  Could not retrieve operational data from the backend.
+                </p>
+              </div>
+              <Button
+                variant="dark"
+                size="sm"
+                onClick={() => refetchAll()}
+                className="font-bold cursor-pointer"
+              >
+                <RotateCw className="h-3.5 w-3.5 mr-1.5" />
+                Retry Connection
+              </Button>
+            </div>
+          ) : (
+            <>
+              {activeTab === "queue" && (
+                <StockAlertsScreen
+                  alerts={alerts}
+                  onApproveTransfer={handleApproveTransfer}
+                  onRejectTransfer={handleRejectTransfer}
+                  onApplyDiscount={handleApplyDiscount}
+                  onAcknowledgeAlert={handleAcknowledgeAlert}
+                  onNavigateTab={(tab) => setActiveTab(tab)}
+                  selectedStoreCode={selectedStoreFilter}
+                  onSelectStore={(code) => setSelectedStoreFilter(code)}
+                />
+              )}
 
-          {activeTab === "inflight" && (
-            <DeliveriesScreen
-              transfers={transfers}
-              onConfirmReceipt={handleConfirmReceipt}
-              onSimulateArrival={handleSimulateArrival}
-            />
-          )}
+              {activeTab === "inflight" && (
+                <DeliveriesScreen
+                  transfers={transfers}
+                  onConfirmReceipt={handleConfirmReceipt}
+                  onSimulateArrival={handleSimulateArrival}
+                />
+              )}
 
-          {activeTab === "outcomes" && (
-            <ResultsScreen isBackendOnline={isBackendOnline} />
+              {activeTab === "outcomes" && (
+                <ResultsScreen isBackendOnline={isBackendOnline} />
+              )}
+            </>
           )}
         </main>
       </div>

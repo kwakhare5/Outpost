@@ -49,10 +49,10 @@ export function StockAlertsScreen({
   });
 
   const selectedAlert = alerts.find((a) => a.id === selectedAlertId) || alerts[0];
-  const senderPostStock = selectedAlert
+  const senderPostStock = selectedAlert && selectedAlert.senderStartingStock !== undefined
     ? Math.max(0, selectedAlert.senderStartingStock - selectedAlert.transferQuantity)
     : 0;
-  const senderSafeMargin = selectedAlert
+  const senderSafeMargin = selectedAlert && selectedAlert.senderLocalDemand !== undefined
     ? Math.max(0, senderPostStock - selectedAlert.senderLocalDemand)
     : 0;
 
@@ -195,9 +195,13 @@ export function StockAlertsScreen({
                       {item.storeName.replace("Dark Store ", "")}
                     </span>
                     <div className="flex items-center gap-2 font-mono">
-                      <span>Stock: <strong className="text-[#1C1917]">{item.stockOnShelves}u</strong></span>
-                      <span>·</span>
-                      <span>Runs out: <strong className="text-[#C2410C]">~{item.runsOutInHours}h</strong></span>
+                      {item.stockOnShelves !== undefined && (
+                        <span>Stock: <strong className="text-[#1C1917]">{item.stockOnShelves}u</strong></span>
+                      )}
+                      {item.stockOnShelves !== undefined && item.runsOutInHours !== undefined && <span>·</span>}
+                      {item.runsOutInHours !== undefined && (
+                        <span>Runs out: <strong className="text-[#C2410C]">~{item.runsOutInHours}h</strong></span>
+                      )}
                     </div>
                   </div>
 
@@ -237,20 +241,28 @@ export function StockAlertsScreen({
           </div>
 
           {/* Key Telemetry Strip (Large Numbers) */}
-          <div className="grid grid-cols-3 gap-2.5 p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] text-center">
-            <div>
-              <span className="text-xs text-[#57534E] font-bold block">Current Stock</span>
-              <span className="text-lg font-bold text-[#1C1917] font-mono">{selectedAlert.stockOnShelves} units</span>
+          {(selectedAlert.stockOnShelves !== undefined || selectedAlert.orderSpeedPerHour !== undefined || selectedAlert.runsOutInHours !== undefined) && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] text-center">
+              {selectedAlert.stockOnShelves !== undefined && (
+                <div>
+                  <span className="text-xs text-[#57534E] font-bold block">Current Stock</span>
+                  <span className="text-lg font-bold text-[#1C1917] font-mono">{selectedAlert.stockOnShelves} units</span>
+                </div>
+              )}
+              {selectedAlert.orderSpeedPerHour !== undefined && (
+                <div>
+                  <span className="text-xs text-[#57534E] font-bold block">Demand</span>
+                  <span className="text-lg font-bold text-[#C2410C] font-mono">{selectedAlert.orderSpeedPerHour} / hr</span>
+                </div>
+              )}
+              {selectedAlert.runsOutInHours !== undefined && (
+                <div>
+                  <span className="text-xs text-[#57534E] font-bold block">Runs Out In</span>
+                  <span className="text-lg font-bold text-[#C2410C] font-mono">~{selectedAlert.runsOutInHours} hrs</span>
+                </div>
+              )}
             </div>
-            <div>
-              <span className="text-xs text-[#57534E] font-bold block">Demand</span>
-              <span className="text-lg font-bold text-[#C2410C] font-mono">{selectedAlert.orderSpeedPerHour} / hr</span>
-            </div>
-            <div>
-              <span className="text-xs text-[#57534E] font-bold block">Runs Out In</span>
-              <span className="text-lg font-bold text-[#C2410C] font-mono">~{selectedAlert.runsOutInHours} hrs</span>
-            </div>
-          </div>
+          )}
 
           {/* DECISION-FIRST: Recommended Action Card & Action Buttons at the Top */}
           {selectedAlert.actionCategory === "TRANSFER" ? (
@@ -265,36 +277,23 @@ export function StockAlertsScreen({
                 <Badge variant="info" size="sm">Lateral Transfer</Badge>
               </div>
 
-              <div className="text-xs text-[#57534E] space-y-0.5">
-                <p>· Delivery Van: #MH-02 (Western Express Highway)</p>
-                <p>· Travel Time: ~35 mins (Expected arrival: 10:15 AM)</p>
-                <p>· Van Cost: Rs 180</p>
-              </div>
-
-              {/* Financial Impact */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#EAE6DF] text-xs">
-                <div>
-                  <span className="text-[#57534E] block">Sales at risk:</span>
-                  <strong className="text-sm font-bold text-[#C2410C] font-mono">Rs {selectedAlert.moneyAtRisk}</strong>
-                </div>
-                <div>
-                  <span className="text-[#57534E] block">Protected revenue:</span>
-                  <strong className="text-sm font-bold text-[#059669] font-mono">+Rs {selectedAlert.moneySaved}</strong>
-                </div>
-              </div>
-
               {/* Immediate Trade-Offs: Approve vs Deny */}
               <div className="p-3 bg-white rounded-xl border border-[#EAE6DF] space-y-2 text-xs">
                 <div className="flex items-start gap-2">
                   <span className="text-emerald-700 font-bold shrink-0">✓ If You Approve:</span>
                   <span className="text-[#1C1917]">
-                    0 empty shelves all day · Protects Rs {selectedAlert.moneySaved} in sales · Costs Rs 180 van trip
+                    Dispatches {selectedAlert.transferQuantity} units from {selectedAlert.sendingStoreName.replace("Dark Store ", "")} to restock shelves.
                   </span>
                 </div>
                 <div className="flex items-start gap-2 pt-1 border-t border-[#F5F2EB]">
                   <span className="text-rose-700 font-bold shrink-0">✕ If You Deny:</span>
                   <span className="text-[#1C1917]">
-                    Shelves empty in ~{selectedAlert.runsOutInHours}h (~{selectedAlert.runsOutAtTime}) · Loses Rs {selectedAlert.moneyAtRisk} in sales today · {selectedAlert.sendingStoreName.replace("Dark Store ", "")} keeps all {selectedAlert.senderStartingStock} units
+                    {selectedAlert.runsOutInHours !== undefined
+                      ? `Shelves face stockout in ~${selectedAlert.runsOutInHours}h. `
+                      : "Stockout risk remains unmitigated. "}
+                    {selectedAlert.senderStartingStock !== undefined
+                      ? `${selectedAlert.sendingStoreName.replace("Dark Store ", "")} keeps all ${selectedAlert.senderStartingStock} units.`
+                      : `${selectedAlert.sendingStoreName.replace("Dark Store ", "")} retains its stock.`}
                   </span>
                 </div>
               </div>
@@ -339,7 +338,7 @@ export function StockAlertsScreen({
                       <Badge variant="neutral" size="sm">REJECTED</Badge>
                     </div>
                     <p className="text-xs text-[#57534E]">
-                      Retained units at Bandra. Emergency purchase order queued for evening warehouse truck.
+                      Retained units at {selectedAlert.sendingStoreName.replace("Dark Store ", "")}.
                     </p>
                   </div>
                 ) : (
@@ -379,29 +378,18 @@ export function StockAlertsScreen({
                 <Badge variant="warning" size="sm">DISCOUNT</Badge>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-amber-800 block">Stock value at risk:</span>
-                  <strong className="text-sm font-bold text-[#C2410C] font-mono">Rs {selectedAlert.moneyAtRisk}</strong>
-                </div>
-                <div>
-                  <span className="text-amber-800 block">Protected sales:</span>
-                  <strong className="text-sm font-bold text-[#059669] font-mono">+Rs {selectedAlert.moneySaved}</strong>
-                </div>
-              </div>
-
               {/* Immediate Trade-Offs: Approve Discount vs Deny */}
               <div className="p-3 bg-white rounded-xl border border-amber-200/80 space-y-2 text-xs">
                 <div className="flex items-start gap-2">
                   <span className="text-emerald-700 font-bold shrink-0">✓ If You Approve:</span>
                   <span className="text-[#1C1917]">
-                    Clears expiring batch fast · Protects Rs {selectedAlert.moneySaved} revenue · Zero landfill waste
+                    Applies markdown to accelerate sales and clear expiring batch before expiration.
                   </span>
                 </div>
                 <div className="flex items-start gap-2 pt-1 border-t border-amber-100">
                   <span className="text-rose-700 font-bold shrink-0">✕ If You Deny:</span>
                   <span className="text-[#1C1917]">
-                    Full price remains · Up to Rs {selectedAlert.moneyAtRisk} in spoiled unsold goods at end of shelf life
+                    Full price remains. Expiring batch risks spoilage and waste at shelf-life cutoff.
                   </span>
                 </div>
               </div>
@@ -446,50 +434,52 @@ export function StockAlertsScreen({
           )}
 
           {/* Dynamic Hourly Demand Timeline & Depletion Chart (Supporting Evidence Below Decision) */}
-          <DemandChart
-            currentStock={selectedAlert.stockOnShelves}
-            burnRate={selectedAlert.orderSpeedPerHour}
-            productName={selectedAlert.productName}
-            runsOutAtTime={selectedAlert.runsOutAtTime}
-            runsOutInHours={selectedAlert.runsOutInHours}
-          />
+          {(selectedAlert.stockOnShelves !== undefined || selectedAlert.orderSpeedPerHour !== undefined) && (
+            <DemandChart
+              currentStock={selectedAlert.stockOnShelves}
+              burnRate={selectedAlert.orderSpeedPerHour}
+              productName={selectedAlert.productName}
+              runsOutAtTime={selectedAlert.runsOutAtTime}
+              runsOutInHours={selectedAlert.runsOutInHours}
+            />
+          )}
 
           {/* Donor Balance Proof & Other Options Considered */}
-          {selectedAlert.actionCategory === "TRANSFER" && (
+          {selectedAlert.actionCategory === "TRANSFER" && (selectedAlert.senderStartingStock !== undefined || (selectedAlert.alternatives && selectedAlert.alternatives.length > 0)) && (
             <div className="space-y-3 pt-2 border-t border-[#EAE6DF]">
               {/* Donor Stock Check */}
-              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-1">
-                <span className="text-xs font-bold uppercase text-[#57534E] block">
-                  Donor Store Stock Check:
-                </span>
-                <p className="text-xs text-[#1C1917]">
-                  {selectedAlert.sendingStoreName.replace("Dark Store ", "")} has <strong>{selectedAlert.senderStartingStock} units</strong> and only needs {selectedAlert.senderLocalDemand}.
-                </p>
-                <p className="text-xs text-[#059669] font-medium">
-                  Sending {selectedAlert.transferQuantity} leaves {senderPostStock} units (a safe extra buffer of +{senderSafeMargin} units).
-                </p>
-              </div>
+              {selectedAlert.senderStartingStock !== undefined && (
+                <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-1">
+                  <span className="text-xs font-bold uppercase text-[#57534E] block">
+                    Donor Store Stock Check:
+                  </span>
+                  <p className="text-xs text-[#1C1917]">
+                    {selectedAlert.sendingStoreName.replace("Dark Store ", "")} has <strong>{selectedAlert.senderStartingStock} units</strong>
+                    {selectedAlert.senderLocalDemand !== undefined ? ` and only needs ${selectedAlert.senderLocalDemand}.` : "."}
+                  </p>
+                  <p className="text-xs text-[#059669] font-medium">
+                    Sending {selectedAlert.transferQuantity} leaves {senderPostStock} units
+                    {selectedAlert.senderLocalDemand !== undefined ? ` (a safe extra buffer of +${senderSafeMargin} units).` : "."}
+                  </p>
+                </div>
+              )}
 
               {/* Other Options Considered */}
-              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-2">
-                <span className="text-xs font-bold uppercase text-[#57534E] block">
-                  Other Options Considered:
-                </span>
-                <ul className="space-y-1.5 text-xs text-[#57534E]">
-                  <li className="flex items-start justify-between gap-2">
-                    <span>1. Wait for warehouse truck:</span>
-                    <span className="text-rose-600 font-semibold shrink-0">Too late (arrives 6:40 PM)</span>
-                  </li>
-                  <li className="flex items-start justify-between gap-2">
-                    <span>2. Transfer smaller 20 units:</span>
-                    <span className="text-rose-600 font-semibold shrink-0">Runs out again by 2:30 PM</span>
-                  </li>
-                  <li className="flex items-start justify-between gap-2">
-                    <span>3. Do nothing:</span>
-                    <span className="text-rose-600 font-semibold shrink-0">Loses Rs 1,390 in sales today</span>
-                  </li>
-                </ul>
-              </div>
+              {selectedAlert.alternatives && selectedAlert.alternatives.length > 0 && (
+                <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EAE6DF] space-y-2">
+                  <span className="text-xs font-bold uppercase text-[#57534E] block">
+                    Other Options Considered:
+                  </span>
+                  <ul className="space-y-1.5 text-xs text-[#57534E]">
+                    {selectedAlert.alternatives.map((alt, idx) => (
+                      <li key={idx} className="flex items-start justify-between gap-2">
+                        <span>{idx + 1}. {alt.label}:</span>
+                        <span className="text-rose-600 font-semibold shrink-0">{alt.reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </section>

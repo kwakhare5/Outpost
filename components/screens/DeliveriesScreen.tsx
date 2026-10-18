@@ -35,33 +35,19 @@ export function DeliveriesScreen({
   onConfirmReceipt,
   onSimulateArrival,
 }: DeliveriesScreenProps) {
-  const [selectedShipmentId, setSelectedShipmentId] = useState<string>(transfers[0]?.id || "REC-4470-TR");
+  const [selectedShipmentId, setSelectedShipmentId] = useState<string>(transfers[0]?.id || "");
   const [activeLeftView, setActiveLeftView] = useState<"vans" | "log">("vans");
 
   const selectedTransfer = transfers.find((t) => t.id === selectedShipmentId) || transfers[0];
-  const [receivedCount, setReceivedCount] = useState<number>(selectedTransfer?.units ?? 40);
+  const [receivedCount, setReceivedCount] = useState<number>(selectedTransfer?.units ?? 0);
   const [notes, setNotes] = useState<string>("");
 
-  const events: LogEvent[] = [
-    {
-      time: "08:20 AM",
-      title: "Van Dispatched: Bandra -> Andheri West",
-      detail: "Van #MH-02 left Bandra carrying 40 packets of milk. Bandra stock deducted.",
-      type: "action",
-    },
-    {
-      time: "08:00 AM",
-      title: "Arrived at Dock: Van #MH-05",
-      detail: "Van reached Andheri West with 20 loaves of bread. Ready for back-door check.",
-      type: "arrival",
-    },
-    {
-      time: "07:45 AM",
-      title: "Highway Congestion: Bhiwandi Route",
-      detail: "Morning traffic on Thane-Bhiwandi highway adding +30m delay to regional warehouse trucks.",
-      type: "info",
-    },
-  ];
+  const events: LogEvent[] = transfers.map((t) => ({
+    time: t.dispatchedAt || t.eta,
+    title: `${t.status}: ${t.fromName.replace("Dark Store ", "")} → ${t.toName.replace("Dark Store ", "")}`,
+    detail: `${t.vanId} carrying ${t.units} units of ${t.sku}. ETA: ${t.eta}.`,
+    type: t.status === "Completed" ? ("arrival" as const) : ("action" as const),
+  }));
 
   const currentStep = selectedTransfer?.currentStep || (selectedTransfer?.status === "Completed" ? 6 : 4);
   const isCompleted = selectedTransfer?.status === "Completed" || currentStep === 6;

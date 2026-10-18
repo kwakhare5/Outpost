@@ -57,24 +57,23 @@ export interface AlertItem {
   category: string;
   storeCode: string; // Destination/Target Store UUID
   storeName: string;
-  stockOnShelves: number;
-  runsOutInHours: number;
-  runsOutAtTime: string;
-  orderSpeedPerHour: number;
+  stockOnShelves?: number;
+  runsOutInHours?: number;
+  runsOutAtTime?: string;
+  orderSpeedPerHour?: number;
   urgency: AlertUrgency;
   suggestedAction: string;
   status: AlertStatus;
   sendingStoreCode: string; // Donor/Source Store UUID
   sendingStoreName: string;
   transferQuantity: number;
-  senderStartingStock: number;
-  senderLocalDemand: number;
-  moneyAtRisk: number;
-  moneySaved: number;
+  senderStartingStock?: number;
+  senderLocalDemand?: number;
   simpleDescription: string;
   actionCategory: AlertActionCategory;
   recommendationId?: string;
   riskId?: string;
+  alternatives?: Array<Record<string, any>>;
 }
 
 export type OutcomeStatus =

@@ -11,7 +11,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import type { HistorySummary, ReplayComparison } from "@/lib/types";
+import type { HistorySummary, ReplayComparison, RunRecordDeltas } from "@/lib/types";
 import { fetchHistoryOutcomes, fetchLatestRuns, runReplay } from "@/lib/api";
 import { mapOutcomesToSummary } from "@/lib/mapper";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,39 @@ import { Badge, MetricTile, Button } from "@/components/ui";
 
 const SPEC_RUPEE_ASSUMPTION =
   "Prices are synthetic catalog prices from seed_data.py. Calibrated to public quick commerce reports (CNBC-TV18, Jan 2026: gross margins ~15–18%, AOV ~Rs 695, waste ~1% of order value). Synthetic assumption, not actual business metrics.";
+
+function getHonestDeltaSummary(d: RunRecordDeltas): string {
+  const availText =
+    d.availability_pct_delta > 0
+      ? "higher availability"
+      : d.availability_pct_delta < 0
+      ? "lower availability"
+      : "identical availability";
+
+  const lostSalesText =
+    d.lost_sales_units_delta < 0
+      ? "fewer lost sales"
+      : d.lost_sales_units_delta > 0
+      ? "more lost sales"
+      : "equal lost sales";
+
+  let costWasteText = "";
+  if (d.rupee_loss_delta > 0) {
+    costWasteText =
+      d.waste_units_delta > 0
+        ? "with slightly more waste cost"
+        : "with slightly higher operational cost";
+  } else if (d.rupee_loss_delta < 0) {
+    costWasteText =
+      d.waste_units_delta < 0
+        ? "with reduced waste and lower rupee loss"
+        : "with lower overall rupee loss";
+  } else {
+    costWasteText = "with identical rupee loss";
+  }
+
+  return `Outpost has ${availText} and ${lostSalesText}, ${costWasteText}. Synthetic simulation, not a savings claim.`;
+}
 
 export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: boolean }) {
   const [outcomes, setOutcomes] = useState<HistorySummary | null>(null);
@@ -32,8 +65,8 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
     setErrorMsg(null);
     try {
       const [rawOutcomes, latestRuns] = await Promise.all([
-        fetchHistoryOutcomes().catch(() => null),
-        fetchLatestRuns().catch(() => null),
+        fetchHistoryOutcomes(),
+        fetchLatestRuns(),
       ]);
 
       if (rawOutcomes) {
@@ -55,7 +88,7 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
     setIsLoadingReplay(true);
     setErrorMsg(null);
     try {
-      const res = await runReplay(42, 24, 6, 3);
+      const res = await runReplay(42, 168, 1, 7);
       setReplayData({
         has_runs: true,
         seed: res.seed,
@@ -112,7 +145,7 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
               Results &amp; Verification
             </Badge>
             <span className="text-xs text-[#57534E] font-medium">
-              Real RunRecord measurements from the database
+              Measured in a synthetic simulation
             </span>
           </div>
           <p className="text-xs text-[#78716C] mt-1">
@@ -128,7 +161,7 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
           className="shrink-0"
         >
           <RotateCw className={cn("w-3.5 h-3.5 mr-1.5", isLoadingReplay && "animate-spin")} />
-          {isLoadingReplay ? "Running Replay..." : "Run Same-Seed Replay"}
+          {isLoadingReplay ? "Running Replay (168h)..." : "Run Same-Seed Replay (168h)"}
         </Button>
       </section>
 
@@ -285,6 +318,17 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
               </div>
             </div>
 
+            {/* Honest Delta Assessment Box */}
+            <div className="p-3.5 rounded-xl bg-[#FAF8F5] border border-[#EAE6DF] text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-[#1C1917]">
+                <ShieldCheck className="w-4 h-4 text-[#2563EB]" />
+                <span>Replay Comparison Summary</span>
+              </div>
+              <p className="text-[#57534E] leading-relaxed">
+                {getHonestDeltaSummary(d)}
+              </p>
+            </div>
+
             {/* Spec Section 5 Rupee Price Assumption Banner */}
             <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-950 flex items-start gap-2">
               <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
@@ -299,7 +343,9 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
         ) : (
           <div className="p-6 text-center rounded-xl bg-[#FAF8F5] border border-dashed border-[#EAE6DF] space-y-2">
             <p className="text-xs text-[#57534E]">
-              No replay run records recorded in the database yet.
+              {replayData?.outpost && !replayData?.baseline
+                ? "No matching baseline run yet"
+                : "No 168-hour replay comparison runs recorded in the database yet."}
             </p>
             <Button
               variant="dark"
@@ -307,7 +353,7 @@ export function ResultsScreen({ isBackendOnline = false }: { isBackendOnline?: b
               onClick={handleRunReplay}
               disabled={isLoadingReplay}
             >
-              Run Replay Comparison (Baseline vs Outpost)
+              {isLoadingReplay ? "Running Replay (168h)..." : "Run Same-Seed Replay (168h)"}
             </Button>
           </div>
         )}

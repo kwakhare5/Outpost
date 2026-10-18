@@ -157,19 +157,58 @@ async def get_latest_runs(
     from backend.services.metrics import RUPEE_PRICE_ASSUMPTION
     from backend.services.simulation.replay import DETERMINISTIC_NOTE
 
-    stmt = select(RunRecord).order_by(RunRecord.created_at.desc())
-    res = await db.execute(stmt)
-    records = res.scalars().all()
+    stmt_outpost = (
+        select(RunRecord)
+        .where(RunRecord.policy == "outpost")
+        .order_by(RunRecord.created_at.desc())
+        .limit(1)
+    )
+    res_outpost = await db.execute(stmt_outpost)
+    outpost = res_outpost.scalar_one_or_none()
 
-    baseline = next((r for r in records if r.policy == "baseline"), None)
-    outpost = next((r for r in records if r.policy == "outpost"), None)
-
-    if not baseline or not outpost:
+    if not outpost:
         return {
             "has_runs": False,
+            "message": "No runs recorded yet",
             "rupee_price_assumption": RUPEE_PRICE_ASSUMPTION,
             "baseline": None,
             "outpost": None,
+            "deltas": None,
+        }
+
+    stmt_baseline = (
+        select(RunRecord)
+        .where(
+            RunRecord.policy == "baseline",
+            RunRecord.seed == outpost.seed,
+            RunRecord.window_hours == outpost.window_hours,
+        )
+        .order_by(RunRecord.created_at.desc())
+        .limit(1)
+    )
+    res_baseline = await db.execute(stmt_baseline)
+    baseline = res_baseline.scalar_one_or_none()
+
+    if not baseline:
+        return {
+            "has_runs": False,
+            "message": "No matching baseline run yet",
+            "rupee_price_assumption": RUPEE_PRICE_ASSUMPTION,
+            "seed": outpost.seed,
+            "window_hours": outpost.window_hours,
+            "baseline": None,
+            "outpost": {
+                "run_id": str(outpost.run_id),
+                "simulation_id": str(outpost.simulation_id),
+                "policy": outpost.policy,
+                "seed": outpost.seed,
+                "window_hours": outpost.window_hours,
+                "lost_sales_units": outpost.lost_sales_units,
+                "waste_units": outpost.waste_units,
+                "rupee_loss": outpost.rupee_loss,
+                "availability_pct": outpost.availability_pct,
+                "created_at": outpost.created_at.isoformat() if outpost.created_at else None,
+            },
             "deltas": None,
         }
 
@@ -190,6 +229,8 @@ async def get_latest_runs(
             "run_id": str(baseline.run_id),
             "simulation_id": str(baseline.simulation_id),
             "policy": baseline.policy,
+            "seed": baseline.seed,
+            "window_hours": baseline.window_hours,
             "lost_sales_units": baseline.lost_sales_units,
             "waste_units": baseline.waste_units,
             "rupee_loss": baseline.rupee_loss,
@@ -200,6 +241,8 @@ async def get_latest_runs(
             "run_id": str(outpost.run_id),
             "simulation_id": str(outpost.simulation_id),
             "policy": outpost.policy,
+            "seed": outpost.seed,
+            "window_hours": outpost.window_hours,
             "lost_sales_units": outpost.lost_sales_units,
             "waste_units": outpost.waste_units,
             "rupee_loss": outpost.rupee_loss,

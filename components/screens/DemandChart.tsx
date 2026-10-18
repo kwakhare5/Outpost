@@ -4,20 +4,24 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 interface DemandChartProps {
-  currentStock: number;
-  burnRate: number;
+  currentStock?: number;
+  burnRate?: number;
   productName: string;
   runsOutAtTime?: string;
   runsOutInHours?: number;
+  poArrivalHour?: number;
+  poArrivalLabel?: string;
   className?: string;
 }
 
 export function DemandChart({
-  currentStock,
-  burnRate,
+  currentStock = 0,
+  burnRate = 0,
   productName,
-  runsOutAtTime = "13:00",
-  runsOutInHours = 4.8,
+  runsOutAtTime,
+  runsOutInHours,
+  poArrivalHour,
+  poArrivalLabel,
   className,
 }: DemandChartProps) {
   // Chart coordinate mapping (viewBox 0 0 500 160)
@@ -47,12 +51,11 @@ export function DemandChart({
 
   // Timeline points
   const nowHour = 8.25; // 08:15 AM
-  const stockoutHour = Math.min(19.5, nowHour + runsOutInHours); // ~13.0
-  const poHour = 18.67; // 18:40 PM PO-4471 Arrival
-
   const nowX = hourToX(nowHour);
-  const stockoutX = hourToX(stockoutHour);
-  const poX = hourToX(poHour);
+  const stockoutX = runsOutInHours !== undefined
+    ? hourToX(Math.min(19.5, nowHour + runsOutInHours))
+    : null;
+  const poX = poArrivalHour !== undefined ? hourToX(poArrivalHour) : null;
 
   // Past actual sales bars (06:00 - 08:15)
   const actualBars = [
@@ -87,12 +90,14 @@ export function DemandChart({
         <div>
           <span className="font-bold text-[#1C1917]">Hourly Sales &amp; Demand Forecast</span>
           <span className="text-[10px] text-[#78716C] ml-2 font-mono">
-            {productName} ({currentStock} units left)
+            {productName}{currentStock !== undefined ? ` (${currentStock} units left)` : ""}
           </span>
         </div>
-        <span className="text-[11px] font-mono font-semibold text-[#C2410C]">
-          Empty: ~{runsOutAtTime} (in ~{runsOutInHours.toFixed(1)}h)
-        </span>
+        {runsOutAtTime && runsOutInHours !== undefined && (
+          <span className="text-[11px] font-mono font-semibold text-[#C2410C]">
+            Empty: ~{runsOutAtTime} (in ~{runsOutInHours.toFixed(1)}h)
+          </span>
+        )}
       </div>
 
       {/* SVG Timeline Canvas */}
@@ -232,64 +237,72 @@ export function DemandChart({
           </text>
 
           {/* Vertical Pin 2: STOCKOUT (~13:00 PM) */}
-          <line
-            x1={stockoutX}
-            y1={chartTop - 6}
-            x2={stockoutX}
-            y2={chartBottom}
-            stroke="#E11D48"
-            strokeWidth="1.5"
-            strokeDasharray="3 2"
-          />
-          <rect
-            x={stockoutX - 32}
-            y={chartTop - 18}
-            width="64"
-            height="14"
-            rx="3"
-            fill="#E11D48"
-          />
-          <text
-            x={stockoutX}
-            y={chartTop - 8}
-            textAnchor="middle"
-            fontSize="8"
-            fontWeight="bold"
-            fill="#FFFFFF"
-            fontFamily="sans-serif"
-          >
-            Out ~{runsOutAtTime}
-          </text>
+          {stockoutX !== null && (
+            <>
+              <line
+                x1={stockoutX}
+                y1={chartTop - 6}
+                x2={stockoutX}
+                y2={chartBottom}
+                stroke="#E11D48"
+                strokeWidth="1.5"
+                strokeDasharray="3 2"
+              />
+              <rect
+                x={stockoutX - 32}
+                y={chartTop - 18}
+                width="64"
+                height="14"
+                rx="3"
+                fill="#E11D48"
+              />
+              <text
+                x={stockoutX}
+                y={chartTop - 8}
+                textAnchor="middle"
+                fontSize="8"
+                fontWeight="bold"
+                fill="#FFFFFF"
+                fontFamily="sans-serif"
+              >
+                Out {runsOutAtTime ? `~${runsOutAtTime}` : ""}
+              </text>
+            </>
+          )}
 
-          {/* Vertical Pin 3: RFC PO ARRIVAL (18:40 PM) */}
-          <line
-            x1={poX}
-            y1={chartTop - 6}
-            x2={poX}
-            y2={chartBottom}
-            stroke="#D97706"
-            strokeWidth="1.5"
-            strokeDasharray="3 2"
-          />
-          <rect
-            x={poX - 44}
-            y={chartTop - 18}
-            width="88"
-            height="14"
-            rx="3"
-            fill="#D97706"
-          />
-          <text
-            x={poX}
-            y={chartTop - 8}
-            textAnchor="middle"
-            fontSize="8"
-            fontWeight="bold"
-            fill="#FFFFFF"
-            fontFamily="sans-serif"
-          >
-            Truck Arrives 18:40
-          </text>
+          {/* Vertical Pin 3: Real Inbound PO Arrival (if known) */}
+          {poX !== null && (
+            <>
+              <line
+                x1={poX}
+                y1={chartTop - 6}
+                x2={poX}
+                y2={chartBottom}
+                stroke="#D97706"
+                strokeWidth="1.5"
+                strokeDasharray="3 2"
+              />
+              <rect
+                x={poX - 44}
+                y={chartTop - 18}
+                width="88"
+                height="14"
+                rx="3"
+                fill="#D97706"
+              />
+              <text
+                x={poX}
+                y={chartTop - 8}
+                textAnchor="middle"
+                fontSize="8"
+                fontWeight="bold"
+                fill="#FFFFFF"
+                fontFamily="sans-serif"
+              >
+                {poArrivalLabel || "Truck Arrives"}
+              </text>
+            </>
+          )}
 
           {/* X-axis tick labels */}
           {hourTicks.map((hour) => {
@@ -332,17 +345,21 @@ export function DemandChart({
             <span className="inline-block w-3 border-t-2 border-dashed border-[#2563EB]" />
             <span>Demand Forecast ({burnRate}/hr)</span>
           </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#E11D48]" />
-            <span>Runs Out (~{runsOutAtTime})</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#D97706]" />
-            <span>Truck (Too Late)</span>
-          </span>
+          {runsOutAtTime && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#E11D48]" />
+              <span>Runs Out (~{runsOutAtTime})</span>
+            </span>
+          )}
+          {poArrivalHour !== undefined && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#D97706]" />
+              <span>{poArrivalLabel || "Truck Arrival"}</span>
+            </span>
+          )}
         </div>
         <span className="font-mono text-[#1C1917] font-semibold">
-          Sales Rate: {burnRate}/hr · Covers: {runsOutInHours.toFixed(1)}h
+          Sales Rate: {burnRate}/hr{runsOutInHours !== undefined ? ` · Covers: ${runsOutInHours.toFixed(1)}h` : ""}
         </span>
       </div>
     </div>
