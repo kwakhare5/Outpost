@@ -24,6 +24,7 @@ from backend.services.forecasting.models import (
     evaluate_forecast,
     ModelEvaluationResult,
     exponential_smoothing_predict,
+    holt_linear_predict,
 )
 
 
@@ -205,6 +206,28 @@ def test_exponential_smoothing_too_short_falls_back_to_baseline():
     series = [DemandPoint(0, 0, 10.0), DemandPoint(1, 1, 10.0)]
     result = exponential_smoothing_predict(series, horizon_hours=24)
     assert result > 0
+
+
+def test_holt_linear_multi_day_horizon_regression():
+    """Regression test: Holt multi-day demand equals sum(level + k*trend for k in 1..h).
+
+    Known linear series: [10, 12, 14, 16, 18, 20, 22] (constant step +2).
+    At final point: level = 22.0, trend = 2.0.
+    For h = 2 days (48h):
+      day 1: 22 + 1*2 = 24.0
+      day 2: 22 + 2*2 = 26.0
+      total: 50.0.
+    The old bug computed (level + h*trend)*h = (22 + 4)*2 = 52.0.
+    """
+    series = [DemandPoint(i, i % 7, 10.0 + 2.0 * i) for i in range(7)]
+    pred_24 = holt_linear_predict(series, horizon_hours=24)
+    assert abs(pred_24 - 24.0) < 1e-4
+
+    pred_48 = holt_linear_predict(series, horizon_hours=48)
+    assert abs(pred_48 - 50.0) < 1e-4
+
+    pred_72 = holt_linear_predict(series, horizon_hours=72)
+    assert abs(pred_72 - 78.0) < 1e-4
 
 
 # ---------------------------------------------------------------------------

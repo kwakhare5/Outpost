@@ -27,7 +27,7 @@ from backend.agents.execution.tools import (
 )
 from backend.models.core import Action, Recommendation
 from backend.models.enums import RecommendationStatus, ActionType, ActionStatus
-from backend.events.bus import bus
+from backend.events.audit import audit_log
 
 
 def _enum_val(v: Any) -> str:
@@ -246,9 +246,23 @@ async def node_verify(state: AgentState) -> dict:
         if evt_res.scalars().first():
             verification_details["audit_event_logged"] = True
         else:
-            verification_details["audit_event_logged"] = True
+            verification_details["audit_event_logged"] = False
+            events.append({"node": "verify", "result": "failed", "error": "audit_event_not_logged"})
+            return {
+                "verified": False,
+                "verify_error": "invariant_violation: audit event not logged",
+                "verification_details": verification_details,
+                "events": events,
+            }
     else:
-        verification_details["audit_event_logged"] = True
+        verification_details["audit_event_logged"] = False
+        events.append({"node": "verify", "result": "failed", "error": "missing_recommendation_id"})
+        return {
+            "verified": False,
+            "verify_error": "invariant_violation: missing recommendation id for audit check",
+            "verification_details": verification_details,
+            "events": events,
+        }
 
     # 2. Check source inventory and negative stock
     src_store_id = result.get("source_store_id") or rec.get("source_store_id")

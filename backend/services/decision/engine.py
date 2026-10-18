@@ -16,7 +16,7 @@ from backend.models.core import (
     Risk, Inventory, Forecast, Recommendation, Store, Product, Supplier,
 )
 from backend.models.enums import RecommendationStatus, ActionType
-from backend.events.bus import bus
+from backend.events.audit import audit_log as bus
 from backend.services.decision.models import (
     DEFAULT_WEIGHTS,
     ScoringWeights,

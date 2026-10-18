@@ -34,7 +34,6 @@ from __future__ import annotations
 import uuid
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock
 
 from backend.agents.execution.state import AgentState
 from backend.agents.execution.tools import (
@@ -345,9 +344,11 @@ async def test_recalculate_options_creates_new_recommendation(db_session):
     assert risk is not None
 
     recalc_result = await recalculate_options(db_session, risk.risk_id)
-    # Should create a new recommendation (or return None if no candidates)
-    # Either outcome is valid -- we just check the shape
     assert "new_recommendation_id" in recalc_result
+    if recalc_result["new_recommendation_id"]:
+        new_rec = await db_session.get(Recommendation, uuid.UUID(recalc_result["new_recommendation_id"]))
+        assert new_rec is not None
+        assert new_rec.risk_id == risk.risk_id
 
 
 # ---------------------------------------------------------------------------
@@ -493,3 +494,30 @@ async def test_full_graph_happy_path_approved_transfer_completes(db_session):
     assert run_result.action_type == "transfer"
     assert run_result.requires_human_review is False
     assert len(run_result.events) > 0
+
+
+async def test_node_verify_fails_when_no_audit_event(db_session):
+    """Verify that node_verify returns verified=False and invariant_violation error when no Event exists."""
+    scenario = await _seed_transfer_scenario(db_session)
+    rec_snap = await get_recommendation(db_session, scenario["rec"].recommendation_id)
+    state: AgentState = {
+        "recommendation_id": scenario["rec"].recommendation_id,
+        "db": db_session,
+        "recommendation": rec_snap,
+        "execution_result": {
+            "success": True,
+            "source_store_id": str(scenario["src_store"].store_id),
+            "destination_store_id": str(scenario["dst_store"].store_id),
+            "product_id": str(scenario["product"].product_id),
+        },
+        "events": [],
+        "status": "running",
+        "pre_check_passed": True,
+        "stale_inventory": False,
+        "verified": False,
+        "requires_human_review": False,
+    }
+    result = await node_verify(state)
+    assert result["verified"] is False
+    assert "audit event not logged" in result["verify_error"]
+    assert result["verification_details"]["audit_event_logged"] is False

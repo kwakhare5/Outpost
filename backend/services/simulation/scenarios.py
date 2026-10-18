@@ -9,6 +9,7 @@ Encapsulates the 5 canonical benchmark scenarios:
 """
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
@@ -35,7 +36,6 @@ class ScenarioConfig:
     description: str
     demand_multiplier_by_category: dict[str, float] = field(default_factory=dict)
     supplier_lead_time_delay_hours: int = 0
-    perishable_shelf_life_scale: float = 1.0
 
 
 _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
@@ -62,7 +62,6 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
         description='Perishable batches expiring within 6-12 hours with low baseline sell-through.',
         demand_multiplier_by_category={'dairy': 0.8, 'bakery': 0.8, 'produce': 0.7, 'staples': 1.0, 'packaged': 1.0},
         supplier_lead_time_delay_hours=0,
-        perishable_shelf_life_scale=0.2,
     ),
     'network_imbalance': ScenarioConfig(
         name='network_imbalance',
@@ -73,7 +72,143 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
 }
 
 
-_current_active_scenario: str = 'normal'
+@dataclass
+class SimulationState:
+    simulation_id: uuid.UUID
+    scenario: str = "normal"
+    active_transfers: list[Any] = field(default_factory=list)
+    active_pos: list[Any] = field(default_factory=list)
+    engine: Any = None
+
+
+_simulation_states: dict[str, SimulationState] = {}
+_DEFAULT_SIM_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
+_default_state = SimulationState(simulation_id=_DEFAULT_SIM_ID)
+
+
+def get_simulation_state(sim_id: str | uuid.UUID | None = None) -> SimulationState:
+    """Retrieve the SimulationState for a simulation ID, or default/active."""
+    if sim_id is not None:
+        key = str(sim_id)
+        if key in _simulation_states:
+            return _simulation_states[key]
+        state = SimulationState(simulation_id=uuid.UUID(key) if isinstance(sim_id, str) else sim_id)
+        _simulation_states[key] = state
+        return state
+    if _simulation_states:
+        return next(reversed(list(_simulation_states.values())))
+    return _default_state
+
+
+def get_or_create_simulation_state(sim_id: str | uuid.UUID) -> SimulationState:
+    """Get existing or create new SimulationState for a simulation ID."""
+    key = str(sim_id)
+    if key not in _simulation_states:
+        _simulation_states[key] = SimulationState(
+            simulation_id=uuid.UUID(key) if isinstance(sim_id, str) else sim_id
+        )
+    return _simulation_states[key]
+
+
+def clear_simulation_states() -> None:
+    """Clear all simulation states (used during reset / simulated process restart)."""
+    _simulation_states.clear()
+    _default_state.active_transfers.clear()
+    _default_state.active_pos.clear()
+    _default_state.scenario = "normal"
+    _default_state.engine = None
+
+
+async def restore_simulation_state_from_db(
+    db: AsyncSession,
+    sim_uuid: uuid.UUID,
+    engine: Any = None,
+) -> SimulationState:
+    """Rebuild per-simulation state (scenario, in-flight vans, purchase orders) from database."""
+    from backend.models.core import Shipment, PurchaseOrder as PurchaseOrderModel
+    from backend.models.enums import ShipmentStatus, POStatus
+
+    state = get_or_create_simulation_state(sim_uuid)
+    if engine is not None:
+        state.engine = engine
+
+    # 1. Restore scenario
+    sim = await db.get(Simulation, sim_uuid)
+    if sim and sim.configuration and isinstance(sim.configuration, dict):
+        saved_scenario = sim.configuration.get("scenario", "normal")
+        state.scenario = saved_scenario
+        if engine is not None:
+            engine.active_scenario = saved_scenario
+            engine.active_scenario_config = get_scenario_config(saved_scenario)
+
+    # 2. Rebuild in-flight transfers (vans) from Shipment table
+    shipments_res = await db.execute(
+        select(Shipment).where(
+            Shipment.status.in_([ShipmentStatus.IN_TRANSIT, ShipmentStatus.AWAITING_CONFIRMATION])
+        )
+    )
+    shipments = shipments_res.scalars().all()
+
+    from backend.services.simulation.transfer import InTransitTransfer
+
+    state.active_transfers = []
+    for s in shipments:
+        batch_records = s.batch_records
+        if isinstance(batch_records, str):
+            try:
+                batch_records = json.loads(batch_records)
+            except Exception:
+                batch_records = []
+        elif not isinstance(batch_records, list):
+            batch_records = []
+
+        status_str = 'awaiting_confirmation' if (
+            s.status == ShipmentStatus.AWAITING_CONFIRMATION or str(s.status) == 'awaiting_confirmation'
+        ) else 'in_transit'
+
+        state.active_transfers.append(
+            InTransitTransfer(
+                transfer_id=s.shipment_id,
+                source_store_id=s.source_store_id,
+                destination_store_id=s.destination_store_id,
+                product_id=s.product_id,
+                quantity=s.quantity,
+                dispatched_at=s.dispatched_at,
+                arrival_eta=s.arrival_eta,
+                status=status_str,
+                batch_records=batch_records,
+                distance_km=s.distance_km,
+                traffic_multiplier=s.traffic_multiplier,
+            )
+        )
+
+    # 3. Rebuild in-flight purchase orders from PurchaseOrder table
+    pos_res = await db.execute(
+        select(PurchaseOrderModel).where(
+            PurchaseOrderModel.status == POStatus.IN_TRANSIT
+        )
+    )
+    po_rows = pos_res.scalars().all()
+
+    from backend.services.simulation.supplier import PurchaseOrder
+
+    state.active_pos = []
+    for r in po_rows:
+        po_status = 'delayed' if str(r.status) == 'delayed' else 'in_transit'
+        state.active_pos.append(
+            PurchaseOrder(
+                po_id=r.po_id,
+                supplier_id=r.supplier_id,
+                store_id=r.destination_store_id,
+                product_id=r.product_id,
+                quantity=r.quantity,
+                ordered_at=r.ordered_at,
+                expected_arrival=r.arrival_eta,
+                status=po_status,
+            )
+        )
+
+    return state
 
 
 def get_scenario_config(scenario_name: str) -> ScenarioConfig:
@@ -83,17 +218,20 @@ def get_scenario_config(scenario_name: str) -> ScenarioConfig:
     return _SCENARIO_CONFIGS[scenario_name]
 
 
-def get_current_scenario_config() -> ScenarioConfig:
-    """Retrieve currently active scenario configuration parameters."""
-    return _SCENARIO_CONFIGS.get(_current_active_scenario, _SCENARIO_CONFIGS['normal'])
+def get_current_scenario_config(sim_id: str | uuid.UUID | None = None) -> ScenarioConfig:
+    """Retrieve currently active scenario configuration parameters for a simulation."""
+    state = get_simulation_state(sim_id)
+    scenario_name = state.scenario if state else 'normal'
+    return _SCENARIO_CONFIGS.get(scenario_name, _SCENARIO_CONFIGS['normal'])
 
 
-def set_current_scenario(scenario_name: str) -> ScenarioConfig:
-    """Set the currently active scenario and return its config."""
-    global _current_active_scenario
+def set_current_scenario(scenario_name: str, sim_id: str | uuid.UUID | None = None) -> ScenarioConfig:
+    """Set the currently active scenario for a simulation and return its config."""
     if scenario_name not in _SCENARIO_CONFIGS:
         raise ValueError(f"Unknown scenario '{scenario_name}'. Available: {SCENARIO_NAMES}")
-    _current_active_scenario = scenario_name
+    state = get_simulation_state(sim_id)
+    if state:
+        state.scenario = scenario_name
     return _SCENARIO_CONFIGS[scenario_name]
 
 
@@ -103,10 +241,20 @@ async def apply_scenario(
     scenario_name: str,
 ) -> dict[str, Any]:
     """Inject scenario conditions into the live simulation database."""
-    config = set_current_scenario(scenario_name)
+    sim_id = getattr(engine, 'simulation_id', None)
+    config = set_current_scenario(scenario_name, sim_id=sim_id)
     if engine is not None:
         setattr(engine, 'active_scenario', scenario_name)
         setattr(engine, 'active_scenario_config', config)
+
+    # Persist scenario to database simulation configuration
+    if sim_id:
+        sim = await db.get(Simulation, sim_id)
+        if sim:
+            cfg = dict(sim.configuration or {})
+            cfg['scenario'] = scenario_name
+            sim.configuration = cfg
+            await db.flush()
 
     now = engine.clock.now if (engine and getattr(engine, 'clock', None)) else datetime.now(timezone.utc)
     now_naive = now.replace(tzinfo=None) if now.tzinfo else now

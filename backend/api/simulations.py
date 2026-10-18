@@ -13,7 +13,12 @@ from backend.models.enums import SimulationStatus
 from backend.services.simulation.engine import SimulationEngine, SimulationClock
 from backend.services.simulation.transfer import get_store_distance_matrix, get_active_transfers
 from backend.services.simulation.supplier import get_active_pos
-from backend.services.simulation.scenarios import apply_scenario, SCENARIO_NAMES
+from backend.services.simulation.scenarios import (
+    apply_scenario,
+    SCENARIO_NAMES,
+    restore_simulation_state_from_db,
+    get_simulation_state,
+)
 from backend.services.simulation.seed_data import STORES
 
 router = APIRouter(prefix='/simulations', tags=['simulations'])
@@ -34,7 +39,12 @@ async def _get_or_restore_engine(db: AsyncSession, sim_uuid: _uuid.UUID) -> Simu
 
     # Reconstitute engine using persisted seed and clock
     engine = SimulationEngine(seed=sim.seed, historical_days=60)
+    engine.simulation_id = sim.simulation_id
     engine.clock = SimulationClock(start_time=sim.current_time, seed=sim.seed)
+
+    # Restore simulation state from database (scenario, active transfers, active POs)
+    await restore_simulation_state_from_db(db, sim_uuid, engine)
+
     _engines[sim_id_str] = engine
     return engine
 
@@ -242,8 +252,9 @@ async def get_simulation_in_transit(
     if not sim:
         raise HTTPException(status_code=404, detail='Simulation not found')
 
-    active_transfers = get_active_transfers()
-    active_pos = get_active_pos()
+    await _get_or_restore_engine(db, sim_uuid)
+    active_transfers = get_active_transfers(sim_uuid)
+    active_pos = get_active_pos(sim_uuid)
 
     return {
         'transfers': [

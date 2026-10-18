@@ -334,8 +334,7 @@ async def test_risk_engine_resolve_marks_risk_resolved(db_session):
     await db_session.commit()
 
     risks = (await db_session.execute(select(Risk))).scalars().all()
-    if not risks:
-        pytest.skip("No risks created -- cannot test resolution")
+    assert len(risks) > 0, "Precondition failed: Expected risk engine to generate risks"
 
     # Resolve the first risk
     risk_id = risks[0].risk_id

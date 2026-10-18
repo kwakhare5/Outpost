@@ -58,7 +58,7 @@ def detect_anomalies(
 ) -> list[int]:
     """Return list of indices in *series* whose quantity is a statistical outlier.
 
-    Uses a robust IQR fence (Q3 + factor*IQR) as primary criterion.
+    Uses an IQR fence (Q3 + factor*IQR) as primary criterion.
     This is resistant to spike self-contamination that distorts plain Z-score.
     Falls back to empty list on < 4 points.
     """
@@ -221,8 +221,8 @@ def holt_linear_predict(
         trend = _BETA * (level - prev_level) + (1 - _BETA) * trend
 
     # Forecast h steps ahead (h = horizon days)
-    h = horizon_hours / 24.0
-    return max(0.0, (level + h * trend) * h)
+    h = max(1, int(round(horizon_hours / 24.0)))
+    return max(0.0, sum(level + k * trend for k in range(1, h + 1)))
 
 
 # Backward compatibility alias

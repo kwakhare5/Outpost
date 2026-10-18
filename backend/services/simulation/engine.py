@@ -26,10 +26,11 @@ from backend.services.simulation.seed_data import (
     SeedProduct, SeedCustomer,
 )
 from backend.services.simulation.transfer import process_arriving_transfers, clear_active_transfers
-from backend.services.simulation.supplier import process_supplier_deliveries, clear_active_pos
+from backend.services.simulation.supplier import process_supplier_deliveries, clear_active_pos, evaluate_reorder_policy
 from backend.services.simulation.scenarios import (
     get_scenario_config,
     set_current_scenario,
+    get_or_create_simulation_state,
     ScenarioConfig,
 )
 # Demand Rate Table: category x hour block x weekday (Spec Section 4)
@@ -119,6 +120,7 @@ class SimulationEngine:
     def __init__(self, seed: int = 42, historical_days: int = 60):
         self.seed = seed
         self.historical_days = historical_days
+        self.simulation_id: uuid.UUID | None = None
         self.rng = random.Random(seed)
         self.clock: SimulationClock | None = None
         self._supplier_map: dict[str, uuid.UUID] = {}
@@ -132,6 +134,12 @@ class SimulationEngine:
         
         Returns the created Simulation ORM object.
         """
+        if self.simulation_id is None:
+            self.simulation_id = uuid.uuid4()
+        state = get_or_create_simulation_state(self.simulation_id)
+        state.engine = self
+        state.scenario = self.active_scenario
+
         # 1. Calculate timeline
         sim_start = datetime.now(timezone.utc) - timedelta(days=self.historical_days)
         self.clock = SimulationClock(sim_start, self.seed)
@@ -150,11 +158,12 @@ class SimulationEngine:
 
         # 6. Ensure active batches exist at simulation present time
         await self._expire_batches(db, self.clock.now)
-        await self._restock_inventory(db, self.clock.now)
+        await process_supplier_deliveries(db, self.clock.now, sim_id=self.simulation_id)
+        await evaluate_reorder_policy(db, self.clock.now, sim_id=self.simulation_id)
 
         # 7. Create Simulation record
         simulation = Simulation(
-            simulation_id=uuid.uuid4(),
+            simulation_id=self.simulation_id,
             seed=self.seed,
             current_time=self.clock.now,
             status=SimulationStatus.CREATED,
@@ -177,6 +186,10 @@ class SimulationEngine:
         if self.clock is None:
             raise RuntimeError('Simulation not initialized. Call initialize() first.')
 
+        self.simulation_id = simulation_id
+        state = get_or_create_simulation_state(simulation_id)
+        state.engine = self
+
         old_time = self.clock.now
         new_time = self.clock.advance(hours)
 
@@ -187,8 +200,11 @@ class SimulationEngine:
         expired_batches = await self._expire_batches(db, new_time)
 
         # Process arriving store transfers & supplier PO deliveries
-        delivered_transfers = await process_arriving_transfers(db, new_time)
-        delivered_pos = await process_supplier_deliveries(db, new_time)
+        delivered_transfers = await process_arriving_transfers(db, new_time, sim_id=self.simulation_id)
+        delivered_pos = await process_supplier_deliveries(db, new_time, sim_id=self.simulation_id)
+
+        # Replenish through fixed reorder rule
+        await evaluate_reorder_policy(db, new_time, sim_id=self.simulation_id)
 
         # Update simulation record
         sim = await db.get(Simulation, simulation_id)
@@ -241,15 +257,16 @@ class SimulationEngine:
         await db.commit()
 
         # Clear in-flight transfers and purchase orders
-        clear_active_transfers()
-        clear_active_pos()
+        clear_active_transfers(simulation_id)
+        clear_active_pos(simulation_id)
 
         # Re-initialize RNG and scenario state
         self.rng = random.Random(self.seed)
         self.clock = None
         self.active_scenario = "normal"
         self.active_scenario_config = get_scenario_config("normal")
-        set_current_scenario("normal")
+        set_current_scenario("normal", sim_id=simulation_id)
+        self.simulation_id = None
 
         # Re-seed and regenerate
         simulation = await self.initialize(db)
@@ -355,9 +372,9 @@ class SimulationEngine:
             day_end = day_start + timedelta(days=1)
             await self._generate_orders_for_period(db, day_start, day_end)
 
-            # Periodic restocking every 3 days
-            if day_offset > 0 and day_offset % 3 == 0:
-                await self._restock_inventory(db, day_start)
+            # Replenish through supplier deliveries and fixed reorder rule
+            await process_supplier_deliveries(db, day_end, sim_id=self.simulation_id)
+            await evaluate_reorder_policy(db, day_end, sim_id=self.simulation_id)
 
     async def _generate_orders_for_period(
         self, db: AsyncSession, start: datetime, end: datetime
@@ -426,7 +443,8 @@ class SimulationEngine:
                     prod_seed.category, order_time.hour, order_time.weekday()
                 )
                 cat_mult = category_multipliers.get(prod_seed.category, 1.0)
-                combined_mult = rate_mult * cat_mult
+                weekend_mult = prod_seed.weekend_multiplier if is_weekend else 1.0
+                combined_mult = rate_mult * cat_mult * weekend_mult
 
                 requested_qty = max(1, int(round(self.rng.gauss(1.5, 0.5) * combined_mult)))
 
@@ -511,47 +529,7 @@ class SimulationEngine:
 
 
 
-    async def _restock_inventory(self, db: AsyncSession, restock_time: datetime) -> None:
-        """Restock inventory for all stores/products (simulated supplier delivery)."""
-        restock_naive = restock_time.replace(tzinfo=None) if restock_time.tzinfo else restock_time
-        for store_seed in STORES:
-            for prod_seed in PRODUCTS:
-                # Count unexpired active batches
-                active_sum_res = await db.execute(
-                    select(func.coalesce(func.sum(Batch.quantity), 0)).where(
-                        Batch.store_id == store_seed.store_id,
-                        Batch.product_id == prod_seed.product_id,
-                        Batch.quantity > 0,
-                        Batch.expires_at > restock_naive,
-                    )
-                )
-                active_qty = active_sum_res.scalar()
 
-                if active_qty < prod_seed.daily_demand_mean * 2:
-                    restock_qty = int(prod_seed.daily_demand_mean * self.rng.uniform(2.5, 3.5))
-
-                    batch = Batch(
-                        batch_id=uuid.uuid4(),
-                        store_id=store_seed.store_id,
-                        product_id=prod_seed.product_id,
-                        quantity=restock_qty,
-                        received_at=restock_naive,
-                        expires_at=restock_naive + timedelta(hours=prod_seed.shelf_life_hours),
-                    )
-                    db.add(batch)
-
-                    # Synchronize inventory
-                    inv_res = await db.execute(
-                        select(Inventory).where(
-                            Inventory.store_id == store_seed.store_id,
-                            Inventory.product_id == prod_seed.product_id,
-                        )
-                    )
-                    inv = inv_res.scalar_one_or_none()
-                    if inv:
-                        inv.quantity = active_qty + restock_qty
-
-        await db.flush()
 
     async def _expire_batches(self, db: AsyncSession, current_time: datetime) -> int:
         """Mark expired batches and deduct from inventory. Returns count of expired batches."""

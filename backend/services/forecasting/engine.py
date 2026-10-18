@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Order, OrderItem, Forecast
-from backend.events.bus import bus
+from backend.events.audit import audit_log as bus
 from backend.services.simulation.seed_data import PRODUCTS
 from backend.services.forecasting.models import (
     DemandPoint,

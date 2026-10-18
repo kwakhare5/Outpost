@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.core import Store, Product, Inventory, Batch, Event, Shipment, ReceiptConfirmation
 from backend.models.enums import ShipmentStatus
 from backend.services.simulation.seed_data import STORES
+from backend.services.simulation.scenarios import get_simulation_state
 
 
 def calculate_haversine_distance(
@@ -83,19 +84,16 @@ class InTransitTransfer:
 
 
 
-# Active in-transit registry
-_active_transfers: list[InTransitTransfer] = []
-
-
-def get_active_transfers() -> list[InTransitTransfer]:
+def get_active_transfers(sim_id: str | uuid.UUID | None = None) -> list[InTransitTransfer]:
     """Retrieve currently active in-transit transfers."""
-    return [t for t in _active_transfers if t.status == 'in_transit']
+    state = get_simulation_state(sim_id)
+    return [t for t in state.active_transfers if t.status == 'in_transit']
 
 
-def clear_active_transfers() -> None:
+def clear_active_transfers(sim_id: str | uuid.UUID | None = None) -> None:
     """Reset active transfer registry."""
-    global _active_transfers
-    _active_transfers = []
+    state = get_simulation_state(sim_id)
+    state.active_transfers.clear()
 
 
 async def dispatch_transfer(
@@ -107,6 +105,7 @@ async def dispatch_transfer(
     current_time: datetime,
     speed_kmh: float = 25.0,
     traffic_multiplier: float = 1.0,
+    sim_id: str | uuid.UUID | None = None,
 ) -> InTransitTransfer:
     """Dispatch an inter-store transfer.
     
@@ -202,7 +201,8 @@ async def dispatch_transfer(
         distance_km=dist_km,
         traffic_multiplier=traffic_multiplier,
     )
-    _active_transfers.append(transfer)
+    state = get_simulation_state(sim_id)
+    state.active_transfers.append(transfer)
 
     # Persist Shipment ORM row in database
     shipment = Shipment(
@@ -245,7 +245,10 @@ async def dispatch_transfer(
 
 
 async def process_arriving_transfers(
-    db: AsyncSession, current_time: datetime, auto_confirm: bool = True
+    db: AsyncSession,
+    current_time: datetime,
+    auto_confirm: bool = True,
+    sim_id: str | uuid.UUID | None = None,
 ) -> list[InTransitTransfer]:
     """Check for transfers that have arrived at their destination.
     
@@ -258,7 +261,8 @@ async def process_arriving_transfers(
     arrived: list[InTransitTransfer] = []
 
     current_naive = current_time.replace(tzinfo=None) if current_time.tzinfo else current_time
-    for transfer in _active_transfers:
+    state = get_simulation_state(sim_id)
+    for transfer in list(state.active_transfers):
         arr_naive = transfer.arrival_eta.replace(tzinfo=None) if transfer.arrival_eta.tzinfo else transfer.arrival_eta
         if transfer.status == 'in_transit' and current_naive >= arr_naive:
             # Sync shipment row if present
@@ -352,6 +356,7 @@ async def confirm_shipment_receipt(
     received_quantity: int,
     current_time: datetime,
     notes: str | None = None,
+    sim_id: str | uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Confirm arrival count and restock destination dark store.
     
@@ -362,7 +367,8 @@ async def confirm_shipment_receipt(
     4. Discrepancy (sent - received) is recorded as transit shrinkage/damage loss.
     """
     shipment = await db.get(Shipment, shipment_id)
-    transfer = next((t for t in _active_transfers if t.transfer_id == shipment_id), None)
+    state = get_simulation_state(sim_id)
+    transfer = next((t for t in state.active_transfers if t.transfer_id == shipment_id), None)
 
     if not shipment and not transfer:
         raise ValueError(f"Shipment {shipment_id} not found")

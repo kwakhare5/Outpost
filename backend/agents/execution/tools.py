@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.core import Recommendation, Inventory, Risk, Store, Batch, Product, Action
 from backend.models.enums import RecommendationStatus, ActionType, ActionStatus
 from backend.services.decision.models import SafeExcessCalculator, DEFAULT_WEIGHTS
-from backend.events.bus import bus
+from backend.events.audit import audit_log as bus
 
 
 def _naive_now() -> datetime:

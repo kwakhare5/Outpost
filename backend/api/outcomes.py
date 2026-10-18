@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.core import OutcomeRecord, Store, Product
+from backend.services.forecasting.engine import ForecastingEngine
 
 router = APIRouter(prefix="/api/outcomes", tags=["outcomes"])
 
@@ -67,102 +68,15 @@ async def list_outcomes(
     store_map = {s.store_id: s.name for s in stores_res.scalars().all()}
 
     prods_res = await db.execute(select(Product))
-    prod_map = {p.product_id: p.name for p in prods_res.scalars().all()}
-
-    now_utc = datetime.now(timezone.utc)
-
-    # Seed baseline fixtures if empty
-    if not records:
-        default_store_id = next(iter(store_map.keys()), uuid.uuid4())
-        default_prod_id = next(iter(prod_map.keys()), uuid.uuid4())
-
-        sample_fixtures = [
-            OutcomeRecord(
-                outcome_id=uuid.uuid4(),
-                store_id=default_store_id,
-                product_id=default_prod_id,
-                exception_title="Amul Taaza Milk 500ml -- Stockout Risk (Andheri West)",
-                action_taken="Lateral Transfer 40u from Bandra (Van MUM-01)",
-                outcome_status="Stockout prevented",
-                expected_lost_sales_units=38,
-                actual_lost_sales_units=0,
-                measured_vs_expected="0u vs 38u expected lost",
-                waste_units=0,
-                waste_value_inr=0.0,
-                notes="Van arrived 10:18. All 40 units verified by operator. No stockout observed in this run.",
-                evaluated_at=now_utc - timedelta(hours=3),
-            ),
-            OutcomeRecord(
-                outcome_id=uuid.uuid4(),
-                store_id=default_store_id,
-                product_id=default_prod_id,
-                exception_title="Mother Dairy Dahi 400g -- Expiry Wave (Powai)",
-                action_taken="Markdown 20% (Elasticity 1.4x)",
-                outcome_status="Worse than expected",
-                expected_lost_sales_units=0,
-                actual_lost_sales_units=6,
-                measured_vs_expected="6u unsold vs 0u expected",
-                waste_units=6,
-                waste_value_inr=240.0,
-                notes="Price drop stimulated 14 units of demand; 6 units expired before afternoon shift.",
-                evaluated_at=now_utc - timedelta(hours=6),
-            ),
-            OutcomeRecord(
-                outcome_id=uuid.uuid4(),
-                store_id=default_store_id,
-                product_id=default_prod_id,
-                exception_title="Farm Eggs (6) -- Supplier Highway Delay (+2.5h)",
-                action_taken="Emergency RFC Reorder PO-4419 (Nashik)",
-                outcome_status="Residual loss",
-                expected_lost_sales_units=12,
-                actual_lost_sales_units=4,
-                measured_vs_expected="4u lost vs 12u unmitigated",
-                waste_units=0,
-                waste_value_inr=0.0,
-                notes="RFC truck arrived 13:45. Residual 4 units lost during 25-minute noon stockout gap.",
-                evaluated_at=now_utc - timedelta(hours=9),
-            ),
-            OutcomeRecord(
-                outcome_id=uuid.uuid4(),
-                store_id=default_store_id,
-                product_id=default_prod_id,
-                exception_title="Banana (1 dozen) -- Donor Capacity Warning (Bandra)",
-                action_taken="Transfer Proposal Rejected by Operator",
-                outcome_status="Rejected",
-                expected_lost_sales_units=15,
-                actual_lost_sales_units=14,
-                measured_vs_expected="14u lost without intervention",
-                waste_units=0,
-                waste_value_inr=0.0,
-                notes="Operator rejected transfer to protect Bandra morning walk-in buffer. Baseline loss realized.",
-                evaluated_at=now_utc - timedelta(hours=14),
-            ),
-            OutcomeRecord(
-                outcome_id=uuid.uuid4(),
-                store_id=default_store_id,
-                product_id=default_prod_id,
-                exception_title="Britannia Bread 400g -- Evening Surge (Andheri West)",
-                action_taken="Lateral Transfer 20u from Powai",
-                outcome_status="Success",
-                expected_lost_sales_units=18,
-                actual_lost_sales_units=0,
-                measured_vs_expected="0u vs 18u expected lost",
-                waste_units=0,
-                waste_value_inr=0.0,
-                notes="Dispatched 17:00, arrival 17:42. Preserved 100% evening fill rate.",
-                evaluated_at=now_utc - timedelta(hours=18),
-            ),
-        ]
-        for f in sample_fixtures:
-            db.add(f)
-        await db.flush()
-        records = sample_fixtures
+    products = prods_res.scalars().all()
+    prod_map = {p.product_id: p.name for p in products}
+    prod_price_map = {p.product_id: float(p.base_price) for p in products}
 
     # Compute summary aggregates
     resolved_count = len(records)
     stockout_prevented_count = sum(1 for r in records if r.actual_lost_sales_units == 0 and r.expected_lost_sales_units > 0)
     total_lost_sales_units = sum(r.actual_lost_sales_units for r in records)
-    total_lost_sales_inr = total_lost_sales_units * 35.0  # Representative avg unit selling price
+    total_lost_sales_inr = sum(r.actual_lost_sales_units * prod_price_map.get(r.product_id, 0.0) for r in records)
     total_waste_units = sum(r.waste_units for r in records)
     total_waste_inr = sum(r.waste_value_inr for r in records)
 
@@ -185,6 +99,13 @@ async def list_outcomes(
         for r in records
     ]
 
+    # Compute live forecast accuracy metrics on history
+    forecasting_engine = ForecastingEngine()
+    eval_results = await forecasting_engine.evaluate_on_history(db)
+    hl_res = eval_results.get("holt_linear")
+    forecast_mae = round(float(hl_res.mae), 2) if hl_res else 0.0
+    forecast_wape = round(float(hl_res.wape), 2) if hl_res else 0.0
+
     return OutcomesSummaryResponse(
         resolved_count=resolved_count,
         stockout_prevented_count=stockout_prevented_count,
@@ -192,8 +113,8 @@ async def list_outcomes(
         total_lost_sales_inr=total_lost_sales_inr,
         total_waste_units=total_waste_units,
         total_waste_inr=total_waste_inr,
-        forecast_mae_units=1.85,
-        forecast_wape_pct=11.4,
+        forecast_mae_units=forecast_mae,
+        forecast_wape_pct=forecast_wape,
         records=record_items,
-        disclaimer="SYNTHETIC FIXTURE HISTORY & SIMULATION AUDIT",
+        disclaimer="no outcomes measured yet" if not records else "SYNTHETIC FIXTURE HISTORY & SIMULATION AUDIT",
     )

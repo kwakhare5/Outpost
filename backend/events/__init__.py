@@ -1,3 +1,3 @@
-from backend.events.bus import EventBus, bus
+from backend.events.audit import AuditLog, audit_log, EventBus, bus
 
-__all__ = ["EventBus", "bus"]
+__all__ = ["AuditLog", "audit_log", "EventBus", "bus"]

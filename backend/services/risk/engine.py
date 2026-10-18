@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Risk, Inventory, Batch, Product, Supplier, Forecast
 from backend.models.enums import RiskType, RiskSeverity, RiskStatus
-from backend.events.bus import bus
+from backend.events.audit import audit_log as bus
 from backend.services.risk.models import (
     RiskConfig,
     BatchInfo,
