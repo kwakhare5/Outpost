@@ -1,5 +1,13 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-18: Sequential Replay Pre-Pass Cleanup, Forecast FK Deletion & Discount Verification Fix
+
+### Work Card: Sequential Replay Pre-Pass Cleanup, Forecast FK Deletion & Discount Verification Fix
+- **Problem / tension:** Calling `POST /api/simulations/replay` on an already seeded database crashed with `UniqueViolationError: store_pkey` because Pass 1 initialized without resetting prior stores; Pass 1 reset also failed to delete `Forecast` before `Store` and `Product` violating foreign key constraints; and autonomous replay execution of discount recommendations failed on PostgreSQL with datatype mismatch.
+- **Change / decision:** Added `clear_simulation_data()` deleting all simulation tables in dependency order including `Forecast`, clearing transfers and POs; invoked `clear_simulation_data()` at the start of `run_replay()` before Pass 1 and in `SimulationEngine.reset()`; cleared stale `_engines` registry in the replay route; and prevented invalid inventory verification queries on discount actions in `run_outpost_cycle()`. Added `test_replay_sequential.py` testing replay twice sequentially and against pre-seeded databases.
+- **Proof:** `pytest backend/tests` passed 142/142 tests in 64.82s; `POST /api/simulations/replay` (168h, seed 42) succeeded with status 200 in 146.87s against PostgreSQL container `outpost-db-1` with 96 HOLD and 4 DISCOUNT recommendations generated.
+- **Still broken / unproven:** None. Replay runs cleanly and idempotently on fresh or pre-seeded databases.
+
 ## 2026-10-08: Decision-First Usability Overhaul, 1-to-1 File Renaming & Redundancy Purge
 
 ### Work Card: Decision-First Usability Overhaul, 1-to-1 File Renaming & Redundancy Purge

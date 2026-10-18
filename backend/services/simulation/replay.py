@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import RunRecord, Simulation
 from backend.services.metrics import compute_simulation_metrics, RUPEE_PRICE_ASSUMPTION
-from backend.services.simulation.engine import SimulationEngine
+from backend.services.simulation.engine import SimulationEngine, clear_simulation_data
 from backend.services.simulation.scenarios import get_or_create_simulation_state
 
 
@@ -83,6 +83,7 @@ async def run_replay(
     # =========================================================================
     # PASS 1: Baseline Policy (Fixed reorder rule only)
     # =========================================================================
+    await clear_simulation_data(db)
     engine = SimulationEngine(seed=seed, historical_days=historical_days, policy="baseline")
     sim_baseline = await engine.initialize(db, policy="baseline")
     from backend.services.forecasting.engine import ForecastingEngine
