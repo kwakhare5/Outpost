@@ -52,14 +52,23 @@ async def _get_or_restore_engine(db: AsyncSession, sim_uuid: _uuid.UUID) -> Simu
 class CreateSimulationRequest(BaseModel):
     seed: int = 42
     historical_days: int = 60
+    policy: str = "outpost"
 
 
 class AdvanceTimeRequest(BaseModel):
     hours: int
+    auto_execute: bool = False
 
 
 class ApplyScenarioRequest(BaseModel):
     scenario: str
+
+
+class ReplayRequest(BaseModel):
+    seed: int = 42
+    window_hours: int = 168
+    step_hours: int = 1
+    historical_days: int = 7
 
 
 class SimulationResponse(BaseModel):
@@ -77,8 +86,8 @@ async def create_simulation(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create and initialize a new simulation."""
-    engine = SimulationEngine(seed=request.seed, historical_days=request.historical_days)
-    simulation = await engine.initialize(db)
+    engine = SimulationEngine(seed=request.seed, historical_days=request.historical_days, policy=request.policy)
+    simulation = await engine.initialize(db, policy=request.policy)
     await db.commit()
 
     sim_id = str(simulation.simulation_id)
@@ -179,7 +188,7 @@ async def advance_simulation(
         raise HTTPException(status_code=400, detail='Invalid simulation ID')
 
     engine = await _get_or_restore_engine(db, sim_uuid)
-    result = await engine.advance_time(db, sim_uuid, request.hours)
+    result = await engine.advance_time(db, sim_uuid, request.hours, auto_execute=request.auto_execute)
     await db.commit()
     return result
 
@@ -311,3 +320,19 @@ async def set_simulation_scenario(
     await db.commit()
     return result
 
+
+@router.post('/replay')
+async def replay_simulation(
+    request: ReplayRequest = ReplayRequest(),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Execute sequential same-seed replay (baseline vs outpost) and return deltas."""
+    from backend.services.simulation.replay import run_replay
+    result = await run_replay(
+        db,
+        seed=request.seed,
+        window_hours=request.window_hours,
+        step_hours=request.step_hours,
+        historical_days=request.historical_days,
+    )
+    return result

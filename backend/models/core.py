@@ -250,3 +250,17 @@ class OutcomeRecord(Base):
     waste_value_inr: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(Text, default="")
     evaluated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class RunRecord(Base):
+    __tablename__ = 'run_record'
+
+    run_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    simulation_id: Mapped[uuid.UUID]
+    seed: Mapped[int] = mapped_column(Integer)
+    policy: Mapped[str] = mapped_column(Text)
+    window_hours: Mapped[int] = mapped_column(Integer)
+    lost_sales_units: Mapped[int] = mapped_column(Integer, default=0)
+    waste_units: Mapped[int] = mapped_column(Integer, default=0)
+    rupee_loss: Mapped[float] = mapped_column(Float, default=0.0)
+    availability_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -208,6 +208,8 @@ async def dispatch_transfer(
         except RuntimeError:
             pass
     state = get_simulation_state(sim_id)
+    if state.policy == "baseline":
+        raise ValueError("Transfers are not permitted under baseline policy")
     state.active_transfers.append(transfer)
 
     # Persist Shipment ORM row in database

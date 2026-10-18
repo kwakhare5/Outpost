@@ -77,6 +77,7 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
 class SimulationState:
     simulation_id: uuid.UUID
     scenario: str = "normal"
+    policy: str = "outpost"
     active_transfers: list[Any] = field(default_factory=list)
     active_pos: list[Any] = field(default_factory=list)
     engine: Any = None
@@ -117,6 +118,7 @@ def clear_simulation_states() -> None:
     _default_state.active_transfers.clear()
     _default_state.active_pos.clear()
     _default_state.scenario = "normal"
+    _default_state.policy = "outpost"
     _default_state.engine = None
 
 
@@ -161,10 +163,13 @@ async def restore_simulation_state_from_db(
     sim = await db.get(Simulation, sim_uuid)
     if sim and sim.configuration and isinstance(sim.configuration, dict):
         saved_scenario = sim.configuration.get("scenario", "normal")
+        saved_policy = sim.configuration.get("policy", "outpost")
         state.scenario = saved_scenario
+        state.policy = saved_policy
         if engine is not None:
             engine.active_scenario = saved_scenario
             engine.active_scenario_config = get_scenario_config(saved_scenario)
+            engine.policy = saved_policy
 
     # 2. Rebuild in-flight transfers (vans) from Shipment table
     shipments_res = await db.execute(

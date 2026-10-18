@@ -17,6 +17,7 @@ from backend.models.core import (
     Store, Product, Customer, Supplier, Order, OrderItem,
     Inventory, Batch, Simulation, Scenario, Event,
     Shipment, PurchaseOrder, ReceiptConfirmation,
+    Risk, Recommendation, Action, OutcomeRecord,
 )
 from backend.models.enums import (
     StoreStatus, ProductCategory, OrderStatus, SupplierStatus,
@@ -118,9 +119,10 @@ class SimulationEngine:
     - Reset capability
     """
 
-    def __init__(self, seed: int = 42, historical_days: int = 60):
+    def __init__(self, seed: int = 42, historical_days: int = 60, policy: str = "outpost"):
         self.seed = seed
         self.historical_days = historical_days
+        self.policy = policy
         self.simulation_id: uuid.UUID | None = None
         self.rng = random.Random(seed)
         self.clock: SimulationClock | None = None
@@ -130,16 +132,20 @@ class SimulationEngine:
         self.active_scenario: str = "normal"
         self.active_scenario_config: ScenarioConfig = get_scenario_config("normal")
 
-    async def initialize(self, db: AsyncSession) -> Simulation:
+    async def initialize(self, db: AsyncSession, policy: str | None = None) -> Simulation:
         """Seed all base data and generate historical orders.
         
         Returns the created Simulation ORM object.
         """
+        if policy is not None:
+            self.policy = policy
+
         if self.simulation_id is None:
             self.simulation_id = uuid.uuid4()
         state = get_or_create_simulation_state(self.simulation_id)
         state.engine = self
         state.scenario = self.active_scenario
+        state.policy = self.policy
 
         # 1. Calculate timeline
         sim_start = datetime.now(timezone.utc) - timedelta(days=self.historical_days)
@@ -172,13 +178,21 @@ class SimulationEngine:
                 'stores': len(STORES),
                 'products': len(PRODUCTS),
                 'customers': len(CUSTOMERS),
+                'scenario': self.active_scenario,
+                'policy': self.policy,
             },
         )
         db.add(simulation)
         await db.commit()
         return simulation
 
-    async def advance_time(self, db: AsyncSession, simulation_id: uuid.UUID, hours: int) -> dict[str, Any]:
+    async def advance_time(
+        self,
+        db: AsyncSession,
+        simulation_id: uuid.UUID,
+        hours: int,
+        auto_execute: bool = False,
+    ) -> dict[str, Any]:
         """Advance simulation time, generate new orders, handle batch expiry.
         
         Returns summary of what happened during the time advance.
@@ -189,6 +203,7 @@ class SimulationEngine:
         self.simulation_id = simulation_id
         state = get_or_create_simulation_state(simulation_id)
         state.engine = self
+        self.policy = state.policy
 
         old_time = self.clock.now
         new_time = self.clock.advance(hours)
@@ -200,11 +215,18 @@ class SimulationEngine:
         expired_batches = await self._expire_batches(db, new_time)
 
         # Process arriving store transfers & supplier PO deliveries
-        delivered_transfers = await process_arriving_transfers(db, new_time, sim_id=self.simulation_id)
+        delivered_transfers = []
+        if self.policy == 'outpost':
+            delivered_transfers = await process_arriving_transfers(db, new_time, sim_id=self.simulation_id)
         delivered_pos = await process_supplier_deliveries(db, new_time, sim_id=self.simulation_id)
 
-        # Replenish through fixed reorder rule
+        # Replenish through fixed reorder rule (formalised baseline policy)
         await evaluate_reorder_policy(db, new_time, sim_id=self.simulation_id)
+
+        # If outpost policy and auto_execute requested, run the autonomous loop
+        outpost_results = {}
+        if self.policy == 'outpost' and auto_execute:
+            outpost_results = await self.run_outpost_cycle(db, new_time)
 
         # Update simulation record
         sim = await db.get(Simulation, simulation_id)
@@ -223,10 +245,12 @@ class SimulationEngine:
                 'from': old_time.isoformat(),
                 'to': new_time.isoformat(),
                 'hours': hours,
+                'policy': self.policy,
                 'orders_created': orders_created,
                 'batches_expired': expired_batches,
                 'transfers_delivered': len(delivered_transfers),
                 'pos_delivered': len(delivered_pos),
+                'outpost_results': outpost_results,
             },
         )
         db.add(event)
@@ -235,15 +259,64 @@ class SimulationEngine:
         return {
             'current_time': new_time.isoformat(),
             'hours_advanced': hours,
+            'policy': self.policy,
             'orders_created': orders_created,
             'batches_expired': expired_batches,
             'transfers_delivered': len(delivered_transfers),
             'pos_delivered': len(delivered_pos),
+            'outpost_results': outpost_results,
+        }
+
+    async def run_outpost_cycle(self, db: AsyncSession, current_time: datetime | None = None) -> dict[str, int]:
+        """Run the Outpost loop: risk scan, decision recommendations, approval, and agent execution."""
+        if self.policy != "outpost":
+            return {"risks": 0, "recommendations": 0, "executed": 0}
+
+        now = current_time or (self.clock.now if self.clock else datetime.now(timezone.utc))
+        from backend.services.risk.engine import RiskEngine
+        from backend.services.decision.engine import DecisionOrchestrator
+        from backend.agents.execution.runner import ExecutionRunner
+        from backend.models.core import Recommendation
+        from backend.models.enums import RecommendationStatus
+
+        risk_engine = RiskEngine()
+        risks_count = await risk_engine.run(db, now=now)
+        await db.flush()
+
+        orchestrator = DecisionOrchestrator()
+        recs_count = await orchestrator.evaluate_all(db)
+        await db.flush()
+
+        # Approve and execute any newly generated PENDING recommendations
+        pending_recs = (await db.execute(
+            select(Recommendation).where(Recommendation.status == RecommendationStatus.PENDING)
+        )).scalars().all()
+
+        runner = ExecutionRunner()
+        executed_count = 0
+        for rec in pending_recs:
+            approved = await orchestrator.approve(db, rec.recommendation_id, approver="autonomous_replay")
+            if approved:
+                run_res = await runner.run(db, rec.recommendation_id)
+                if run_res.status == "completed":
+                    executed_count += 1
+        await db.flush()
+
+        return {
+            "risks": risks_count,
+            "recommendations": recs_count,
+            "executed": executed_count,
         }
 
     async def reset(self, db: AsyncSession, simulation_id: uuid.UUID) -> dict[str, Any]:
         """Reset simulation: clear generated data, re-seed, restart clock."""
+        saved_policy = self.policy
+
         # Delete in dependency order
+        await db.execute(delete(Action))
+        await db.execute(delete(Recommendation))
+        await db.execute(delete(Risk))
+        await db.execute(delete(OutcomeRecord))
         await db.execute(delete(ReceiptConfirmation))
         await db.execute(delete(Shipment))
         await db.execute(delete(PurchaseOrder))
@@ -271,13 +344,14 @@ class SimulationEngine:
         set_current_scenario("normal", sim_id=simulation_id)
         self.simulation_id = None
 
-        # Re-seed and regenerate
-        simulation = await self.initialize(db)
+        # Re-seed and regenerate with preserved policy
+        simulation = await self.initialize(db, policy=saved_policy)
         clear_active_transfers(simulation.simulation_id)
         clear_active_pos(simulation.simulation_id)
         return {
             'simulation_id': str(simulation.simulation_id),
             'status': 'reset_complete',
+            'policy': self.policy,
             'current_time': self.clock.now.isoformat() if self.clock else None,
         }
 
@@ -548,6 +622,23 @@ class SimulationEngine:
 
         affected_pairs: set[tuple[uuid.UUID, uuid.UUID]] = set()
         for batch in expired:
+            units = batch.quantity
+            if units > 0:
+                event = Event(
+                    event_id=uuid.uuid4(),
+                    event_type='WASTE_EXPIRED',
+                    timestamp=current_time,
+                    entity_type='batch',
+                    entity_id=batch.batch_id,
+                    payload={
+                        'store_id': str(batch.store_id),
+                        'product_id': str(batch.product_id),
+                        'units': units,
+                        'batch_id': str(batch.batch_id),
+                        'expires_at': batch.expires_at.isoformat() if batch.expires_at else None,
+                    },
+                )
+                db.add(event)
             affected_pairs.add((batch.store_id, batch.product_id))
             batch.quantity = 0
 
