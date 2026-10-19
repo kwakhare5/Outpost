@@ -28,6 +28,7 @@ SCENARIO_NAMES = [
     'supplier_delay',
     'expiry_wave',
     'network_imbalance',
+    'store_short_excess',
 ]
 
 
@@ -37,6 +38,7 @@ class ScenarioConfig:
     description: str
     demand_multiplier_by_category: dict[str, float] = field(default_factory=dict)
     supplier_lead_time_delay_hours: int = 0
+    duration_hours: int | None = None
 
 
 _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
@@ -48,15 +50,17 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
     ),
     'demand_spike': ScenarioConfig(
         name='demand_spike',
-        description='Morning surge with +250% demand on dairy and bakery perishables.',
+        description='Demand surge on one store and product group for 24 hours.',
         demand_multiplier_by_category={'dairy': 3.5, 'bakery': 2.5, 'produce': 2.0, 'staples': 1.0, 'packaged': 1.1},
         supplier_lead_time_delay_hours=0,
+        duration_hours=24,
     ),
     'supplier_delay': ScenarioConfig(
         name='supplier_delay',
-        description='Supply chain disruption adding +24h delay to arriving supplier purchase orders.',
+        description='Supplier lead time doubled (x2) for 48 hours.',
         demand_multiplier_by_category={'dairy': 1.0, 'bakery': 1.0, 'produce': 1.0, 'staples': 1.0, 'packaged': 1.0},
         supplier_lead_time_delay_hours=24,
+        duration_hours=48,
     ),
     'expiry_wave': ScenarioConfig(
         name='expiry_wave',
@@ -66,11 +70,23 @@ _SCENARIO_CONFIGS: dict[str, ScenarioConfig] = {
     ),
     'network_imbalance': ScenarioConfig(
         name='network_imbalance',
-        description='Asymmetric spatial distribution with excess in Bandra and critical stockout risk in Andheri.',
+        description='A store running short while another has excess inventory.',
         demand_multiplier_by_category={'dairy': 1.2, 'bakery': 1.1, 'produce': 1.0, 'staples': 1.0, 'packaged': 1.0},
         supplier_lead_time_delay_hours=0,
     ),
 }
+_SCENARIO_CONFIGS['store_short_excess'] = _SCENARIO_CONFIGS['network_imbalance']
+
+
+@dataclass
+class ActiveDiscount:
+    discount_id: uuid.UUID
+    store_id: uuid.UUID
+    product_id: uuid.UUID
+    discount_pct: float
+    start_time: datetime
+    end_time: datetime
+    recommendation_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -80,6 +96,7 @@ class SimulationState:
     policy: str = "outpost"
     active_transfers: list[Any] = field(default_factory=list)
     active_pos: list[Any] = field(default_factory=list)
+    active_discounts: list[ActiveDiscount] = field(default_factory=list)
     engine: Any = None
 
 
@@ -112,11 +129,48 @@ def get_or_create_simulation_state(sim_id: str | uuid.UUID) -> SimulationState:
     return _simulation_states[key]
 
 
+def get_active_discounts(sim_id: str | uuid.UUID | None = None) -> list[ActiveDiscount]:
+    """Retrieve active discounts for a simulation."""
+    state = get_simulation_state(sim_id)
+    return state.active_discounts
+
+
+def add_active_discount(
+    store_id: uuid.UUID,
+    product_id: uuid.UUID,
+    discount_pct: float,
+    start_time: datetime,
+    end_time: datetime,
+    recommendation_id: uuid.UUID | None = None,
+    sim_id: str | uuid.UUID | None = None,
+) -> ActiveDiscount:
+    """Register an active discount affecting simulation price and demand lift."""
+    state = get_simulation_state(sim_id)
+    disc = ActiveDiscount(
+        discount_id=uuid.uuid4(),
+        store_id=store_id,
+        product_id=product_id,
+        discount_pct=discount_pct,
+        start_time=start_time.replace(tzinfo=None) if start_time.tzinfo else start_time,
+        end_time=end_time.replace(tzinfo=None) if end_time.tzinfo else end_time,
+        recommendation_id=recommendation_id,
+    )
+    state.active_discounts.append(disc)
+    return disc
+
+
+def clear_active_discounts(sim_id: str | uuid.UUID | None = None) -> None:
+    """Reset active discounts."""
+    state = get_simulation_state(sim_id)
+    state.active_discounts.clear()
+
+
 def clear_simulation_states() -> None:
     """Clear all simulation states (used during reset / simulated process restart)."""
     _simulation_states.clear()
     _default_state.active_transfers.clear()
     _default_state.active_pos.clear()
+    _default_state.active_discounts.clear()
     _default_state.scenario = "normal"
     _default_state.policy = "outpost"
     _default_state.engine = None
@@ -289,39 +343,42 @@ async def apply_scenario(
     now = engine.clock.now if (engine and getattr(engine, 'clock', None)) else datetime.now(timezone.utc).replace(tzinfo=None)
     now_naive = now if now.tzinfo is None else now.replace(tzinfo=None)
 
-    if scenario_name == 'network_imbalance':
-        # Drain Andheri milk to <= 4 units and inflate Bandra milk to >= 80 units
+    if scenario_name in ('network_imbalance', 'store_short_excess'):
+        # Drain one store to <= 3 units and inflate another to >= 80 units
         all_stores = (await db.execute(select(Store))).scalars().all()
-        bandra = next((s for s in all_stores if 'Bandra' in s.name), None)
-        andheri = next((s for s in all_stores if 'Andheri' in s.name), None)
+        bandra = next((s for s in all_stores if 'Bandra' in s.name), all_stores[0] if all_stores else None)
+        andheri = next((s for s in all_stores if 'Andheri' in s.name), all_stores[1] if len(all_stores) > 1 else None)
 
         all_prods = (await db.execute(select(Product))).scalars().all()
-        milk = next((p for p in all_prods if 'Milk' in p.name), None)
+        target_prod = next(
+            (p for p in all_prods if getattr(p.category, "value", str(p.category)) in ('dairy', 'bakery')),
+            all_prods[0] if all_prods else None
+        )
 
-        if bandra and andheri and milk:
-            # Drain non-Bandra stores down to tight stock (3 units) and inflate Bandra to 85 units
+        if bandra and andheri and target_prod:
+            # Drain non-excess stores down to tight stock (3 units) and inflate excess store to 85 units
             other_stores = [s for s in all_stores if s.store_id != bandra.store_id]
             for st in other_stores:
                 st_batches = (await db.execute(
                     select(Batch).where(
                         Batch.store_id == st.store_id,
-                        Batch.product_id == milk.product_id,
+                        Batch.product_id == target_prod.product_id,
                         Batch.quantity > 0,
                     )
                 )).scalars().all()
                 for idx, b in enumerate(st_batches):
                     b.quantity = 3 if idx == 0 else 0
                 st_inv = (await db.execute(
-                    select(Inventory).where(Inventory.store_id == st.store_id, Inventory.product_id == milk.product_id)
+                    select(Inventory).where(Inventory.store_id == st.store_id, Inventory.product_id == target_prod.product_id)
                 )).scalar_one_or_none()
                 if st_inv:
                     st_inv.quantity = 3
 
-            # Inflate Bandra active batches up to 85 units
+            # Inflate excess store active batches up to 85 units
             bandra_batches = (await db.execute(
                 select(Batch).where(
                     Batch.store_id == bandra.store_id,
-                    Batch.product_id == milk.product_id,
+                    Batch.product_id == target_prod.product_id,
                     Batch.quantity > 0,
                 )
             )).scalars().all()
@@ -331,14 +388,14 @@ async def apply_scenario(
                 db.add(Batch(
                     batch_id=uuid.uuid4(),
                     store_id=bandra.store_id,
-                    product_id=milk.product_id,
+                    product_id=target_prod.product_id,
                     quantity=85,
                     received_at=now_naive,
                     expires_at=now_naive + timedelta(hours=72),
                 ))
 
             bandra_inv = (await db.execute(
-                select(Inventory).where(Inventory.store_id == bandra.store_id, Inventory.product_id == milk.product_id)
+                select(Inventory).where(Inventory.store_id == bandra.store_id, Inventory.product_id == target_prod.product_id)
             )).scalar_one_or_none()
             if bandra_inv:
                 bandra_inv.quantity = 85

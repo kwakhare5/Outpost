@@ -147,10 +147,17 @@ class SimulationEngine:
     - Reset capability
     """
 
-    def __init__(self, seed: int = 42, historical_days: int = 60, policy: str = "outpost"):
+    def __init__(
+        self,
+        seed: int = 42,
+        historical_days: int = 60,
+        policy: str = "outpost",
+        sim_start: datetime | None = None,
+    ):
         self.seed = seed
         self.historical_days = historical_days
         self.policy = policy
+        self.sim_start: datetime | None = sim_start.replace(tzinfo=None) if (sim_start and sim_start.tzinfo) else sim_start
         self.simulation_id: uuid.UUID | None = None
         self.rng = random.Random(seed)
         self.clock: SimulationClock | None = None
@@ -160,13 +167,20 @@ class SimulationEngine:
         self.active_scenario: str = "normal"
         self.active_scenario_config: ScenarioConfig = get_scenario_config("normal")
 
-    async def initialize(self, db: AsyncSession, policy: str | None = None) -> Simulation:
+    async def initialize(
+        self,
+        db: AsyncSession,
+        policy: str | None = None,
+        sim_start: datetime | None = None,
+    ) -> Simulation:
         """Seed all base data and generate historical orders.
         
         Returns the created Simulation ORM object.
         """
         if policy is not None:
             self.policy = policy
+        if sim_start is not None:
+            self.sim_start = sim_start.replace(tzinfo=None) if sim_start.tzinfo else sim_start
 
         if self.simulation_id is None:
             self.simulation_id = uuid.uuid4()
@@ -175,9 +189,13 @@ class SimulationEngine:
         state.scenario = self.active_scenario
         state.policy = self.policy
 
-        # 1. Calculate timeline
-        sim_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.historical_days)
-        self.clock = SimulationClock(sim_start, self.seed)
+        # 1. Calculate timeline (fixed anchor if given, else computed once)
+        if self.sim_start is not None:
+            sim_start_val = self.sim_start
+        else:
+            sim_start_val = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.historical_days)
+            self.sim_start = sim_start_val
+        self.clock = SimulationClock(sim_start_val, self.seed)
 
         # 2. Seed stores, suppliers, products, customers
         await self._seed_base_data(db)
@@ -248,10 +266,15 @@ class SimulationEngine:
             delivered_transfers = await process_arriving_transfers(db, new_time, sim_id=self.simulation_id)
         delivered_pos = await process_supplier_deliveries(db, new_time, sim_id=self.simulation_id)
 
-        # Replenish through fixed reorder rule (formalised baseline policy)
+        # Replenishment policies:
+        # 1. Baseline supplier-side ordering (fixed reorder rule):
+        #    In baseline pass (pass 1), this is the sole replenishment policy.
+        #    In outpost pass (pass 2), this models the supplier-side ordering
+        #    that already exists in the world, with Outpost layered on top.
         await evaluate_reorder_policy(db, new_time, sim_id=self.simulation_id)
 
-        # If outpost policy and auto_execute requested, run the autonomous loop
+        # 2. Outpost Decision Engine layer (pass 2):
+        #    Runs risk detection, transfer/discount/reorder decisions, approval, and execution.
         outpost_results = {}
         if self.policy == 'outpost' and auto_execute:
             outpost_results = await self.run_outpost_cycle(db, new_time)
@@ -320,11 +343,31 @@ class SimulationEngine:
             select(Recommendation).where(Recommendation.status == RecommendationStatus.PENDING)
         )).scalars().all()
 
+        from backend.services.simulation.scenarios import get_active_discounts
+        active_discounts = get_active_discounts(self.simulation_id)
+
         runner = ExecutionRunner()
         executed_count = 0
         for rec in pending_recs:
+            if rec.action_type == ActionType.HOLD:
+                rec.status = RecommendationStatus.EXECUTED
+                continue
+
             if rec.action_type == ActionType.DISCOUNT:
                 rec.source_store_id = None
+                # If an active discount is already running for this store and product, skip redundant re-execution
+                rec_risk = await db.get(Risk, rec.risk_id)
+                if rec_risk:
+                    already_active = any(
+                        d.store_id == rec_risk.store_id
+                        and d.product_id == rec_risk.product_id
+                        and d.end_time > now
+                        for d in active_discounts
+                    )
+                    if already_active:
+                        rec.status = RecommendationStatus.EXPIRED
+                        continue
+
             approved = await orchestrator.approve(db, rec.recommendation_id, approver="autonomous_replay")
             if approved:
                 run_res = await runner.run(db, rec.recommendation_id)
@@ -341,20 +384,25 @@ class SimulationEngine:
     async def reset(self, db: AsyncSession, simulation_id: uuid.UUID) -> dict[str, Any]:
         """Reset simulation: clear generated data, re-seed, restart clock."""
         saved_policy = self.policy
+        saved_scenario = self.active_scenario
+        saved_sim_start = self.sim_start
 
         await clear_simulation_data(db, simulation_id)
 
         # Re-initialize RNG and scenario state
         self.rng = random.Random(self.seed)
         self.clock = None
-        self.active_scenario = "normal"
-        self.active_scenario_config = get_scenario_config("normal")
+        self.active_scenario = saved_scenario
+        self.active_scenario_config = get_scenario_config(saved_scenario)
         self.simulation_id = None
+        self.sim_start = saved_sim_start
 
-        # Re-seed and regenerate with preserved policy
-        simulation = await self.initialize(db, policy=saved_policy)
+        # Re-seed and regenerate with preserved policy and fixed anchor
+        simulation = await self.initialize(db, policy=saved_policy, sim_start=saved_sim_start)
         clear_active_transfers(simulation.simulation_id)
         clear_active_pos(simulation.simulation_id)
+        from backend.services.simulation.scenarios import clear_active_discounts
+        clear_active_discounts(simulation.simulation_id)
         return {
             'simulation_id': str(simulation.simulation_id),
             'status': 'reset_complete',
@@ -476,9 +524,17 @@ class SimulationEngine:
             stores = store_res.scalars().all()
             self._store_map = {s.name: s.store_id for s in stores}
 
+        # Check active scenario duration window
+        scenario_active = True
+        if self.clock and self.active_scenario_config and self.active_scenario_config.duration_hours:
+            sim_present = self.clock.start_time + timedelta(days=self.historical_days)
+            elapsed_hours = (start - sim_present).total_seconds() / 3600.0
+            if elapsed_hours >= self.active_scenario_config.duration_hours or elapsed_hours < 0:
+                scenario_active = False
+
         category_multipliers = (
             self.active_scenario_config.demand_multiplier_by_category
-            if self.active_scenario_config
+            if (self.active_scenario_config and scenario_active)
             else {}
         )
         avg_demand_mult = (
@@ -486,6 +542,9 @@ class SimulationEngine:
             if category_multipliers
             else 1.0
         )
+
+        from backend.services.simulation.scenarios import get_active_discounts
+        active_discounts = get_active_discounts(self.simulation_id)
 
         for cust_seed in CUSTOMERS:
             # Probability of ordering in this period, scaled by scenario demand intensity (Fix A)
@@ -523,13 +582,36 @@ class SimulationEngine:
             items_accounting: list[tuple[int, int, int]] = []
 
             for prod_seed in selected_products:
+                # Check active discount for this store and product at order_time
+                discount_lift = 1.0
+                effective_price = prod_seed.base_price
+                matching_discounts = [
+                    d for d in active_discounts
+                    if d.store_id == store_id
+                    and d.product_id == prod_seed.product_id
+                    and d.start_time <= order_time <= d.end_time
+                ]
+                if matching_discounts:
+                    disc = matching_discounts[-1]
+                    # Price elasticity model: price reduction creates bounded demand lift
+                    demand_lift = min(2.0, 1.0 + disc.discount_pct * 2.0)
+                    discount_lift = demand_lift
+                    effective_price = round(prod_seed.base_price * (1.0 - disc.discount_pct), 2)
+
                 # Quantity driven by category x hour block x weekday rate table + scenario multiplier (Spec Section 4)
                 rate_mult = get_demand_rate_multiplier(
                     prod_seed.category, order_time.hour, order_time.weekday()
                 )
                 cat_mult = category_multipliers.get(prod_seed.category, 1.0)
+                if self.active_scenario == 'demand_spike' and scenario_active:
+                    # Focus demand spike on one store (Store 0) and product group (dairy)
+                    if cust_seed.home_store_name == STORES[0].name and prod_seed.category == 'dairy':
+                        cat_mult = 4.5
+                    elif prod_seed.category == 'dairy':
+                        cat_mult = 1.6
+
                 weekend_mult = prod_seed.weekend_multiplier if is_weekend else 1.0
-                combined_mult = rate_mult * cat_mult * weekend_mult
+                combined_mult = rate_mult * cat_mult * weekend_mult * discount_lift
 
                 requested_qty = max(1, int(round(self.rng.gauss(1.5, 0.5) * combined_mult)))
 
@@ -546,7 +628,7 @@ class SimulationEngine:
                     requested_quantity=requested_qty,
                     fulfilled_quantity=fulfilled_qty,
                     lost_quantity=lost_qty,
-                    price=prod_seed.base_price,
+                    price=effective_price,
                 )
                 db.add(item)
                 items_accounting.append((requested_qty, fulfilled_qty, lost_qty))

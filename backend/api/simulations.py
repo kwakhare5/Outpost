@@ -69,6 +69,7 @@ class ReplayRequest(BaseModel):
     window_hours: int = 168
     step_hours: int = 1
     historical_days: int = 7
+    scenario: str = "normal"
 
 
 class SimulationResponse(BaseModel):
@@ -439,6 +440,7 @@ async def replay_simulation(
         window_hours=request.window_hours,
         step_hours=request.step_hours,
         historical_days=request.historical_days,
+        scenario=request.scenario,
     )
     _engines.clear()
     return result

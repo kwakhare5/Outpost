@@ -58,3 +58,186 @@ async def test_sequential_same_seed_replay_stores_two_run_records(db_session):
     assert "DELTAS (Outpost minus Baseline)" in report
     assert RUPEE_PRICE_ASSUMPTION in report
     assert "CNBC-TV18" in report
+
+
+@pytest.mark.asyncio
+async def test_replay_passes_identical_sim_start_and_deterministic_baseline(db_session):
+    """Test 1: Two replay passes start at identical sim_start, and same seed twice gives identical baseline."""
+    from datetime import datetime, timezone, timedelta
+
+    anchor = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=5)
+
+    result1 = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=3,
+        sim_start=anchor,
+    )
+
+    # Assert equality of start instants for both passes
+    assert result1["start_time_baseline"] == result1["start_time_outpost"]
+    assert result1["sim_start"] == anchor.isoformat()
+
+    # Run replay a second time with identical anchor and seed
+    result2 = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=3,
+        sim_start=anchor,
+    )
+
+    # Baseline results must be 100% deterministic and identical
+    b1 = result1["baseline"]
+    b2 = result2["baseline"]
+    assert b1["lost_sales_units"] == b2["lost_sales_units"]
+    assert b1["waste_units"] == b2["waste_units"]
+    assert b1["rupee_loss"] == b2["rupee_loss"]
+    assert b1["availability_pct"] == b2["availability_pct"]
+
+
+@pytest.mark.asyncio
+async def test_discount_executed_changes_simulated_demand(db_session):
+    """Test 2: A discount executed in outpost pass changes simulated demand for that store and product (assert direction)."""
+    from datetime import datetime, timezone, timedelta
+    from backend.services.simulation.engine import SimulationEngine, clear_simulation_data
+    from backend.services.simulation.scenarios import add_active_discount, clear_simulation_states
+    from backend.models.core import OrderItem, Product, Store
+    from backend.services.simulation.seed_data import STORES, PRODUCTS
+
+    anchor = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=2)
+
+    # --- Run A: Baseline advance without discount ---
+    await clear_simulation_data(db_session)
+    clear_simulation_states()
+    engine_no_disc = SimulationEngine(seed=77, historical_days=1, policy="outpost", sim_start=anchor)
+    sim_a = await engine_no_disc.initialize(db_session, sim_start=anchor)
+
+    # Advance 12 hours
+    await engine_no_disc.advance_time(db_session, sim_a.simulation_id, hours=12, auto_execute=False)
+
+    store_id = STORES[0].store_id
+    prod_id = PRODUCTS[0].product_id
+
+    items_no_disc = (await db_session.execute(
+        select(OrderItem).where(
+            OrderItem.product_id == prod_id,
+        )
+    )).scalars().all()
+    req_no_disc = sum(i.requested_quantity for i in items_no_disc)
+    prices_no_disc = [i.price for i in items_no_disc]
+
+    # --- Run B: Advance with active discount on that store and product ---
+    await clear_simulation_data(db_session)
+    clear_simulation_states()
+    engine_disc = SimulationEngine(seed=77, historical_days=1, policy="outpost", sim_start=anchor)
+    sim_b = await engine_disc.initialize(db_session, sim_start=anchor)
+
+    # Add active discount: 30% off
+    discount_pct = 0.30
+    add_active_discount(
+        store_id=store_id,
+        product_id=prod_id,
+        discount_pct=discount_pct,
+        start_time=engine_disc.clock.now,
+        end_time=engine_disc.clock.now + timedelta(hours=24),
+        sim_id=sim_b.simulation_id,
+    )
+
+    # Advance identical 12 hours with discount active
+    await engine_disc.advance_time(db_session, sim_b.simulation_id, hours=12, auto_execute=False)
+
+    items_disc = (await db_session.execute(
+        select(OrderItem).where(
+            OrderItem.product_id == prod_id,
+        )
+    )).scalars().all()
+    req_disc = sum(i.requested_quantity for i in items_disc)
+    prices_disc = [i.price for i in items_disc]
+
+    # PROOF:
+    # 1. Prices for discounted product items are strictly reduced
+    assert len(prices_disc) > 0, "Discounted run must generate orders for target product"
+    expected_discounted_price = round(PRODUCTS[0].base_price * (1.0 - discount_pct), 2)
+    assert any(pytest.approx(float(p), abs=0.01) == expected_discounted_price for p in prices_disc), (
+        f"Expected price {expected_discounted_price} in discounted order items, got {prices_disc}"
+    )
+
+    # 2. Simulated requested demand direction is increased (bounded demand lift)
+    assert req_disc >= req_no_disc, (
+        f"Expected discounted requested demand ({req_disc}) >= non-discounted ({req_no_disc})"
+    )
+
+
+@pytest.mark.asyncio
+async def test_stress_scenarios_produce_different_baseline_results(db_session):
+    """Test 3: Each stress scenario produces a different baseline result than the normal scenario."""
+    from datetime import datetime, timezone, timedelta
+
+    anchor = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=3)
+
+    normal_res = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=2,
+        scenario="normal",
+        sim_start=anchor,
+    )
+    b_norm = normal_res["baseline"]
+
+    spike_res = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=2,
+        scenario="demand_spike",
+        sim_start=anchor,
+    )
+    b_spike = spike_res["baseline"]
+
+    delay_res = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=2,
+        scenario="supplier_delay",
+        sim_start=anchor,
+    )
+    b_delay = delay_res["baseline"]
+
+    imbalance_res = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=2,
+        scenario="network_imbalance",
+        sim_start=anchor,
+    )
+    b_imbalance = imbalance_res["baseline"]
+
+    # Assert each stress scenario diverges from normal baseline
+    assert (
+        b_spike["lost_sales_units"] != b_norm["lost_sales_units"]
+        or b_spike["rupee_loss"] != b_norm["rupee_loss"]
+        or b_spike["availability_pct"] != b_norm["availability_pct"]
+    ), f"demand_spike baseline must differ from normal baseline"
+
+    assert (
+        b_delay["lost_sales_units"] != b_norm["lost_sales_units"]
+        or b_delay["rupee_loss"] != b_norm["rupee_loss"]
+        or b_delay["availability_pct"] != b_norm["availability_pct"]
+    ), f"supplier_delay baseline must differ from normal baseline"
+
+    assert (
+        b_imbalance["lost_sales_units"] != b_norm["lost_sales_units"]
+        or b_imbalance["rupee_loss"] != b_norm["rupee_loss"]
+        or b_imbalance["waste_units"] != b_norm["waste_units"]
+    ), f"network_imbalance baseline must differ from normal baseline"

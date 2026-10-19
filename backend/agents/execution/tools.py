@@ -547,6 +547,36 @@ async def apply_discount(
         await db.flush()
 
     discount_pct = 0.20
+    if rec.alternatives and isinstance(rec.alternatives, list):
+        for alt in rec.alternatives:
+            if isinstance(alt, dict) and alt.get("action_type") == "discount":
+                meta = alt.get("metadata") or {}
+                if "discount_pct" in meta:
+                    try:
+                        discount_pct = float(meta["discount_pct"])
+                    except (ValueError, TypeError):
+                        pass
+                    break
+
+    now = await _get_sim_now(db)
+    try:
+        from backend.services.simulation.scenarios import get_active_simulation_id
+        active_sim_id = await get_active_simulation_id(db)
+    except Exception:
+        active_sim_id = None
+
+    end_time = risk.expected_time if (risk.expected_time and risk.expected_time > now) else now + timedelta(hours=24)
+
+    from backend.services.simulation.scenarios import add_active_discount
+    add_active_discount(
+        store_id=risk.store_id,
+        product_id=risk.product_id,
+        discount_pct=discount_pct,
+        start_time=now,
+        end_time=end_time,
+        recommendation_id=recommendation_id,
+        sim_id=active_sim_id,
+    )
 
     await audit_log.publish(
         db,

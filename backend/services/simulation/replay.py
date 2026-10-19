@@ -9,7 +9,7 @@ Records a RunRecord for each pass and returns both rows and their deltas.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -38,6 +38,8 @@ def format_replay_report(result: dict[str, Any]) -> str:
         f"OUTPOST SEQUENTIAL SAME-SEED REPLAY REPORT\n"
         f"================================================================================\n"
         f"Seed:            {result['seed']}\n"
+        f"Scenario:        {result.get('scenario', 'normal')}\n"
+        f"Sim Start:       {result.get('sim_start', 'N/A')}\n"
         f"Window:          {result['window_hours']} hours\n"
         f"Environment:     {result['deterministic_note']}\n\n"
         f"--- RUN RECORDS ---\n"
@@ -47,14 +49,20 @@ def format_replay_report(result: dict[str, Any]) -> str:
         f"  Lost Sales:    {b['lost_sales_units']} units\n"
         f"  Waste:         {b['waste_units']} units\n"
         f"  Rupee Loss:    Rs {b['rupee_loss']:,.2f}\n"
-        f"  Availability:  {b['availability_pct']:.2f}%\n\n"
+        f"  Availability:  {b['availability_pct']:.2f}%\n"
+        f"  Transfers:     {b.get('transfers', 0)}\n"
+        f"  Reorders:      {b.get('reorders', 0)}\n"
+        f"  Discounts:     {b.get('discounts', 0)}\n\n"
         f"Outpost Run:\n"
         f"  Run ID:        {o['run_id']}\n"
         f"  Policy:        {o['policy']}\n"
         f"  Lost Sales:    {o['lost_sales_units']} units\n"
         f"  Waste:         {o['waste_units']} units\n"
         f"  Rupee Loss:    Rs {o['rupee_loss']:,.2f}\n"
-        f"  Availability:  {o['availability_pct']:.2f}%\n\n"
+        f"  Availability:  {o['availability_pct']:.2f}%\n"
+        f"  Transfers:     {o.get('transfers', 0)}\n"
+        f"  Reorders:      {o.get('reorders', 0)}\n"
+        f"  Discounts:     {o.get('discounts', 0)}\n\n"
         f"--- DELTAS (Outpost minus Baseline) ---\n"
         f"  Lost Sales Delta:    {d['lost_sales_units_delta']:+d} units\n"
         f"  Waste Delta:         {d['waste_units_delta']:+d} units\n"
@@ -72,6 +80,8 @@ async def run_replay(
     window_hours: int = 168,
     step_hours: int = 1,
     historical_days: int = 7,
+    scenario: str = "normal",
+    sim_start: datetime | None = None,
 ) -> dict[str, Any]:
     """Execute sequential same-seed replay comparing baseline vs outpost policies.
     
@@ -80,12 +90,30 @@ async def run_replay(
     if step_hours <= 0:
         step_hours = 1
 
+    # Compute fixed anchor once per replay request, reused by both passes
+    if sim_start is None:
+        anchor_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=historical_days)
+    else:
+        anchor_start = sim_start.replace(tzinfo=None) if sim_start.tzinfo else sim_start
+
     # =========================================================================
     # PASS 1: Baseline Policy (Fixed reorder rule only)
     # =========================================================================
     await clear_simulation_data(db)
-    engine = SimulationEngine(seed=seed, historical_days=historical_days, policy="baseline")
-    sim_baseline = await engine.initialize(db, policy="baseline")
+    from backend.services.simulation.scenarios import clear_simulation_states, apply_scenario, get_scenario_config
+    clear_simulation_states()
+    engine = SimulationEngine(
+        seed=seed,
+        historical_days=historical_days,
+        policy="baseline",
+        sim_start=anchor_start,
+    )
+    engine.active_scenario = scenario
+    engine.active_scenario_config = get_scenario_config(scenario)
+    sim_baseline = await engine.initialize(db, policy="baseline", sim_start=anchor_start)
+    if scenario != "normal":
+        await apply_scenario(db, engine, scenario)
+
     from backend.services.forecasting.engine import ForecastingEngine
     fc_engine = ForecastingEngine()
     await fc_engine.run(db, horizons=[6, 12, 24, 48])
@@ -125,6 +153,8 @@ async def run_replay(
     # RESET: Clear generated data and registries
     # =========================================================================
     await engine.reset(db, sim_baseline.simulation_id)
+    if scenario != "normal":
+        await apply_scenario(db, engine, scenario)
     await fc_engine.run(db, horizons=[6, 12, 24, 48])
     await db.commit()
 
@@ -169,6 +199,29 @@ async def run_replay(
     db.add(outpost_record)
     await db.commit()
 
+    # Count executed actions from database
+    from backend.models.core import Action
+    from backend.models.enums import ActionType, ActionStatus
+    from sqlalchemy import func
+
+    actions_res = await db.execute(
+        select(Action.action_type, func.count())
+        .where(Action.status.in_([ActionStatus.COMPLETED, ActionStatus.EXECUTING]))
+        .group_by(Action.action_type)
+    )
+    action_counts = dict(actions_res.all())
+    transfers_count = 0
+    reorders_count = 0
+    discounts_count = 0
+    for at, cnt in action_counts.items():
+        at_str = at.value if hasattr(at, "value") else str(at)
+        if at_str.lower() == "transfer":
+            transfers_count += cnt
+        elif at_str.lower() == "reorder":
+            reorders_count += cnt
+        elif at_str.lower() == "discount":
+            discounts_count += cnt
+
     # =========================================================================
     # Compute Deltas (Outpost minus Baseline)
     # =========================================================================
@@ -181,6 +234,10 @@ async def run_replay(
 
     result = {
         "seed": seed,
+        "scenario": scenario,
+        "sim_start": anchor_start.isoformat(),
+        "start_time_baseline": start_time_baseline.isoformat(),
+        "start_time_outpost": start_time_outpost.isoformat(),
         "window_hours": window_hours,
         "deterministic_note": DETERMINISTIC_NOTE,
         "rupee_price_assumption": RUPEE_PRICE_ASSUMPTION,
@@ -192,6 +249,9 @@ async def run_replay(
             "waste_units": baseline_record.waste_units,
             "rupee_loss": baseline_record.rupee_loss,
             "availability_pct": baseline_record.availability_pct,
+            "transfers": 0,
+            "reorders": 0,
+            "discounts": 0,
             "created_at": baseline_record.created_at.isoformat() if baseline_record.created_at else None,
         },
         "outpost": {
@@ -202,6 +262,9 @@ async def run_replay(
             "waste_units": outpost_record.waste_units,
             "rupee_loss": outpost_record.rupee_loss,
             "availability_pct": outpost_record.availability_pct,
+            "transfers": transfers_count,
+            "reorders": reorders_count,
+            "discounts": discounts_count,
             "created_at": outpost_record.created_at.isoformat() if outpost_record.created_at else None,
         },
         "deltas": deltas,

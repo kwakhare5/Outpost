@@ -1,5 +1,16 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-19: Slice C -- Deterministic Sequential Replay Fair Test & Dynamic Discount Response
+
+### Work Card: Deterministic Sequential Replay Fair Test & Dynamic Discount Response
+- **Problem / tension:** Replay comparisons were asymmetric and non-deterministic: Pass 2 computed `sim_start` at wall-clock time after Pass 1, shifting demand hours and weekday patterns; `advance_time` ran the baseline fixed reorder rule identically in both passes leaving Outpost nothing to add; executed discounts were no-ops on simulated demand; and normal demand scenarios produced zero transfers or reorders.
+- **Change / decision:** Fixed `sim_start` to an anchor timestamp computed once per replay request and reused across both passes; decoupled baseline replenishment rule as supplier-side ordering with Outpost decision engine layered on top; added price reduction and bounded price-elastic demand lift (`min(2.0, 1.0 + discount_pct * 2.0)`) for active discounts; added 3 stress scenarios (`demand_spike`, `supplier_delay`, `network_imbalance`); and exposed scenario selection on the `/replay` endpoint. Added 3 new tests in `backend/tests/test_replay.py`.
+- **Proof:** `pytest backend/tests` passed 151/151 tests in 88.19s; 12 replay runs across 4 scenarios and 3 seeds (horizon 168h) completed cleanly under 300s timeout (100–145s each); discounts reduced waste across all 12 runs (up to -42 units) and reduced rupee loss by up to Rs 1,571.
+- **Still broken / unproven:**
+  1. Quantity-blind reorder block: In `backend/services/decision/engine.py:290`, an incoming transfer of even 1 unit in transit blocks a reorder of 20 units entirely rather than subtracting incoming units and ordering the remaining gap.
+  2. Transit speed discrepancy: Decision engine assumes 25 km/h for road transfers (`engine.py:247`), while validator / fleet runner assumes 30 km/h (`tools.py:116`).
+  3. Weak tomato test: Test in `test_decision.py` checks basic reorder creation but uses loose assertions that do not stress simultaneous transfer/reorder conflict resolution on thin margins.
+
 ## 2026-10-19: Forecast Horizon Isolation (24h) & Holt Linear Tie-Breaker Calibration
 
 ### Work Card: Forecast Horizon Isolation (24h) & Holt Linear Tie-Breaker Calibration
@@ -8,9 +19,8 @@
 - **Proof:** `pytest backend/tests` passed all 148 tests in 62.75s; 168h replays across seeds 42, 7, and 123 completed successfully; 48h forecast for Pav Buns dropped from 45.6 to 8.5 units and Tomatoes dropped from 127.7 to 7.5 units across the network, accurately matching real window demands (5-9 units and 4-17 units).
 - **Still broken / unproven:**
   1. Quantity-blind reorder block: In `backend/services/decision/engine.py:290`, an incoming transfer of even 1 unit in transit blocks a reorder of 20 units entirely rather than subtracting incoming units and ordering the remaining gap.
-  2. Replay summary recommendation count bug: `format_replay_report` / `recommendations_by_type` counts un-executed agent recommendations from recommendations table instead of executed actions in the actions table.
-  3. Transit speed discrepancy: Decision engine assumes 25 km/h for road transfers (`engine.py:247`), while validator / fleet runner assumes 30 km/h (`tools.py:116`).
-  4. Weak tomato test: Test in `test_decision.py` checks basic reorder creation but uses loose assertions that do not stress simultaneous transfer/reorder conflict resolution on thin margins.
+  2. Transit speed discrepancy: Decision engine assumes 25 km/h for road transfers (`engine.py:247`), while validator / fleet runner assumes 30 km/h (`tools.py:116`).
+  3. Weak tomato test: Test in `test_decision.py` checks basic reorder creation but uses loose assertions that do not stress simultaneous transfer/reorder conflict resolution on thin margins.
 
 ## 2026-10-18: Shelf-Life Demand Capping & In-Transit Double-Refill Prevention
 
