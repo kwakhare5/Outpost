@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import Order, OrderItem, Event, Product
@@ -40,6 +40,7 @@ class SimulationMetrics:
     rupee_loss_lost_sales: float = 0.0
     rupee_loss_waste: float = 0.0
     rupee_loss_markdown: float = 0.0
+    rupee_loss_transfer: float = 0.0
     rupee_price_assumption: str = RUPEE_PRICE_ASSUMPTION
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
@@ -54,10 +55,12 @@ class SimulationMetrics:
             "rupee_loss_lost_sales": round(self.rupee_loss_lost_sales, 2),
             "rupee_loss_waste": round(self.rupee_loss_waste, 2),
             "rupee_loss_markdown": round(self.rupee_loss_markdown, 2),
+            "rupee_loss_transfer": round(self.rupee_loss_transfer, 2),
             "rupee_loss_parts": {
                 "lost_sales": round(self.rupee_loss_lost_sales, 2),
                 "waste": round(self.rupee_loss_waste, 2),
                 "markdown": round(self.rupee_loss_markdown, 2),
+                "transfer": round(self.rupee_loss_transfer, 2),
                 "total": round(self.rupee_loss, 2),
             },
             "availability_pct": round(self.availability_pct, 2),
@@ -75,7 +78,8 @@ class SimulationMetrics:
             f"Rupee Loss:       Rs {self.rupee_loss:,.2f} "
             f"(lost sales: Rs {self.rupee_loss_lost_sales:,.2f}, "
             f"waste: Rs {self.rupee_loss_waste:,.2f}, "
-            f"markdown: Rs {self.rupee_loss_markdown:,.2f})\n"
+            f"markdown: Rs {self.rupee_loss_markdown:,.2f}, "
+            f"transfer: Rs {self.rupee_loss_transfer:,.2f})\n"
             f"Availability:     {self.availability_pct:.2f}%\n"
             f"Assumption:       {self.rupee_price_assumption}"
         )
@@ -87,12 +91,20 @@ def _to_naive_utc(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
 
+# Basis: Rs 5.0 per transferred unit based on intra-city dark store van transit (~Rs 150-200 per 30-40 unit delivery batch).
+DEFAULT_TRANSFER_UNIT_COST = 5.0
+
+
 async def compute_simulation_metrics(
     db: AsyncSession,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     simulation_id: uuid.UUID | None = None,
     store_id: uuid.UUID | None = None,
+    lost_sale_multiplier: float = 1.0,
+    transfer_unit_cost: float = DEFAULT_TRANSFER_UNIT_COST,
+    lost_sale_cost: float | None = None,
+    waste_cost: float | None = None,
 ) -> SimulationMetrics:
     """Compute the four canonical metrics for a given time window, optionally filtered by store."""
     naive_start = _to_naive_utc(start_time)
@@ -175,11 +187,34 @@ async def compute_simulation_metrics(
             units_sold = item.fulfilled_quantity
             total_markdown_loss += (base_p - sale_p) * units_sold
 
-    # 5. Rupee loss by part (lost sales, waste, markdown, total)
+    # 5. Transfer cost: per-unit logistics cost for inter-store stock transfers
+    from backend.models.core import Shipment
+    shipment_stmt = select(func.coalesce(func.sum(Shipment.quantity), 0))
+    if naive_start is not None:
+        shipment_stmt = shipment_stmt.where(Shipment.dispatched_at >= naive_start)
+    if naive_end is not None:
+        shipment_stmt = shipment_stmt.where(Shipment.dispatched_at <= naive_end)
+    if store_id is not None:
+        shipment_stmt = shipment_stmt.where(
+            (Shipment.source_store_id == store_id) | (Shipment.destination_store_id == store_id)
+        )
+    transferred_units = (await db.execute(shipment_stmt)).scalar() or 0
+    transfer_loss = float(transferred_units) * float(transfer_unit_cost)
+
+    # 6. Rupee loss by part (lost sales, waste, markdown, transfer, total)
     all_product_ids = set(price_by_product.keys()) | set(lost_units_by_product.keys()) | set(waste_units_by_product.keys())
-    lost_sales_rupee = sum(lost_units_by_product.get(pid, 0) * price_by_product.get(pid, 0.0) for pid in all_product_ids)
-    waste_rupee = sum(waste_units_by_product.get(pid, 0) * price_by_product.get(pid, 0.0) for pid in all_product_ids)
-    total_rupee_loss = lost_sales_rupee + waste_rupee + total_markdown_loss
+    if lost_sale_cost is not None:
+        base_lost_sales_rupee = total_lost_units * float(lost_sale_cost)
+    else:
+        base_lost_sales_rupee = sum(lost_units_by_product.get(pid, 0) * price_by_product.get(pid, 0.0) for pid in all_product_ids)
+    lost_sales_rupee = base_lost_sales_rupee * float(lost_sale_multiplier)
+
+    if waste_cost is not None:
+        waste_rupee = total_waste_units * float(waste_cost)
+    else:
+        waste_rupee = sum(waste_units_by_product.get(pid, 0) * price_by_product.get(pid, 0.0) for pid in all_product_ids)
+
+    total_rupee_loss = lost_sales_rupee + waste_rupee + total_markdown_loss + transfer_loss
 
     return SimulationMetrics(
         lost_sales_units=total_lost_units,
@@ -188,6 +223,7 @@ async def compute_simulation_metrics(
         rupee_loss_lost_sales=round(lost_sales_rupee, 2),
         rupee_loss_waste=round(waste_rupee, 2),
         rupee_loss_markdown=round(total_markdown_loss, 2),
+        rupee_loss_transfer=round(transfer_loss, 2),
         availability_pct=round(availability_pct, 2),
         rupee_price_assumption=RUPEE_PRICE_ASSUMPTION,
         start_time=start_time,

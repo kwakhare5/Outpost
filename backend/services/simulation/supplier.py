@@ -284,3 +284,91 @@ async def evaluate_reorder_policy(
                 created_pos.append(po)
 
     return created_pos
+
+
+async def evaluate_tuned_reorder_policy(
+    db: AsyncSession,
+    current_time: datetime,
+    sim_id: str | uuid.UUID | None = None,
+    safety_stock_hours: float = 6.0,
+) -> list[PurchaseOrder]:
+    """Tuned reorder policy (Spec Slice E fair baseline).
+
+    Looks at shelf life so it never orders more than can be sold before expiry,
+    and maintains a safety stock buffer so availability is not far below Outpost.
+    """
+    from backend.services.simulation.seed_data import STORES, PRODUCTS
+
+    created_pos: list[PurchaseOrder] = []
+    current_naive = current_time.replace(tzinfo=None) if current_time.tzinfo else current_time
+
+    suppliers_res = await db.execute(select(Supplier))
+    suppliers = suppliers_res.scalars().all()
+    if not suppliers:
+        return created_pos
+    supplier_by_name = {s.name: s for s in suppliers}
+
+    from backend.services.simulation.engine import get_simulation_real_daily_demand
+
+    for store_seed in STORES:
+        for prod_seed in PRODUCTS:
+            supplier = supplier_by_name.get(prod_seed.supplier_name)
+            if not supplier or supplier.lead_time_hours <= 0:
+                continue
+
+            daily_velocity = get_simulation_real_daily_demand(store_seed.name, prod_seed)
+            if daily_velocity <= 0:
+                continue
+            hourly_demand = daily_velocity / 24.0
+
+            # Count unexpired active batches
+            active_sum_res = await db.execute(
+                select(func.coalesce(func.sum(Batch.quantity), 0)).where(
+                    Batch.store_id == store_seed.store_id,
+                    Batch.product_id == prod_seed.product_id,
+                    Batch.quantity > 0,
+                    Batch.expires_at > current_naive,
+                )
+            )
+            on_hand_qty = active_sum_res.scalar() or 0
+
+            # In-transit purchase orders for this store & product
+            in_flight_pos = [
+                po for po in get_active_pos(sim_id)
+                if po.store_id == store_seed.store_id
+                and po.product_id == prod_seed.product_id
+                and po.status in ('in_transit', 'delayed')
+            ]
+            incoming_qty = sum(po.quantity for po in in_flight_pos)
+
+            effective_stock = on_hand_qty + incoming_qty
+            hours_of_stock = effective_stock / hourly_demand
+
+            # Reorder trigger: lead time plus safety stock buffer
+            reorder_trigger_hours = supplier.lead_time_hours + safety_stock_hours
+            if hours_of_stock < reorder_trigger_hours:
+                # Usable shelf life upon arrival
+                usable_hours = max(0.0, float(prod_seed.shelf_life_hours - supplier.lead_time_hours))
+                max_sellable = usable_hours * hourly_demand
+                if max_sellable <= 0:
+                    continue
+
+                # Target stock: lead time + safety stock + 12h cycle, capped by max sellable
+                desired_target = (supplier.lead_time_hours + safety_stock_hours + 12.0) * hourly_demand
+                target_stock = min(desired_target, max_sellable)
+
+                reorder_qty = int(round(target_stock - effective_stock))
+                reorder_qty = min(reorder_qty, int(round(max_sellable)))
+                if reorder_qty >= 1:
+                    po = await create_purchase_order(
+                        db=db,
+                        supplier_id=supplier.supplier_id,
+                        store_id=store_seed.store_id,
+                        product_id=prod_seed.product_id,
+                        quantity=reorder_qty,
+                        current_time=current_time,
+                        sim_id=sim_id,
+                    )
+                    created_pos.append(po)
+
+    return created_pos

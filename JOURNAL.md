@@ -1,5 +1,25 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-19: Slice E -- Fair Baseline, Priced Transfers & Honest Sensitivity
+
+### Work Card: Fair Baseline, Priced Transfers & Honest Sensitivity
+- **Problem / tension:** Prior benchmark compared Outpost against an unrealistic "flood" baseline that sized orders and starting stock from `daily_demand_mean` (~14x higher than simulation customer demand: ~12.5 vs ~0.86 units/day), generating ~Rs 85,000 in artificial waste that made Outpost appear to win automatically. Additionally, transfer logistics costs (Rs 5.0/unit intra-city van trip) were omitted from loss accounting, lost sale penalties were fixed, baseline reorders counted pre-simulation historical setup POs, and elasticity was zeroed while the decision engine still issued futile markdowns.
+- **Change / decision:**
+  1. Built fair baseline (`baseline`) that sizes starting stock and reorders from real simulation demand (`get_simulation_real_daily_demand`), retaining legacy flood baseline as selectable `baseline_flood`.
+  2. Exact Fair Baseline Rule (Plain Words): The fair baseline checks stock every hour. When unexpired on-hand stock plus incoming purchase orders drops below supplier lead time plus a 6-hour safety buffer, it creates a purchase order. The order quantity refills stock to cover supplier lead time, the 6-hour safety buffer, and a 12-hour review cycle, but is strictly capped so that the total order never exceeds what can actually be sold before the product expires upon arrival.
+  3. Added `transfer_unit_cost` (default Rs 5.0 per transferred unit based on intra-city dark store van transit of ~Rs 150-200 per 30-40 unit delivery batch) to `rupee_loss` and broke it out in `rupee_loss_parts["transfer"]`.
+  4. Added `lost_sale_multiplier` parameter scaling the lost sales portion of rupee loss while keeping waste at base product price.
+  5. Filtered purchase order counts for both baseline and Outpost strictly within the evaluation window (`[start_time, end_time]`).
+  6. Added 3 new directional tests to `test_replay_honest.py` (transfer cost in total, real demand order sizing, windowed reorder count).
+- **Proof:** `pytest backend/tests` passed 159/159 tests in 186s with zero failures and zero skips. 168h matrix results across 5 scenarios x seeds [42, 7, 123]:
+  - Outpost vs Baseline Flood: Outpost wins 14/15 runs (Rs 76,015.00–89,209.40 vs Rs 75,973.00–94,681.00) by curbing ~Rs 5,000–10,000 in waste; on normal scenario, flips to Baseline Flood when `lost_sale_multiplier` >= 2.5x to 4.0x as flood baseline's 92–94% availability outweighs waste penalties.
+  - Outpost vs Fair Baseline: Fair Baseline wins 14/15 runs (Rs 7,017.00–24,002.00 vs Outpost Rs 8,421.20–24,629.00). Total losses drop by ~85% on both sides because waste drops from ~Rs 85,000 down to Rs 500–3,700. Outpost loses 14/15 runs because its conservative reorders cause higher stockouts (availability 35–50% vs 42–62%) plus Rs 50–155 in transfer fees and Rs 40–130 in markdown costs. Outpost wins only in `supplier_delay` seed 42 (Rs 13,409.00 vs Rs 13,599.00). On normal scenario, Fair Baseline wins 3/3 across all multipliers (1.0x, 2.5x, 7.0x, 13.0x) with no flip point.
+- **Honest Sentence for README:** *"Outpost saves 5–10% in net rupee loss against an uncalibrated over-ordering baseline by curbing spoilage, but against a tuned real-demand baseline with safety stock, Outpost loses by 5–20% on rupee loss because its conservative reorders cause higher stockouts that lateral transfers and markdowns do not offset."*
+- **Still broken / unproven:**
+  1. Conservative reorder threshold: Outpost's decision engine hesitates to place replenishment POs during uncertain demand, causing availability to fall 5–12 percentage points behind a simple reorder-point baseline with 6h safety stock.
+  2. Futile discounts at elasticity 0.0: Decision engine issues discounts even when elasticity is zero, incurring markdown loss without demand lift.
+  3. Transfer logistics vs stockout trade-off: Paying Rs 5.0/unit for emergency transfers between dark stores rarely closes the availability gap compared to having ordered adequate safety stock from suppliers up front.
+
 ## 2026-10-19: Slice D -- Honest Accounting & Live Refill Levers
 
 ### Work Card: Honest Accounting & Live Refill Levers

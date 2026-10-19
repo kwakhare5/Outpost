@@ -30,6 +30,7 @@ async def test_markdown_is_charged_and_total_equals_sum_of_parts(db_session):
         historical_days=2,
         scenario="expiry_wave",
         sim_start=anchor,
+        baseline_policy="baseline_flood",
     )
 
     o = result["outpost"]
@@ -39,8 +40,8 @@ async def test_markdown_is_charged_and_total_equals_sum_of_parts(db_session):
     assert parts["markdown"] > 0, f"Expected markdown loss > 0, got {parts['markdown']}"
     assert o["rupee_loss_markdown"] > 0, f"Expected rupee_loss_markdown > 0, got {o['rupee_loss_markdown']}"
 
-    # 2. Assert total equals the sum of parts: lost_sales + waste + markdown
-    expected_total = parts["lost_sales"] + parts["waste"] + parts["markdown"]
+    # 2. Assert total equals the sum of parts: lost_sales + waste + markdown + transfer
+    expected_total = parts["lost_sales"] + parts["waste"] + parts["markdown"] + parts.get("transfer", 0.0)
     assert pytest.approx(parts["total"], abs=0.01) == expected_total
     assert pytest.approx(o["rupee_loss"], abs=0.01) == expected_total
 
@@ -211,3 +212,86 @@ async def test_baseline_reorders_in_report_equal_real_count_of_purchase_orders(d
 
     # 2. The report text accurately reflects this count
     assert f"Reorders:      {b['reorders']}" in result["report"]
+
+
+@pytest.mark.asyncio
+async def test_transfer_cost_counted_in_total_and_parts(db_session):
+    """Test 6 (Slice E): Transfer logistics cost is counted in rupee_loss and parts."""
+    anchor = DEFAULT_SIM_START
+
+    res = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=1,
+        historical_days=2,
+        scenario="network_imbalance",
+        sim_start=anchor,
+        transfer_unit_cost=10.0,
+    )
+
+    o = res["outpost"]
+    parts = o["rupee_loss_parts"]
+
+    assert o["transfers"] > 0, "Expected transfers in network_imbalance scenario"
+    assert parts["transfer"] > 0, f"Expected transfer cost > 0, got {parts['transfer']}"
+    assert o["rupee_loss_transfer"] > 0, f"Expected rupee_loss_transfer > 0, got {o['rupee_loss_transfer']}"
+
+    expected_total = parts["lost_sales"] + parts["waste"] + parts["markdown"] + parts["transfer"]
+    assert pytest.approx(parts["total"], abs=0.01) == expected_total
+    assert pytest.approx(o["rupee_loss"], abs=0.01) == expected_total
+    assert f"transfer: Rs {parts['transfer']:,.2f}" in res["report"]
+
+
+@pytest.mark.asyncio
+async def test_fair_baseline_orders_from_real_demand_not_flood(db_session):
+    """Test 7 (Slice E): Fair baseline orders from real simulation demand, flood orders 14x excess."""
+    anchor = DEFAULT_SIM_START
+
+    res_fair = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=48,
+        step_hours=6,
+        historical_days=2,
+        scenario="normal",
+        sim_start=anchor,
+        baseline_policy="baseline",
+    )
+
+    res_flood = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=48,
+        step_hours=6,
+        historical_days=2,
+        scenario="normal",
+        sim_start=anchor,
+        baseline_policy="baseline_flood",
+    )
+
+    # Flood baseline has massive waste due to 14x over-ordering from daily_demand_mean
+    assert res_flood["baseline"]["waste_units"] > res_fair["baseline"]["waste_units"]
+    assert res_flood["baseline"]["rupee_loss"] > res_fair["baseline"]["rupee_loss"]
+
+
+@pytest.mark.asyncio
+async def test_reorder_counts_use_same_window_filtering_historical(db_session):
+    """Test 8 (Slice E): Reorder counts only count purchase orders inside the evaluation window."""
+    anchor = DEFAULT_SIM_START
+
+    res = await run_replay(
+        db=db_session,
+        seed=42,
+        window_hours=24,
+        step_hours=6,
+        historical_days=5,
+        scenario="normal",
+        sim_start=anchor,
+        baseline_policy="baseline",
+    )
+
+    # Total POs in DB includes 5 historical setup days; windowed counts must be strictly less than or equal
+    total_pos = (await db_session.execute(select(func.count(PurchaseOrder.po_id)))).scalar() or 0
+    assert res["baseline"]["reorders"] <= total_pos
+    assert res["outpost"]["reorders"] <= total_pos

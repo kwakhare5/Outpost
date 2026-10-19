@@ -16,7 +16,11 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.core import RunRecord, Simulation
-from backend.services.metrics import compute_simulation_metrics, RUPEE_PRICE_ASSUMPTION
+from backend.services.metrics import (
+    compute_simulation_metrics,
+    RUPEE_PRICE_ASSUMPTION,
+    DEFAULT_TRANSFER_UNIT_COST,
+)
 from backend.services.simulation.engine import SimulationEngine, clear_simulation_data
 from backend.services.simulation.scenarios import get_or_create_simulation_state
 
@@ -39,14 +43,17 @@ def format_replay_report(result: dict[str, Any]) -> str:
     b_ls_r = b.get("rupee_loss_lost_sales", 0.0)
     b_w_r = b.get("rupee_loss_waste", 0.0)
     b_md_r = b.get("rupee_loss_markdown", 0.0)
+    b_tr_r = b.get("rupee_loss_transfer", 0.0)
 
     o_ls_r = o.get("rupee_loss_lost_sales", 0.0)
     o_w_r = o.get("rupee_loss_waste", 0.0)
     o_md_r = o.get("rupee_loss_markdown", 0.0)
+    o_tr_r = o.get("rupee_loss_transfer", 0.0)
 
     d_ls_r = d.get("rupee_loss_lost_sales_delta", 0.0)
     d_w_r = d.get("rupee_loss_waste_delta", 0.0)
     d_md_r = d.get("rupee_loss_markdown_delta", 0.0)
+    d_tr_r = d.get("rupee_loss_transfer_delta", 0.0)
 
     return (
         f"================================================================================\n"
@@ -63,7 +70,7 @@ def format_replay_report(result: dict[str, Any]) -> str:
         f"  Policy:        {b['policy']}\n"
         f"  Lost Sales:    {b['lost_sales_units']} units\n"
         f"  Waste:         {b['waste_units']} units\n"
-        f"  Rupee Loss:    Rs {b['rupee_loss']:,.2f} (lost sales: Rs {b_ls_r:,.2f}, waste: Rs {b_w_r:,.2f}, markdown: Rs {b_md_r:,.2f})\n"
+        f"  Rupee Loss:    Rs {b['rupee_loss']:,.2f} (lost sales: Rs {b_ls_r:,.2f}, waste: Rs {b_w_r:,.2f}, markdown: Rs {b_md_r:,.2f}, transfer: Rs {b_tr_r:,.2f})\n"
         f"  Availability:  {b['availability_pct']:.2f}%\n"
         f"  Transfers:     {b.get('transfers', 0)}\n"
         f"  Reorders:      {b.get('reorders', 0)}\n"
@@ -73,7 +80,7 @@ def format_replay_report(result: dict[str, Any]) -> str:
         f"  Policy:        {o['policy']}\n"
         f"  Lost Sales:    {o['lost_sales_units']} units\n"
         f"  Waste:         {o['waste_units']} units\n"
-        f"  Rupee Loss:    Rs {o['rupee_loss']:,.2f} (lost sales: Rs {o_ls_r:,.2f}, waste: Rs {o_w_r:,.2f}, markdown: Rs {o_md_r:,.2f})\n"
+        f"  Rupee Loss:    Rs {o['rupee_loss']:,.2f} (lost sales: Rs {o_ls_r:,.2f}, waste: Rs {o_w_r:,.2f}, markdown: Rs {o_md_r:,.2f}, transfer: Rs {o_tr_r:,.2f})\n"
         f"  Availability:  {o['availability_pct']:.2f}%\n"
         f"  Transfers:     {o.get('transfers', 0)}\n"
         f"  Reorders:      {o.get('reorders', 0)}\n"
@@ -81,7 +88,7 @@ def format_replay_report(result: dict[str, Any]) -> str:
         f"--- DELTAS (Outpost minus Baseline) ---\n"
         f"  Lost Sales Delta:    {d['lost_sales_units_delta']:+d} units\n"
         f"  Waste Delta:         {d['waste_units_delta']:+d} units\n"
-        f"  Rupee Loss Delta:    Rs {d['rupee_loss_delta']:+,.2f} (lost sales: Rs {d_ls_r:+,.2f}, waste: Rs {d_w_r:+,.2f}, markdown: Rs {d_md_r:+,.2f})\n"
+        f"  Rupee Loss Delta:    Rs {d['rupee_loss_delta']:+,.2f} (lost sales: Rs {d_ls_r:+,.2f}, waste: Rs {d_w_r:+,.2f}, markdown: Rs {d_md_r:+,.2f}, transfer: Rs {d_tr_r:+,.2f})\n"
         f"  Availability Delta:  {d['availability_pct_delta']:+.2f}%\n\n"
         f"--- RUPEE PRICE ASSUMPTION ---\n"
         f"  {result['rupee_price_assumption']}\n"
@@ -98,6 +105,11 @@ async def run_replay(
     scenario: str = "normal",
     sim_start: datetime | None = None,
     discount_elasticity: float = 0.0,
+    lost_sale_multiplier: float = 1.0,
+    transfer_unit_cost: float = DEFAULT_TRANSFER_UNIT_COST,
+    baseline_policy: str = "baseline",
+    lost_sale_cost: float | None = None,
+    waste_cost: float | None = None,
 ) -> dict[str, Any]:
     """Execute sequential same-seed replay comparing baseline vs outpost policies.
     
@@ -113,7 +125,7 @@ async def run_replay(
         anchor_start = sim_start.replace(tzinfo=None) if sim_start.tzinfo else sim_start
 
     # =========================================================================
-    # PASS 1: Baseline Policy (Fixed reorder rule only)
+    # PASS 1: Baseline Policy (Fixed reorder rule only or Tuned baseline)
     # =========================================================================
     await clear_simulation_data(db)
     from backend.services.simulation.scenarios import clear_simulation_states, apply_scenario, get_scenario_config
@@ -121,13 +133,13 @@ async def run_replay(
     engine = SimulationEngine(
         seed=seed,
         historical_days=historical_days,
-        policy="baseline",
+        policy=baseline_policy,
         sim_start=anchor_start,
         discount_elasticity=discount_elasticity,
     )
     engine.active_scenario = scenario
     engine.active_scenario_config = get_scenario_config(scenario)
-    sim_baseline = await engine.initialize(db, policy="baseline", sim_start=anchor_start)
+    sim_baseline = await engine.initialize(db, policy=baseline_policy, sim_start=anchor_start)
     if scenario != "normal":
         await apply_scenario(db, engine, scenario)
 
@@ -149,6 +161,10 @@ async def run_replay(
         db,
         start_time=start_time_baseline,
         end_time=end_time_baseline,
+        lost_sale_multiplier=lost_sale_multiplier,
+        transfer_unit_cost=transfer_unit_cost,
+        lost_sale_cost=lost_sale_cost,
+        waste_cost=waste_cost,
     )
 
     # Drained store metrics for spatial skew scenarios (e.g. network_imbalance)
@@ -162,18 +178,27 @@ async def run_replay(
             start_time=start_time_baseline,
             end_time=end_time_baseline,
             store_id=drained_store_b.store_id,
+            lost_sale_multiplier=lost_sale_multiplier,
+            transfer_unit_cost=transfer_unit_cost,
+            lost_sale_cost=lost_sale_cost,
+            waste_cost=waste_cost,
         )
 
-    # Real count of baseline purchase orders generated by the fixed policy
+    # Count purchase orders created strictly inside the evaluation window
     from backend.models.core import PurchaseOrder as PurchaseOrderModel
-    baseline_reorders_res = await db.execute(select(func.count(PurchaseOrderModel.po_id)))
+    baseline_reorders_res = await db.execute(
+        select(func.count(PurchaseOrderModel.po_id)).where(
+            PurchaseOrderModel.ordered_at >= start_time_baseline,
+            PurchaseOrderModel.ordered_at <= end_time_baseline,
+        )
+    )
     baseline_reorders_count = baseline_reorders_res.scalar() or 0
 
     baseline_record = RunRecord(
         run_id=uuid.uuid4(),
         simulation_id=sim_baseline.simulation_id,
         seed=seed,
-        policy="baseline",
+        policy=baseline_policy,
         window_hours=window_hours,
         lost_sales_units=metrics_baseline.lost_sales_units,
         waste_units=metrics_baseline.waste_units,
@@ -218,6 +243,10 @@ async def run_replay(
         db,
         start_time=start_time_outpost,
         end_time=end_time_outpost,
+        lost_sale_multiplier=lost_sale_multiplier,
+        transfer_unit_cost=transfer_unit_cost,
+        lost_sale_cost=lost_sale_cost,
+        waste_cost=waste_cost,
     )
 
     all_stores_o = (await db.execute(select(Store))).scalars().all()
@@ -229,6 +258,10 @@ async def run_replay(
             start_time=start_time_outpost,
             end_time=end_time_outpost,
             store_id=drained_store_o.store_id,
+            lost_sale_multiplier=lost_sale_multiplier,
+            transfer_unit_cost=transfer_unit_cost,
+            lost_sale_cost=lost_sale_cost,
+            waste_cost=waste_cost,
         )
 
     outpost_record = RunRecord(
@@ -246,7 +279,7 @@ async def run_replay(
     db.add(outpost_record)
     await db.commit()
 
-    # Count executed actions from database
+    # Count executed actions and windowed reorders
     from backend.models.core import Action
     from backend.models.enums import ActionType, ActionStatus
 
@@ -257,16 +290,22 @@ async def run_replay(
     )
     action_counts = dict(actions_res.all())
     transfers_count = 0
-    reorders_count = 0
     discounts_count = 0
     for at, cnt in action_counts.items():
         at_str = at.value if hasattr(at, "value") else str(at)
         if at_str.lower() == "transfer":
             transfers_count += cnt
-        elif at_str.lower() == "reorder":
-            reorders_count += cnt
         elif at_str.lower() == "discount":
             discounts_count += cnt
+
+    # Count purchase orders created strictly inside the evaluation window
+    outpost_reorders_res = await db.execute(
+        select(func.count(PurchaseOrderModel.po_id)).where(
+            PurchaseOrderModel.ordered_at >= start_time_outpost,
+            PurchaseOrderModel.ordered_at <= end_time_outpost,
+        )
+    )
+    reorders_count = outpost_reorders_res.scalar() or 0
 
     # =========================================================================
     # Compute Deltas (Outpost minus Baseline)
@@ -278,6 +317,7 @@ async def run_replay(
         "rupee_loss_lost_sales_delta": round(metrics_outpost.rupee_loss_lost_sales - metrics_baseline.rupee_loss_lost_sales, 2),
         "rupee_loss_waste_delta": round(metrics_outpost.rupee_loss_waste - metrics_baseline.rupee_loss_waste, 2),
         "rupee_loss_markdown_delta": round(metrics_outpost.rupee_loss_markdown - metrics_baseline.rupee_loss_markdown, 2),
+        "rupee_loss_transfer_delta": round(metrics_outpost.rupee_loss_transfer - metrics_baseline.rupee_loss_transfer, 2),
         "availability_pct_delta": round(outpost_record.availability_pct - baseline_record.availability_pct, 2),
     }
 
@@ -286,6 +326,11 @@ async def run_replay(
         "scenario": scenario,
         "sim_start": anchor_start.isoformat(),
         "discount_elasticity": discount_elasticity,
+        "lost_sale_multiplier": lost_sale_multiplier,
+        "transfer_unit_cost": transfer_unit_cost,
+        "lost_sale_cost": lost_sale_cost,
+        "waste_cost": waste_cost,
+        "baseline_policy": baseline_policy,
         "start_time_baseline": start_time_baseline.isoformat(),
         "start_time_outpost": start_time_outpost.isoformat(),
         "window_hours": window_hours,
@@ -301,10 +346,12 @@ async def run_replay(
             "rupee_loss_lost_sales": metrics_baseline.rupee_loss_lost_sales,
             "rupee_loss_waste": metrics_baseline.rupee_loss_waste,
             "rupee_loss_markdown": metrics_baseline.rupee_loss_markdown,
+            "rupee_loss_transfer": metrics_baseline.rupee_loss_transfer,
             "rupee_loss_parts": {
                 "lost_sales": metrics_baseline.rupee_loss_lost_sales,
                 "waste": metrics_baseline.rupee_loss_waste,
                 "markdown": metrics_baseline.rupee_loss_markdown,
+                "transfer": metrics_baseline.rupee_loss_transfer,
                 "total": metrics_baseline.rupee_loss,
             },
             "availability_pct": baseline_record.availability_pct,
@@ -324,10 +371,12 @@ async def run_replay(
             "rupee_loss_lost_sales": metrics_outpost.rupee_loss_lost_sales,
             "rupee_loss_waste": metrics_outpost.rupee_loss_waste,
             "rupee_loss_markdown": metrics_outpost.rupee_loss_markdown,
+            "rupee_loss_transfer": metrics_outpost.rupee_loss_transfer,
             "rupee_loss_parts": {
                 "lost_sales": metrics_outpost.rupee_loss_lost_sales,
                 "waste": metrics_outpost.rupee_loss_waste,
                 "markdown": metrics_outpost.rupee_loss_markdown,
+                "transfer": metrics_outpost.rupee_loss_transfer,
                 "total": metrics_outpost.rupee_loss,
             },
             "availability_pct": outpost_record.availability_pct,
@@ -361,6 +410,11 @@ async def main():
     parser.add_argument("--scenario", type=str, default="normal", help="Simulation scenario name")
     parser.add_argument("--sim-start", type=str, default=None, help="Fixed simulation anchor date (YYYY-MM-DDTHH:MM:SS)")
     parser.add_argument("--discount-elasticity", type=float, default=0.0, help="Demand elasticity for discounts")
+    parser.add_argument("--lost-sale-cost", type=float, default=None, help="Optional flat rupee cost per lost sale unit")
+    parser.add_argument("--waste-cost", type=float, default=None, help="Optional flat rupee cost per wasted unit")
+    parser.add_argument("--lost-sale-multiplier", type=float, default=1.0, help="Multiplier for lost sale rupee loss")
+    parser.add_argument("--transfer-unit-cost", type=float, default=5.0, help="Logistics cost per transferred unit")
+    parser.add_argument("--baseline-policy", type=str, default="baseline", help="Baseline policy: 'baseline' (fair) or 'baseline_flood'")
 
     args = parser.parse_args()
 
@@ -392,6 +446,11 @@ async def main():
             scenario=args.scenario,
             sim_start=parsed_sim_start,
             discount_elasticity=args.discount_elasticity,
+            lost_sale_multiplier=args.lost_sale_multiplier,
+            transfer_unit_cost=args.transfer_unit_cost,
+            baseline_policy=args.baseline_policy,
+            lost_sale_cost=args.lost_sale_cost,
+            waste_cost=args.waste_cost,
         )
         print(result["report"])
     await engine.dispose()
