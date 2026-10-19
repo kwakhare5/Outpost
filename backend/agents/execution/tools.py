@@ -249,7 +249,11 @@ async def validate_reorder(
     # 3. Check demand / target
     fc_res = await db.execute(
         select(Forecast)
-        .where(Forecast.store_id == store_id, Forecast.product_id == product_id)
+        .where(
+            Forecast.store_id == store_id,
+            Forecast.product_id == product_id,
+            Forecast.forecast_window_hours == 24,
+        )
         .order_by(Forecast.created_at.desc())
         .limit(1)
     )
@@ -282,7 +286,12 @@ async def validate_reorder(
         "feasible": True,
         "reason": "ok",
         "reorder_quantity": min(rec.quantity, reorder_qty) if rec.quantity > 0 else reorder_qty,
+        "target": target_stock,
     }
+
+
+check_reorder_feasibility = validate_reorder
+
 
 
 # ---------------------------------------------------------------------------

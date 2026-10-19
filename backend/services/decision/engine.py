@@ -103,7 +103,11 @@ class DecisionOrchestrator:
         # 4. Load latest forecast for destination
         fc_result = await db.execute(
             select(Forecast)
-            .where(Forecast.store_id == store_id, Forecast.product_id == product_id)
+            .where(
+                Forecast.store_id == store_id,
+                Forecast.product_id == product_id,
+                Forecast.forecast_window_hours == 24,
+            )
             .order_by(Forecast.created_at.desc())
             .limit(1)
         )
@@ -216,6 +220,7 @@ class DecisionOrchestrator:
                 .where(
                     Forecast.store_id == src_inv.store_id,
                     Forecast.product_id == product_id,
+                    Forecast.forecast_window_hours == 24,
                 )
                 .order_by(Forecast.created_at.desc())
                 .limit(1)

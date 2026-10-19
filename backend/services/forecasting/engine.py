@@ -195,7 +195,7 @@ class ForecastingEngine:
             hl_eval = evaluate_forecast(holdout_actual, hl_preds_holdout, "holt_linear")
 
             # Select model with lower MAE
-            if hl_eval.mae <= bl_eval.mae:
+            if hl_eval.mae < bl_eval.mae:
                 prediction = holt_linear_predict(cleaned, horizon_hours)
                 model_name = "holt_linear"
             else:

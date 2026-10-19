@@ -764,6 +764,9 @@ async def test_shelf_life_cap_targets_usable_hours_not_48h(db_session):
     dest_fc = (await db_session.execute(
         select(Forecast).where(Forecast.store_id == inv.store_id, Forecast.product_id == product.product_id)
     )).scalars().first()
+    dest_fc.predicted_demand = 24.0
+    await db_session.commit()
+
     forecast_24h = dest_fc.predicted_demand
     hourly_demand = forecast_24h / 24.0
 
@@ -832,3 +835,173 @@ async def test_usable_hours_zero_creates_no_action(db_session):
     assert rec.action_type == ActionType.HOLD, (
         f"Expected HOLD because usable hours is 0, but got {rec.action_type}"
     )
+
+
+@pytest.mark.asyncio
+async def test_readers_use_24h_forecast_window_not_48h(db_session):
+    """Seed 6h, 12h, 24h, 48h forecast rows with clearly different values, 48h newest.
+    Assert decision engine, explain facts and execution tool each use the 24h value, not 48h.
+    """
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, delete, update
+    from backend.models.core import Product, Store, Forecast, Inventory, Risk, Supplier, PurchaseOrder as PurchaseOrderModel, Shipment
+    from backend.models.enums import RiskType, RiskStatus, ActionType
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+    from backend.services.explain.facts import build_facts
+    from backend.agents.execution.tools import check_reorder_feasibility
+    from backend.services.simulation.supplier import clear_active_pos
+    from backend.services.simulation.transfer import clear_active_transfers
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    # Clear all existing forecasts and in-transit orders
+    await db_session.execute(delete(Forecast))
+    await db_session.execute(delete(PurchaseOrderModel))
+    await db_session.execute(delete(Shipment))
+    clear_active_pos()
+    clear_active_transfers()
+    await db_session.commit()
+
+    product = (await db_session.execute(select(Product))).scalars().first()
+    product.shelf_life_hours = 96
+    supplier = await db_session.get(Supplier, product.supplier_id)
+    supplier.lead_time_hours = 12
+
+    store = (await db_session.execute(select(Store))).scalars().first()
+
+    # Zero inventory
+    await db_session.execute(update(Inventory).values(quantity=0))
+    inv = (await db_session.execute(
+        select(Inventory).where(Inventory.store_id == store.store_id, Inventory.product_id == product.product_id)
+    )).scalar_one()
+    inv.quantity = 0
+    await db_session.commit()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Seed 6h, 12h, 24h, 48h forecast rows with clearly different values, 48h newest
+    # 6h -> 6.0, 12h -> 12.0, 24h -> 24.0, 48h -> 480.0
+    horizons = [(6, 6.0, 10), (12, 12.0, 20), (24, 24.0, 30), (48, 480.0, 40)]
+    for h, val, offset_min in horizons:
+        db_session.add(Forecast(
+            forecast_id=uuid.uuid4(),
+            store_id=store.store_id,
+            product_id=product.product_id,
+            forecast_window_hours=h,
+            predicted_demand=val,
+            confidence=0.85,
+            model_name="test_model",
+            created_at=now + timedelta(minutes=offset_min),
+        ))
+    await db_session.commit()
+
+    # 1. Decision engine: should use 24h forecast (24.0) -> hourly_demand = 1.0, 48h target = 48.0 (not 960.0)
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=store.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.9,
+        expected_time=now + timedelta(hours=2),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    orchestrator = DecisionOrchestrator()
+    rec = await orchestrator.run(db_session, risk.risk_id)
+    assert rec is not None
+    assert rec.action_type == ActionType.REORDER
+    assert rec.quantity == 48, f"Expected 48 (from 24h demand 24.0), got {rec.quantity} (48h was 480.0)"
+
+    # 2. Explain facts: should read predicted_demand == 24.0
+    facts = await build_facts(db_session, rec.recommendation_id)
+    assert facts["predicted_demand"] == 24.0, f"Expected 24.0 in explain facts, got {facts['predicted_demand']}"
+
+    # 3. Execution tool: check_reorder_feasibility should compute target == 48.0 (not 960.0)
+    tool_res = await check_reorder_feasibility(db_session, rec.recommendation_id)
+    assert tool_res["target"] == 48.0, f"Expected 48.0 target in execution tool, got {tool_res['target']}"
+    assert tool_res["reorder_quantity"] == 48, f"Expected 48 reorder_quantity, got {tool_res['reorder_quantity']}"
+
+
+@pytest.mark.asyncio
+async def test_decision_engine_ignores_48h_only_and_logs_warning(db_session, caplog):
+    """Seed only a 48h row. Assert decision engine takes no action and logs missing-forecast warning."""
+    import logging
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, delete
+    from backend.models.core import Product, Store, Forecast, Risk
+    from backend.models.enums import RiskType, RiskStatus
+    from backend.services.simulation.engine import SimulationEngine
+    from backend.services.decision.engine import DecisionOrchestrator
+
+    sim = SimulationEngine(seed=42, historical_days=7)
+    await sim.initialize(db_session)
+    await db_session.commit()
+
+    # Clear all forecasts
+    await db_session.execute(delete(Forecast))
+    await db_session.commit()
+
+    product = (await db_session.execute(select(Product))).scalars().first()
+    store = (await db_session.execute(select(Store))).scalars().first()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Seed ONLY a 48h row
+    db_session.add(Forecast(
+        forecast_id=uuid.uuid4(),
+        store_id=store.store_id,
+        product_id=product.product_id,
+        forecast_window_hours=48,
+        predicted_demand=48.0,
+        confidence=0.85,
+        model_name="test_48h_only",
+        created_at=now,
+    ))
+    await db_session.commit()
+
+    risk = Risk(
+        risk_id=uuid.uuid4(),
+        store_id=store.store_id,
+        product_id=product.product_id,
+        risk_type=RiskType.STOCKOUT,
+        severity="critical",
+        probability=0.9,
+        expected_time=now + timedelta(hours=2),
+        status=RiskStatus.ACTIVE,
+        created_at=now,
+    )
+    db_session.add(risk)
+    await db_session.commit()
+
+    with caplog.at_level(logging.WARNING):
+        orchestrator = DecisionOrchestrator()
+        rec = await orchestrator.run(db_session, risk.risk_id)
+        assert rec is None, "Expected DecisionOrchestrator to take no action when only 48h forecast exists"
+        assert "Missing forecast for destination store" in caplog.text
+
+
+def test_sparse_history_tie_picks_baseline_not_runaway_holt():
+    """A 7 to 9 day sparse history where Holt and baseline tie in the holdout.
+    Assert baseline is chosen, and the 48h prediction is near the baseline value (~2.29 vs runaway 22.98).
+    """
+    from backend.services.forecasting.engine import ForecastingEngine
+    from backend.services.forecasting.models import DemandPoint, baseline_predict
+
+    engine = ForecastingEngine()
+    # 7-day sparse series with intermittent sales: [0, 4, 0, 3, 1, 0, 0]
+    series = [DemandPoint(i, i % 7, v) for i, v in enumerate([0.0, 4.0, 0.0, 3.0, 1.0, 0.0, 0.0])]
+
+    expected_bl_48 = baseline_predict(series, horizon_hours=48)
+    assert 2.0 <= expected_bl_48 <= 2.5, f"Expected baseline around 2.29, got {expected_bl_48}"
+
+    pred_48, model_name, confidence = engine._fit_and_predict(series, horizon_hours=48)
+    assert model_name == "baseline", f"Expected 'baseline' to be chosen on tie, got '{model_name}'"
+    assert pred_48 == pytest.approx(expected_bl_48, rel=1e-4)
+    assert pred_48 < 5.0, f"Expected 48h prediction near baseline ({expected_bl_48}), not runaway Holt (22.98)"

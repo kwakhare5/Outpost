@@ -1,5 +1,17 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-19: Forecast Horizon Isolation (24h) & Holt Linear Tie-Breaker Calibration
+
+### Work Card: Forecast Horizon Isolation (24h) & Holt Linear Tie-Breaker Calibration
+- **Problem / tension:** Decision consumers (decision engine destination, decision engine source candidates, explain facts, and execution tool) queried latest `Forecast` without filtering `forecast_window_hours == 24`. Because `ForecastingEngine.run` inserts horizons `[6, 12, 24, 48]` chronologically, the 48h horizon was always picked, erroneously doubled as if 24h demand, quadrupling replenishment targets. Additionally, `forecasting/engine.py:198` used `<=` in model selection, causing Holt Linear to win on exact holdout MAE ties against baseline on sparse 7-day data, projecting runaway positive trends that inflated thin seller forecasts 10x (e.g. 45.6 vs 3-5 real demand).
+- **Change / decision:** Added `Forecast.forecast_window_hours == 24` filter to all 4 consumer query sites (`backend/services/decision/engine.py` lines 109 & 223, `backend/services/explain/facts.py` line 97, and `backend/agents/execution/tools.py` line 255); changed `<=` to `<` in `backend/services/forecasting/engine.py:198` so tie-breaks favor baseline moving average; added 3 new regression tests in `backend/tests/test_decision.py`; and ensured `test_shelf_life_cap_targets_usable_hours_not_48h` deterministically verifies usable-hours capping under baseline forecast.
+- **Proof:** `pytest backend/tests` passed all 148 tests in 62.75s; 168h replays across seeds 42, 7, and 123 completed successfully; 48h forecast for Pav Buns dropped from 45.6 to 8.5 units and Tomatoes dropped from 127.7 to 7.5 units across the network, accurately matching real window demands (5-9 units and 4-17 units).
+- **Still broken / unproven:**
+  1. Quantity-blind reorder block: In `backend/services/decision/engine.py:290`, an incoming transfer of even 1 unit in transit blocks a reorder of 20 units entirely rather than subtracting incoming units and ordering the remaining gap.
+  2. Replay summary recommendation count bug: `format_replay_report` / `recommendations_by_type` counts un-executed agent recommendations from recommendations table instead of executed actions in the actions table.
+  3. Transit speed discrepancy: Decision engine assumes 25 km/h for road transfers (`engine.py:247`), while validator / fleet runner assumes 30 km/h (`tools.py:116`).
+  4. Weak tomato test: Test in `test_decision.py` checks basic reorder creation but uses loose assertions that do not stress simultaneous transfer/reorder conflict resolution on thin margins.
+
 ## 2026-10-18: Shelf-Life Demand Capping & In-Transit Double-Refill Prevention
 
 ### Work Card: Shelf-Life Demand Capping & In-Transit Double-Refill Prevention

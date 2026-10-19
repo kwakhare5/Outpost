@@ -95,6 +95,7 @@ async def build_facts(
             .where(
                 Forecast.store_id == dest_store_id,
                 Forecast.product_id == product_id,
+                Forecast.forecast_window_hours == 24,
             )
             .order_by(Forecast.created_at.desc())
             .limit(1)
