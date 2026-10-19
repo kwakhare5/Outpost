@@ -37,6 +37,9 @@ class SimulationMetrics:
     waste_units: int
     rupee_loss: float
     availability_pct: float
+    rupee_loss_lost_sales: float = 0.0
+    rupee_loss_waste: float = 0.0
+    rupee_loss_markdown: float = 0.0
     rupee_price_assumption: str = RUPEE_PRICE_ASSUMPTION
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
@@ -48,6 +51,15 @@ class SimulationMetrics:
             "lost_sales_units": self.lost_sales_units,
             "waste_units": self.waste_units,
             "rupee_loss": round(self.rupee_loss, 2),
+            "rupee_loss_lost_sales": round(self.rupee_loss_lost_sales, 2),
+            "rupee_loss_waste": round(self.rupee_loss_waste, 2),
+            "rupee_loss_markdown": round(self.rupee_loss_markdown, 2),
+            "rupee_loss_parts": {
+                "lost_sales": round(self.rupee_loss_lost_sales, 2),
+                "waste": round(self.rupee_loss_waste, 2),
+                "markdown": round(self.rupee_loss_markdown, 2),
+                "total": round(self.rupee_loss, 2),
+            },
             "availability_pct": round(self.availability_pct, 2),
             "rupee_price_assumption": self.rupee_price_assumption,
             "start_time": self.start_time.isoformat() if self.start_time else None,
@@ -60,7 +72,10 @@ class SimulationMetrics:
         return (
             f"Lost Sales Units: {self.lost_sales_units}\n"
             f"Waste Units:      {self.waste_units}\n"
-            f"Rupee Loss:       Rs {self.rupee_loss:,.2f}\n"
+            f"Rupee Loss:       Rs {self.rupee_loss:,.2f} "
+            f"(lost sales: Rs {self.rupee_loss_lost_sales:,.2f}, "
+            f"waste: Rs {self.rupee_loss_waste:,.2f}, "
+            f"markdown: Rs {self.rupee_loss_markdown:,.2f})\n"
             f"Availability:     {self.availability_pct:.2f}%\n"
             f"Assumption:       {self.rupee_price_assumption}"
         )
@@ -77,8 +92,9 @@ async def compute_simulation_metrics(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     simulation_id: uuid.UUID | None = None,
+    store_id: uuid.UUID | None = None,
 ) -> SimulationMetrics:
-    """Compute the four canonical metrics for a given time window."""
+    """Compute the four canonical metrics for a given time window, optionally filtered by store."""
     naive_start = _to_naive_utc(start_time)
     naive_end = _to_naive_utc(end_time)
 
@@ -95,6 +111,8 @@ async def compute_simulation_metrics(
         order_stmt = order_stmt.where(Order.created_at >= naive_start)
     if naive_end is not None:
         order_stmt = order_stmt.where(Order.created_at <= naive_end)
+    if store_id is not None:
+        order_stmt = order_stmt.where(Order.store_id == store_id)
 
     order_items_res = await db.execute(order_stmt)
     order_items = order_items_res.scalars().all()
@@ -128,6 +146,8 @@ async def compute_simulation_metrics(
 
     events_res = await db.execute(event_stmt)
     waste_events = events_res.scalars().all()
+    if store_id is not None:
+        waste_events = [e for e in waste_events if e.payload and str(e.payload.get("store_id")) == str(store_id)]
 
     waste_units_by_product: dict[uuid.UUID, int] = {}
     total_waste_units = 0
@@ -146,19 +166,28 @@ async def compute_simulation_metrics(
                 if p_uuid:
                     waste_units_by_product[p_uuid] = waste_units_by_product.get(p_uuid, 0) + units
 
-    # 4. Rupee loss: ((lost plus waste units) times Product.base_price per product)
-    total_rupee_loss = 0.0
+    # 4. Markdown loss: (base_price minus sale_price) x units sold at a discount
+    total_markdown_loss = 0.0
+    for item in order_items:
+        base_p = price_by_product.get(item.product_id, 0.0)
+        sale_p = float(item.price) if item.price is not None else base_p
+        if base_p > sale_p:
+            units_sold = item.fulfilled_quantity
+            total_markdown_loss += (base_p - sale_p) * units_sold
+
+    # 5. Rupee loss by part (lost sales, waste, markdown, total)
     all_product_ids = set(price_by_product.keys()) | set(lost_units_by_product.keys()) | set(waste_units_by_product.keys())
-    for pid in all_product_ids:
-        unit_price = price_by_product.get(pid, 0.0)
-        p_lost = lost_units_by_product.get(pid, 0)
-        p_waste = waste_units_by_product.get(pid, 0)
-        total_rupee_loss += (p_lost + p_waste) * unit_price
+    lost_sales_rupee = sum(lost_units_by_product.get(pid, 0) * price_by_product.get(pid, 0.0) for pid in all_product_ids)
+    waste_rupee = sum(waste_units_by_product.get(pid, 0) * price_by_product.get(pid, 0.0) for pid in all_product_ids)
+    total_rupee_loss = lost_sales_rupee + waste_rupee + total_markdown_loss
 
     return SimulationMetrics(
         lost_sales_units=total_lost_units,
         waste_units=total_waste_units,
         rupee_loss=round(total_rupee_loss, 2),
+        rupee_loss_lost_sales=round(lost_sales_rupee, 2),
+        rupee_loss_waste=round(waste_rupee, 2),
+        rupee_loss_markdown=round(total_markdown_loss, 2),
         availability_pct=round(availability_pct, 2),
         rupee_price_assumption=RUPEE_PRICE_ASSUMPTION,
         start_time=start_time,

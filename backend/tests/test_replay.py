@@ -133,7 +133,7 @@ async def test_discount_executed_changes_simulated_demand(db_session):
     # --- Run B: Advance with active discount on that store and product ---
     await clear_simulation_data(db_session)
     clear_simulation_states()
-    engine_disc = SimulationEngine(seed=77, historical_days=1, policy="outpost", sim_start=anchor)
+    engine_disc = SimulationEngine(seed=77, historical_days=1, policy="outpost", sim_start=anchor, discount_elasticity=2.0)
     sim_b = await engine_disc.initialize(db_session, sim_start=anchor)
 
     # Add active discount: 30% off

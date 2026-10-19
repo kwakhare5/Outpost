@@ -351,8 +351,8 @@ async def apply_scenario(
 
         all_prods = (await db.execute(select(Product))).scalars().all()
         target_prod = next(
-            (p for p in all_prods if getattr(p.category, "value", str(p.category)) in ('dairy', 'bakery')),
-            all_prods[0] if all_prods else None
+            (p for p in all_prods if getattr(p, "substitution_group", None) == 'milk'),
+            next((p for p in all_prods if getattr(p.category, "value", str(p.category)) == 'dairy'), all_prods[0] if all_prods else None)
         )
 
         if bandra and andheri and target_prod:
@@ -384,6 +384,9 @@ async def apply_scenario(
             )).scalars().all()
             if bandra_batches:
                 bandra_batches[0].quantity = 85
+                bandra_batches[0].expires_at = now_naive + timedelta(hours=72)
+                for extra_b in bandra_batches[1:]:
+                    extra_b.quantity = 0
             else:
                 db.add(Batch(
                     batch_id=uuid.uuid4(),

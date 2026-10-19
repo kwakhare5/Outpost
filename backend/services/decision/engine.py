@@ -287,7 +287,30 @@ class DecisionOrchestrator:
             target_hours_reorder = min(48.0, usable_hours_reorder)
             target_stock_reorder = hourly_demand * target_hours_reorder
             reorder_qty = max(0, int(round(target_stock_reorder - on_hand_unexpired - total_incoming)))
-            if reorder_qty > 0 and po_in_transit == 0 and transfers_in_transit == 0 and pending_incoming == 0:
+            # FIX 3: Keep in-flight PO veto only when that PO arrives before the stockout time
+            stockout_time = risk.expected_time.replace(tzinfo=None) if risk.expected_time.tzinfo else risk.expected_time
+            po_arrives_before_stockout = False
+            for po in get_active_pos(active_sim_id):
+                if po.store_id == store_id and po.product_id == product_id and po.status in ('in_transit', 'delayed'):
+                    arr = po.expected_arrival.replace(tzinfo=None) if po.expected_arrival.tzinfo else po.expected_arrival
+                    if arr < stockout_time:
+                        po_arrives_before_stockout = True
+                        break
+            if not po_arrives_before_stockout:
+                po_db_res = await db.execute(
+                    select(PurchaseOrderModel.arrival_eta).where(
+                        PurchaseOrderModel.destination_store_id == store_id,
+                        PurchaseOrderModel.product_id == product_id,
+                        PurchaseOrderModel.status == POStatus.IN_TRANSIT,
+                    )
+                )
+                for arr_db in po_db_res.scalars().all():
+                    arr = arr_db.replace(tzinfo=None) if arr_db.tzinfo else arr_db
+                    if arr < stockout_time:
+                        po_arrives_before_stockout = True
+                        break
+
+            if reorder_qty > 0 and not po_arrives_before_stockout and transfers_in_transit == 0 and pending_incoming == 0:
                 reorders = [ReorderInput(
                     store_id=store_id,
                     product_id=product_id,
@@ -459,22 +482,24 @@ class DecisionOrchestrator:
                 PurchaseOrderModel.status == POStatus.IN_TRANSIT
             )
         )
-        inflight_incoming = {(po.destination_store_id, po.product_id) for po in inflight_po_res.scalars().all()}
+        inflight_pos: list[tuple[uuid.UUID, uuid.UUID, datetime]] = []
+        for po in inflight_po_res.scalars().all():
+            arr = po.arrival_eta.replace(tzinfo=None) if po.arrival_eta.tzinfo else po.arrival_eta
+            inflight_pos.append((po.destination_store_id, po.product_id, arr))
         for po in get_active_pos(active_sim_id):
             if po.status in ('in_transit', 'delayed'):
-                inflight_incoming.add((po.store_id, po.product_id))
+                arr = po.expected_arrival.replace(tzinfo=None) if po.expected_arrival.tzinfo else po.expected_arrival
+                inflight_pos.append((po.store_id, po.product_id, arr))
 
         shipment_in_transit_res = await db.execute(
             select(Shipment).where(
                 Shipment.status.in_([ShipmentStatus.DISPATCHED, ShipmentStatus.IN_TRANSIT])
             )
         )
-        for s in shipment_in_transit_res.scalars().all():
-            inflight_incoming.add((s.destination_store_id, s.product_id))
-
+        inflight_transfers = {(s.destination_store_id, s.product_id) for s in shipment_in_transit_res.scalars().all()}
         for t in get_active_transfers(active_sim_id):
             if t.status == 'in_transit':
-                inflight_incoming.add((t.destination_store_id, t.product_id))
+                inflight_transfers.add((t.destination_store_id, t.product_id))
 
         cycle_refills: dict[tuple[uuid.UUID, uuid.UUID], Recommendation] = {}
         count = 0
@@ -486,10 +511,21 @@ class DecisionOrchestrator:
                 dest_store = rec.destination_store_id or risk.store_id
                 prod_id = risk.product_id
 
-                # Fix 2: In-flight check and cycle-level conflict resolution between TRANSFER and REORDER
+                # FIX 3: In-flight check and cycle-level conflict resolution between TRANSFER and REORDER
                 if rec.action_type in (ActionType.TRANSFER, ActionType.REORDER):
                     refill_key = (dest_store, prod_id)
-                    if refill_key in inflight_incoming:
+                    if refill_key in inflight_transfers:
+                        await db.delete(rec)
+                        await db.flush()
+                        continue
+
+                    # Keep the in-flight PO veto only when that PO arrives before the stockout time
+                    stockout_time = risk.expected_time.replace(tzinfo=None) if risk.expected_time.tzinfo else risk.expected_time
+                    po_veto = any(
+                        p_store == dest_store and p_prod == prod_id and p_arr < stockout_time
+                        for p_store, p_prod, p_arr in inflight_pos
+                    )
+                    if po_veto:
                         await db.delete(rec)
                         await db.flush()
                         continue

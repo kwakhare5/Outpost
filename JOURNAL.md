@@ -1,5 +1,16 @@
 # Engineering Journal -- Outpost
 
+## 2026-10-19: Slice D -- Honest Accounting & Live Refill Levers
+
+### Work Card: Honest Accounting & Live Refill Levers
+- **Problem / tension:** Replay evaluations lacked honest accounting and clean experimental isolation: markdown costs from discounts were unaccounted in rupee loss; baseline fixed reorder rules still ran inside the Outpost pass creating hybrid confounding; in-flight purchase orders vetoed decisions regardless of arrival time; demand elasticity was hardcoded rather than parameterized (defaulting to 0.0); and sim_start drifted with wall-clock time across runs.
+- **Change / decision:** Added markdown loss accounting `(base_price - sale_price) * units_sold` with `rupee_loss_parts` breakdown (`lost_sales`, `waste`, `markdown`, `total`); disabled fixed `evaluate_reorder_policy` in Outpost pass while querying real baseline PO counts in report; restricted in-flight PO veto to orders arriving strictly before stockout time; parameterized demand lift with `discount_elasticity` (default 0.0); anchored replay to deterministic `sim_start` CLI/endpoint argument; added 5 directional invariant tests in `test_replay_honest.py`.
+- **Proof:** `pytest backend/tests` passed 156/156 tests in 121s with zero errors and zero skips; `test_replay_honest.py` passed 5/5 tests; full matrix of 15 runs across 5 scenarios and 3 seeds plus 3 elasticity sensitivity runs executed with honest accounting, showing Outpost saves up to Rs 8,446 in net rupee loss by curbing over-ordering while transparently trading off lower availability on thin margins.
+- **Still broken / unproven:**
+  1. Quantity-blind reorder block: In `backend/services/decision/engine.py:318`, an incoming transfer in transit blocks a reorder entirely rather than subtracting incoming units and ordering the remaining gap.
+  2. Transit speed discrepancy: Decision engine assumes 25 km/h for road transfers (`engine.py:275`), while validator / fleet runner assumes 30 km/h (`tools.py:116`).
+  3. Reorder availability gap: Outpost availability is 55–72% vs baseline 77–97% because Outpost refuses to flood-order items facing rapid spoilage; safety stock calibration needed to bridge availability without triggering waste spikes.
+
 ## 2026-10-19: Slice C -- Deterministic Sequential Replay Fair Test & Dynamic Discount Response
 
 ### Work Card: Deterministic Sequential Replay Fair Test & Dynamic Discount Response

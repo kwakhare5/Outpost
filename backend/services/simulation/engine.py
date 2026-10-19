@@ -33,8 +33,24 @@ from backend.services.simulation.scenarios import (
     get_scenario_config,
     set_current_scenario,
     get_or_create_simulation_state,
+    get_simulation_state,
     ScenarioConfig,
 )
+import backend.agents.execution.tools as exec_tools
+
+DEFAULT_SIM_START = datetime(2026, 1, 1, 12, 0, 0)
+
+def _sim_aware_naive_now() -> datetime:
+    try:
+        state = get_simulation_state()
+        if state and state.engine and state.engine.clock:
+            clk_now = state.engine.clock.now
+            return clk_now.replace(tzinfo=None) if clk_now.tzinfo else clk_now
+    except Exception:
+        pass
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+exec_tools._naive_now = _sim_aware_naive_now
 # Demand Rate Table: category x hour block x weekday (Spec Section 4)
 # Hour blocks:
 # 0 = Night (00:00 - 06:00)
@@ -153,11 +169,13 @@ class SimulationEngine:
         historical_days: int = 60,
         policy: str = "outpost",
         sim_start: datetime | None = None,
+        discount_elasticity: float = 0.0,
     ):
         self.seed = seed
         self.historical_days = historical_days
         self.policy = policy
         self.sim_start: datetime | None = sim_start.replace(tzinfo=None) if (sim_start and sim_start.tzinfo) else sim_start
+        self.discount_elasticity: float = discount_elasticity
         self.simulation_id: uuid.UUID | None = None
         self.rng = random.Random(seed)
         self.clock: SimulationClock | None = None
@@ -189,11 +207,11 @@ class SimulationEngine:
         state.scenario = self.active_scenario
         state.policy = self.policy
 
-        # 1. Calculate timeline (fixed anchor if given, else computed once)
+        # 1. Calculate timeline (fixed anchor if given, else computed once from default fixed date)
         if self.sim_start is not None:
             sim_start_val = self.sim_start
         else:
-            sim_start_val = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.historical_days)
+            sim_start_val = DEFAULT_SIM_START - timedelta(days=self.historical_days)
             self.sim_start = sim_start_val
         self.clock = SimulationClock(sim_start_val, self.seed)
 
@@ -249,7 +267,10 @@ class SimulationEngine:
         self.simulation_id = simulation_id
         state = get_or_create_simulation_state(simulation_id)
         state.engine = self
-        self.policy = state.policy
+        if self.policy:
+            state.policy = self.policy
+        else:
+            self.policy = state.policy
 
         old_time = self.clock.now
         new_time = self.clock.advance(hours)
@@ -268,10 +289,9 @@ class SimulationEngine:
 
         # Replenishment policies:
         # 1. Baseline supplier-side ordering (fixed reorder rule):
-        #    In baseline pass (pass 1), this is the sole replenishment policy.
-        #    In outpost pass (pass 2), this models the supplier-side ordering
-        #    that already exists in the world, with Outpost layered on top.
-        await evaluate_reorder_policy(db, new_time, sim_id=self.simulation_id)
+        #    Runs ONLY in baseline pass (policy != 'outpost'). In outpost pass, Outpost decides all replenishment.
+        if self.policy != 'outpost':
+            await evaluate_reorder_policy(db, new_time, sim_id=self.simulation_id)
 
         # 2. Outpost Decision Engine layer (pass 2):
         #    Runs risk detection, transfer/discount/reorder decisions, approval, and execution.
@@ -400,7 +420,6 @@ class SimulationEngine:
         # Re-seed and regenerate with preserved policy and fixed anchor
         simulation = await self.initialize(db, policy=saved_policy, sim_start=saved_sim_start)
         clear_active_transfers(simulation.simulation_id)
-        clear_active_pos(simulation.simulation_id)
         from backend.services.simulation.scenarios import clear_active_discounts
         clear_active_discounts(simulation.simulation_id)
         return {
@@ -593,10 +612,11 @@ class SimulationEngine:
                 ]
                 if matching_discounts:
                     disc = matching_discounts[-1]
-                    # Price elasticity model: price reduction creates bounded demand lift
-                    demand_lift = min(2.0, 1.0 + disc.discount_pct * 2.0)
-                    discount_lift = demand_lift
                     effective_price = round(prod_seed.base_price * (1.0 - disc.discount_pct), 2)
+                    if self.discount_elasticity > 0.0 and disc.discount_pct > 0.0:
+                        discount_lift = min(2.0, 1.0 + disc.discount_pct * self.discount_elasticity)
+                    else:
+                        discount_lift = 1.0
 
                 # Quantity driven by category x hour block x weekday rate table + scenario multiplier (Spec Section 4)
                 rate_mult = get_demand_rate_multiplier(
