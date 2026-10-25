@@ -18,3 +18,9 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Restored `icon.svg` directly to `D:\Outpost V1` and committed it to git.
 - **Proof:** `git log -n 1` shows commit `5c4d42a` with `icon.svg` safely tracked.
 - **Still broken / unproven:** None. Logo is intact.
+
+#### Work card 3: Remote GitHub branch cleanup and V1 sync
+- **Problem / tension:** GitHub repo `kwakhare5/Outpost` still held 7 legacy phase branches and old codebase history.
+- **Change / decision:** Deleted all 7 legacy branches on GitHub (`phase-1-honesty` through `phase-4b-decision-fix`), force-updated remote `main` to clean ground zero, and pushed tracked branch `v1`.
+- **Proof:** `git ls-remote origin` confirms only `main` and `v1` exist on GitHub pointing to commit `a8c0241`.
+- **Still broken / unproven:** None.
