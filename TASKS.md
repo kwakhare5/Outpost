@@ -32,7 +32,7 @@ RULES FOR THE AI:
   - _Verification:_ Live query confirms 3 stores and 5 products seeded with real hourly sales curves in `real_demand_curves`.
 - [x] **Task 2.2:** Build Inventory & Oldest-First engine with automated expiry locking (`lib/engine/inventory.ts`).
   - _Verification:_ Automated tests verifying oldest batch deducts first and expired batches are locked from fulfillment.
-- [ ] **Task 2.3:** Build Urgency Detection engine ("Hours Left" calculation from real demand curves) (`lib/engine/urgency.ts`).
+- [x] **Task 2.3:** Build Urgency Detection engine ("Hours Left" calculation from real demand curves) (`lib/engine/urgency.ts`).
   - _Verification:_ Unit test proving Amul Milk stockout detected ~50 minutes ahead.
 - [ ] **Task 2.4:** Build Decision & Safety engine (Van transfer recommendation with donor safety cushion check & cart rationing) (`lib/engine/decision.ts`).
   - _Verification:_ Unit test proving Bandra transfer recommendation without causing Bandra deficit.

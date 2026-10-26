@@ -215,3 +215,19 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Added failing reproduction test in `tests/inventory.test.ts` proving the zero-price defect; fixed `lib/engine/inventory.ts` by querying `products` table directly for authoritative MRP; wrapped batch deductions in PostgreSQL transactions (`BEGIN ... COMMIT`); added `getExpiringBatches` for 24-hour spoilage detection and `getSimulationClock` to synchronize time with `time_clock`.
 - **Proof:** `.\verify.ps1` completed with exit code 0 in 35.72s; all 24 tests passing across 4 test suites against live Supabase PostgreSQL.
 - **Still broken / unproven:** Task 2.3 (Urgency Detection engine `lib/engine/urgency.ts`) pending implementation.
+
+
+
+#### Work card 28: Built Urgency Detection engine ("Hours Left" calculation) (Task 2.3)
+- **Problem / tension:** Need real-time calculation of "Hours Left" from active batch stock and hourly demand curves to flag items facing morning stockouts.
+- **Change / decision:** Built `lib/engine/urgency.ts` providing `computeUrgencyMetrics`, `calculateItemUrgency`, and `getUrgencyQueue` sorted by Hours Left with revenue-at-risk tie-breaking; wrote `tests/urgency.test.ts` proving Amul Milk in Andheri West flags a ~50-minute stockout (<1.5 hr critical alert) while Bandra maintains safe buffer.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 41.16s; all 28 tests passing across 5 test suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 2.4 (Decision & Safety engine `lib/engine/decision.ts`) pending implementation.
+
+
+
+#### Work card 29: Fixed code review findings across Standards and Spec (Task 2.3)
+- **Problem / tension:** Code review identified `parseSimulationHour` jargon breaking `GLOSSARY.md`, midnight `00:00` clock hour parsing bug, synthetic 999-hour magic sentinel, velocity metric unit mismatch (₹/hr vs ₹/min), and duplicated row/clock mapping.
+- **Change / decision:** Renamed to `parseClockHour` and fixed midnight falsy check; replaced 999 sentinel with `null` for zero-demand runway; calculated `burnRatePerMinute` (₹/min) for PRD tie-breaking; extracted `resolveClockOptions` and `mapUrgencyRow` helpers; updated `tests/urgency.test.ts`.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 43.7s; 29/29 tests passing across 5 test suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 2.4 (Decision & Safety engine `lib/engine/decision.ts`) pending implementation.
