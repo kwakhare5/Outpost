@@ -1,5 +1,8 @@
 # AGENTS.md - Outpost
 
+> **MANDATORY INSTRUCTION:** Read and obey the global master rules at C:\Users\kwakh\.agents\AGENTS.md. Treat this file as project-specific facts and invariants that override or extend global rules.
+
+
 ## What this is
 Autonomous inventory replenishment control engine for high-velocity dark stores.
 
