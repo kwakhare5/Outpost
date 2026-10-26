@@ -1,4 +1,7 @@
 # AGENTS.md — Outpost V1
+
+> **MANDATORY INSTRUCTION:** Read and obey the global master rules at C:\Users\kwakh\.agents\AGENTS.md. Treat this file as project-specific facts and invariants that override or extend global rules.
+
 # NOTE FOR AI: Treat this file as AGENTS.md + RULES.md combined.
 # It defines both the project facts AND the hard invariant rules for this codebase.
 # Global master working rules live at C:\Users\kwakh\.agents\AGENTS.md.
