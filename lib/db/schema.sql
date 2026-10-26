@@ -61,8 +61,20 @@ CREATE TABLE IF NOT EXISTS van_transfers (
     dispatched_at TIMESTAMPTZ,
     expected_arrival_at TIMESTAMPTZ,
     received_at TIMESTAMPTZ,
+    batch_expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure batch_expires_at column exists if table was previously created
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'van_transfers' AND column_name = 'batch_expires_at'
+    ) THEN
+        ALTER TABLE van_transfers ADD COLUMN batch_expires_at TIMESTAMPTZ;
+    END IF;
+END $$;
 
 -- Rename simulation_clock if it exists from previous migration
 DO $$

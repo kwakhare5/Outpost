@@ -49,8 +49,9 @@ export interface ExpiringBatchInfo {
 
 /**
  * Returns current operational time and date from the database clock table.
+ * Follows GLOSSARY.md domain term: "Time Clock".
  */
-export async function getSimulationClock(): Promise<{ currentTime: string; dayDate: string }> {
+export async function getTimeClock(): Promise<{ currentTime: string; dayDate: string }> {
   const rows = await query<{ current_time: string; day_date: string }>(
     `SELECT "current_time", day_date FROM time_clock WHERE id = 1`
   );
@@ -59,6 +60,9 @@ export async function getSimulationClock(): Promise<{ currentTime: string; dayDa
   }
   return { currentTime: "08:00", dayDate: "2026-10-25" };
 }
+
+// Deprecated alias retained for backward compatibility
+export const getSimulationClock = getTimeClock;
 
 function normalizeTimestamp(time?: string | Date): string {
   if (!time) return new Date().toISOString();

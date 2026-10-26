@@ -40,7 +40,7 @@ RULES FOR THE AI:
 ---
 
 ## Phase 3: Van Transfers, Doorstep Gate & Outcomes Ledger
-- [ ] **Task 3.1:** Build Van Transfer state machine and Doorstep Count confirmation API (`/api/transfers/[id]/confirm-doorstep`).
+- [x] **Task 3.1:** Build Van Transfer state machine and Doorstep Count confirmation API (`/api/transfers/[id]/confirm-doorstep`).
   - _Verification:_ Conservation of mass test: Bandra deducted, zero in-transit destination credit, counted arrival credited, 2 leaking cartons logged to road damage, idempotent.
 - [ ] **Task 3.2:** Build Top-Bar Time Clock controller (`/api/clock/advance`).
   - _Verification:_ Advancing 1 hour consumes demand from oldest batches, advances vans, and recalculates Hours Left.

@@ -245,3 +245,17 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Replaced all jargon with plain terms from `GLOSSARY.md` (`sendingStore`, `receivingStore`, `salesVelocityPerMinute`); extracted `DecisionOptions` interface and `getEntityName` helper; fixed remainder unit distribution to prioritize rank 1 stores; added `priorityDockReceiving: true` to cart rationing; calibrated daytime demand window (11:00-18:00) yielding exact 60-unit PRD demand directly from Supabase curves without overrides; set 20s vitest timeout for cloud database latency; added `evaluateMultiStoreReplenishment`.
 - **Proof:** `.\verify.ps1` completed with exit code 0 in 56.12s; all 38 tests passing across 6 test suites against live Supabase PostgreSQL.
 - **Still broken / unproven:** Task 3.1 (Van Transfer state machine and Doorstep Count confirmation API) pending implementation.
+
+
+#### Work card 32: Built Van Transfer state machine and Doorstep Count confirmation API (Task 3.1)
+- **Problem / tension:** Stock movements between dark stores risked phantom inventory, in-transit teleportation, and double-crediting when road damage occurred.
+- **Change / decision:** Built `lib/engine/transit.ts` (`dispatchVanTransfer`, `confirmDoorstepCount`, `getActiveTransfers`) and Next.js route handlers `app/api/transfers/[id]/confirm-doorstep/route.ts` and `app/api/transfers/route.ts`; enforced immediate deduction at sending store, zero in-transit destination credit, physical counted arrival crediting, automatic road damage booking to `outcomes_ledger`, and transaction-locked idempotency; authored 5 comprehensive tests in `tests/transit.test.ts`.
+- **Proof:** `.\verify.ps1` passed with exit code 0 in 80.86s; 43/43 tests passing across 7 test suites against live Supabase PostgreSQL with clean production build.
+- **Still broken / unproven:** Task 3.2 (Top-Bar Time Clock controller `/api/clock/advance`) pending implementation.
+
+
+#### Work card 33: Fixed code review findings across Standards and Spec (Task 3.1)
+- **Problem / tension:** Code review identified batch expiry resets granting phantom freshness, doorstep count confirmation callable mid-transit before van arrival, missing sending store safety cushion enforcement, and silent missing route fallbacks.
+- **Change / decision:** Added `batch_expires_at TIMESTAMPTZ` to `van_transfers` table schema and Supabase; updated `lib/engine/transit.ts` to carry over exact source batch expiration timestamps into received batches, block doorstep counting before van arrival ETA or `markVanArrived`, enforce sending store safety cushions before dispatch, and fail fast if transit routes are missing; removed dead code and replaced payload aliasing with strict numbers; updated `app/api/transfers/route.ts` to call `getAllTransfers()`; expanded `tests/transit.test.ts` to 11 comprehensive tests.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 85.94s; 49/49 tests passing across 7 test suites against live Supabase PostgreSQL with clean production build.
+- **Still broken / unproven:** Task 3.2 (Top-Bar Time Clock controller `/api/clock/advance`) pending implementation.
