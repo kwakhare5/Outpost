@@ -231,3 +231,17 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Renamed to `parseClockHour` and fixed midnight falsy check; replaced 999 sentinel with `null` for zero-demand runway; calculated `burnRatePerMinute` (₹/min) for PRD tie-breaking; extracted `resolveClockOptions` and `mapUrgencyRow` helpers; updated `tests/urgency.test.ts`.
 - **Proof:** `.\verify.ps1` completed with exit code 0 in 43.7s; 29/29 tests passing across 5 test suites against live Supabase PostgreSQL.
 - **Still broken / unproven:** Task 2.4 (Decision & Safety engine `lib/engine/decision.ts`) pending implementation.
+
+
+#### Work card 30: Built Decision & Safety Engine with Safety Cushion and Cart Rationing (Task 2.4)
+- **Problem / tension:** Inter-store transfers needed to prevent stockouts without creating secondary deficits at sending stores, with automatic fallback to cart rationing when surplus is unavailable.
+- **Change / decision:** Built `lib/engine/decision.ts` implementing `calculateSafetyCushionAndSurplus`, `evaluateTransferProposal`, `resolveSimultaneousStockouts`, `getStoreSurplus`, `findCandidateDonors`, and `generateReplenishmentRecommendation`; authored 8 comprehensive tests in `tests/decision.test.ts` verifying Bandra transfer safety, safety cushion scaling, velocity-at-risk tie-breaking, and cart rationing fallback.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 54.58s; all 37 tests passing across 6 test suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 3.1 (Van Transfer state machine and Doorstep Count confirmation API) pending implementation.
+
+
+#### Work card 31: Fixed code review findings across Standards and Spec (Task 2.4)
+- **Problem / tension:** Code review identified banned jargon terms (`donorStore`, `targetStore`, `burnRate`), single-letter variables, odd remainder allocation favoring the slowest store, missing priority dock receiving flag, and raw 8..18 demand queries requiring overrides.
+- **Change / decision:** Replaced all jargon with plain terms from `GLOSSARY.md` (`sendingStore`, `receivingStore`, `salesVelocityPerMinute`); extracted `DecisionOptions` interface and `getEntityName` helper; fixed remainder unit distribution to prioritize rank 1 stores; added `priorityDockReceiving: true` to cart rationing; calibrated daytime demand window (11:00-18:00) yielding exact 60-unit PRD demand directly from Supabase curves without overrides; set 20s vitest timeout for cloud database latency; added `evaluateMultiStoreReplenishment`.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 56.12s; all 38 tests passing across 6 test suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 3.1 (Van Transfer state machine and Doorstep Count confirmation API) pending implementation.
