@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env
+.env*.local
+outpost.db*
+dist/
+coverage/
+*.tsbuildinfo
+*.pyc
+__pycache__/

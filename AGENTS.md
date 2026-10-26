@@ -7,14 +7,17 @@
 Autonomous inventory replenishment control engine for high-velocity dark stores across Mumbai (Andheri West, Bandra, Powai).
 
 ## 2. Stack
-- Frontend: TBD (align with user before scaffold)
-- Backend: TBD (align with user before scaffold)
+- Frontend: Next.js 16.4.3 (Turbopack, App Router, React 19.3.1)
+- Backend: Next.js Route Handlers + Supabase PostgreSQL 17.11 (direct `pg` pool + Supabase client)
+- AI / LLM: Gemini 2.5 Flash via `@google/genai` (2.31.0)
+- Styling: Tailwind CSS (MailCheap light-mode theme) + Lucide React (1.61.0)
+- Testing: Vitest 5.0.5
 - Hosting: Local dev / self-hosted
 
 ## 3. Project Commands & Self-Verification
-- Install: TBD upon scaffold
-- Dev server: TBD
-- Test (all): TBD
+- Install: `npm install`
+- Dev server: `npm run dev` (starts on http://localhost:3000)
+- Test (all): `npm test`
 - Verification runner: `.\verify.ps1`
 - Done check = `.\verify.ps1` exits 0 with pasted raw terminal output.
 
@@ -22,9 +25,10 @@ Autonomous inventory replenishment control engine for high-velocity dark stores 
 - Always run `.\verify.ps1` before declaring any task complete.
 - Level-2 Autonomy Gate: Never execute high-consequence interventions (`TRANSFER`, `REORDER`) without verified human approval.
 - Conservation of Mass: Stock transfers must deduct from source and credit to destination with zero phantom creation or loss. Zero units credited during transit.
-- Batches as Absolute Truth: Enforce FIFO/FEFO deduction with expiration timestamps; zero expired stock leaked into fulfillment.
+- Batches as Absolute Truth: Enforce Oldest-First deduction with expiration timestamps; zero expired stock leaked into fulfillment.
 - Doorstep Count Confirmation: Credited stock matches counted arrival; discrepancies logged to waste.
 - Arrival confirmation must be idempotent (no double-crediting).
+- Plain Language Standard: Never use forbidden acronyms (FEFO, FIFO, IST, GRN, TTS); use plain terms from `GLOSSARY.md`.
 
 ## 5. What the AI must NEVER do
 - Never commit hardcoded secrets, passwords, or API keys (use `.env`).
@@ -32,18 +36,20 @@ Autonomous inventory replenishment control engine for high-velocity dark stores 
 - Never delete or weaken a test just to get green.
 
 ## 6. Design Source of Truth
-- Design tokens & vibe: Follow `DESIGN.md` and `PRD.md`.
+- Design tokens & vibe: Follow `DESIGN.md` (official MailCheap light-mode system) and `PRD.md`.
 
 ## 7. Folder Map
 - `PRD.md`: Single source of truth for features and flows.
-- `ARCHITECTURE.md`: System design and data models.
-- `DESIGN.md`: Visual tokens, UI components, and layouts.
+- `ARCHITECTURE.md`: System design, database models, and API routes.
+- `DESIGN.md`: Visual tokens, typography, and light-mode components.
 - `TASKS.md`: Active atomic task checklist.
 - `JOURNAL.md`: Factual progress and proof log.
+- `GLOSSARY.md`: Everyday language dictionary and banned jargon list.
+- `data/`: Extracted hourly demand and dark store dataset CSVs.
 
 ## 8. Gotchas & Known Traps
 - No teleportation: In-transit stock cannot be sold or credited to the destination before receiver count confirmation.
-- Donor validation: Inter-store transfer must not cause a secondary stockout at the donor store.
+- Donor validation: Inter-store transfer must not cause a secondary stockout at the donor store (enforce safety cushion).
 
 ## 9. Do Not Touch
 - `PRD.md` acceptance criteria without explicit user instruction.
