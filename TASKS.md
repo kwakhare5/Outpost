@@ -30,7 +30,7 @@ RULES FOR THE AI:
 ## Phase 2: Real Data Ingestion & Core Domain Engines
 - [x] **Task 2.1:** Seed 3-store real demand curves from `data/mumbai_anchor_demand.csv` into Supabase `real_demand_curves`, `stores`, and `products`.
   - _Verification:_ Live query confirms 3 stores and 5 products seeded with real hourly sales curves in `real_demand_curves`.
-- [ ] **Task 2.2:** Build Inventory & Oldest-First engine with automated expiry locking (`lib/engine/inventory.ts`).
+- [x] **Task 2.2:** Build Inventory & Oldest-First engine with automated expiry locking (`lib/engine/inventory.ts`).
   - _Verification:_ Automated tests verifying oldest batch deducts first and expired batches are locked from fulfillment.
 - [ ] **Task 2.3:** Build Urgency Detection engine ("Hours Left" calculation from real demand curves) (`lib/engine/urgency.ts`).
   - _Verification:_ Unit test proving Amul Milk stockout detected ~50 minutes ahead.

@@ -201,3 +201,17 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Updated `scripts/extract_data.py` to produce 45.0 units/hr at 08:00 breakfast rush for Andheri Amul Milk and regenerated `data/mumbai_anchor_demand.csv`; refactored `lib/db/seed.ts` to parse CSV headers dynamically, extract unique stores and products with unit MRPs directly from data, use multi-row SQL batch inserts across all tables, rename loop variables to domain terms, and purge forbidden jargon in favor of "Sending Store"; updated `tests/seed.test.ts`.
 - **Proof:** `npm run db:seed` and `.\verify.ps1` completed with exit code 0 in 20.64s; all 16 tests passing across all suites against live Supabase PostgreSQL.
 - **Still broken / unproven:** Task 2.2 (Inventory & Oldest-First engine `lib/engine/inventory.ts`) pending implementation.
+
+
+#### Work card 26: Built Inventory & Oldest-First engine with automated expiry locking (Task 2.2)
+- **Problem / tension:** Customer orders needed to consume oldest batches first with zero expired food leaking into fulfillment, logging waste directly to the outcomes ledger.
+- **Change / decision:** Built `lib/engine/inventory.ts` implementing `lockExpiredBatches`, `getAvailableStock`, `getActiveBatches`, and `deductOldestFirst`; configured `vitest.config.ts` with `fileParallelism: false` for clean live Supabase test execution; wrote `tests/inventory.test.ts` covering oldest batch priority, expiry locking, waste ledger entries, and stockout shortfalls.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 27.37s; all 21 tests passing across 4 test suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 2.3 (Urgency Detection engine `lib/engine/urgency.ts`) pending implementation.
+
+
+#### Work card 27: Diagnosed and fixed complete stockout rupee defect and spec gaps (Task 2.2)
+- **Problem / tension:** Deducting units when store stock was zero recorded ₹0 unit price and ₹0 rupee impact in outcomes ledger; 24-hour impending expiry query and transaction atomicity were missing.
+- **Change / decision:** Added failing reproduction test in `tests/inventory.test.ts` proving the zero-price defect; fixed `lib/engine/inventory.ts` by querying `products` table directly for authoritative MRP; wrapped batch deductions in PostgreSQL transactions (`BEGIN ... COMMIT`); added `getExpiringBatches` for 24-hour spoilage detection and `getSimulationClock` to synchronize time with `time_clock`.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 35.72s; all 24 tests passing across 4 test suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 2.3 (Urgency Detection engine `lib/engine/urgency.ts`) pending implementation.
