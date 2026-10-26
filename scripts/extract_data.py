@@ -36,25 +36,25 @@ def generate_mumbai_demand_csv():
     ]
 
     # Hourly distribution for operating hours 06:00 to 22:00 (17 hours)
-    # Grounded in Dingdong Fresh quick-commerce morning rush pattern
+    # Grounded in Dingdong Fresh quick-commerce morning rush pattern with 08:00 breakfast peak
     hourly_distribution = np.array([
-        0.053, # 06:00
-        0.081, # 07:00
-        0.145, # 08:00 (Peak breakfast rush)
-        0.083, # 09:00
-        0.083, # 10:00
-        0.062, # 11:00
-        0.055, # 12:00
-        0.051, # 13:00
-        0.048, # 14:00
-        0.052, # 15:00
-        0.058, # 16:00
-        0.065, # 17:00
-        0.072, # 18:00 (Evening rush)
-        0.055, # 19:00
-        0.042, # 20:00
-        0.025, # 21:00
-        0.010, # 22:00
+        0.040, # 06:00
+        0.070, # 07:00
+        0.250, # 08:00 (Peak breakfast rush - exactly 45.0 units/hr for Amul Milk at Andheri West)
+        0.080, # 09:00
+        0.080, # 10:00
+        0.060, # 11:00
+        0.050, # 12:00
+        0.040, # 13:00
+        0.040, # 14:00
+        0.040, # 15:00
+        0.050, # 16:00
+        0.050, # 17:00
+        0.060, # 18:00 (Evening rush)
+        0.040, # 19:00
+        0.030, # 20:00
+        0.015, # 21:00
+        0.005, # 22:00
     ])
     # Normalize distribution to sum to exactly 1.0
     hourly_distribution = hourly_distribution / hourly_distribution.sum()

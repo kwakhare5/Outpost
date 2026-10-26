@@ -187,3 +187,17 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Renamed table to `time_clock` in Supabase migration and schema; updated `data/mumbai_anchor_demand.csv` and `scripts/extract_data.py` to canonical IDs (`andheri-west`, `amul-taaza-500`, etc.); configured `Newsreader` and `Geist` fonts in `tailwind.config.ts`, `app/layout.tsx`, and `app/globals.css`; stripped `app/page.tsx` to an editorial minimalist shell; expanded `tests/schema.test.ts` to test all 8 tables and `tests/health.test.ts` to test against real `stores` table.
 - **Proof:** `npm run db:migrate` confirmed all 8 tables including `time_clock`; `.\verify.ps1` completed with exit code 0 in 23.9s with 10/10 tests passing.
 - **Still broken / unproven:** Task 2.1 (seeding demand curves, stores, and products) pending execution.
+
+
+#### Work card 24: Seeded Mumbai anchor dark store demand and operational state (Task 2.1)
+- **Problem / tension:** Supabase tables were empty; real demand curves and operational starting inventory were needed to power replenishment simulations without fake data.
+- **Change / decision:** Built `lib/db/seed.ts` to ingest 3 dark stores, 6 transit corridors, 5 anchor products, and 255 hourly demand rows from `data/mumbai_anchor_demand.csv` into Supabase. Also seeded initial morning inventory batches (including Andheri 38-unit milk stockout risk and 20-unit expiring dahi) and the 08:00 operational clock, added `npm run db:seed`, and created live test suite `tests/seed.test.ts`.
+- **Proof:** `npm run db:seed` and `.\verify.ps1` completed with exit code 0 in 26.56s; 16/16 tests passing across all suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 2.2 (Inventory & Oldest-First engine `lib/engine/inventory.ts`) pending implementation.
+
+
+#### Work card 25: Fixed code review findings across Standards and Spec (Task 2.1)
+- **Problem / tension:** Code review identified 25.1 vs 45.0 units/hr demand rate conflict throwing off ~50-minute stockout timing, hardcoded store/product arrays ignoring CSV headers, forbidden "donor store" jargon, single-letter variables, and sequential single-row database inserts.
+- **Change / decision:** Updated `scripts/extract_data.py` to produce 45.0 units/hr at 08:00 breakfast rush for Andheri Amul Milk and regenerated `data/mumbai_anchor_demand.csv`; refactored `lib/db/seed.ts` to parse CSV headers dynamically, extract unique stores and products with unit MRPs directly from data, use multi-row SQL batch inserts across all tables, rename loop variables to domain terms, and purge forbidden jargon in favor of "Sending Store"; updated `tests/seed.test.ts`.
+- **Proof:** `npm run db:seed` and `.\verify.ps1` completed with exit code 0 in 20.64s; all 16 tests passing across all suites against live Supabase PostgreSQL.
+- **Still broken / unproven:** Task 2.2 (Inventory & Oldest-First engine `lib/engine/inventory.ts`) pending implementation.

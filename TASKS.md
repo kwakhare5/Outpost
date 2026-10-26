@@ -28,7 +28,7 @@ RULES FOR THE AI:
 ---
 
 ## Phase 2: Real Data Ingestion & Core Domain Engines
-- [ ] **Task 2.1:** Seed 3-store real demand curves from `data/mumbai_anchor_demand.csv` into Supabase `real_demand_curves`, `stores`, and `products`.
+- [x] **Task 2.1:** Seed 3-store real demand curves from `data/mumbai_anchor_demand.csv` into Supabase `real_demand_curves`, `stores`, and `products`.
   - _Verification:_ Live query confirms 3 stores and 5 products seeded with real hourly sales curves in `real_demand_curves`.
 - [ ] **Task 2.2:** Build Inventory & Oldest-First engine with automated expiry locking (`lib/engine/inventory.ts`).
   - _Verification:_ Automated tests verifying oldest batch deducts first and expired batches are locked from fulfillment.
