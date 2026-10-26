@@ -9,7 +9,7 @@ import {
   getAvailableStock,
   getActiveBatches,
   getExpiringBatches,
-  getSimulationClock,
+  getTimeClock,
   deductOldestFirst,
 } from "../lib/engine/inventory";
 
@@ -183,8 +183,8 @@ describe("Inventory & Oldest-First Engine (Task 2.2)", () => {
     expect(dahiBatch?.unitMrp).toBe(35.0);
   });
 
-  it("reads simulation clock from time_clock table", async () => {
-    const clock = await getSimulationClock();
+  it("reads time clock from time_clock table", async () => {
+    const clock = await getTimeClock();
     expect(clock.currentTime).toBe("08:00");
     expect(clock.dayDate).toBe("2026-10-25");
   });

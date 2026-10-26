@@ -61,9 +61,6 @@ export async function getTimeClock(): Promise<{ currentTime: string; dayDate: st
   return { currentTime: "08:00", dayDate: "2026-10-25" };
 }
 
-// Deprecated alias retained for backward compatibility
-export const getSimulationClock = getTimeClock;
-
 function normalizeTimestamp(time?: string | Date): string {
   if (!time) return new Date().toISOString();
   return time instanceof Date ? time.toISOString() : time;
@@ -78,7 +75,7 @@ export async function lockExpiredBatches(
   clockTime?: string
 ): Promise<ExpiryLockResult> {
   const timestamp = normalizeTimestamp(asOfTime);
-  const clock = clockTime || (await getSimulationClock()).currentTime;
+  const clock = clockTime || (await getTimeClock()).currentTime;
 
   // 1. Find all active batches that have expired
   const expiredBatches = await query<{
@@ -278,6 +275,8 @@ export async function deductOldestFirst(
     clockTime?: string;
     asOfTime?: string | Date;
     logEvents?: boolean;
+    skipLockExpired?: boolean;
+    unitMrp?: number;
   }
 ): Promise<DeductionResult> {
   if (unitsRequested <= 0) {
@@ -286,21 +285,26 @@ export async function deductOldestFirst(
 
   const asOf = options?.asOfTime || new Date();
   const timestamp = normalizeTimestamp(asOf);
-  const clock = options?.clockTime || (await getSimulationClock()).currentTime;
+  const clock = options?.clockTime || (await getTimeClock()).currentTime;
   const shouldLog = options?.logEvents ?? false;
 
-  // 1. Fetch product MRP directly from products table (guarantees non-zero pricing even if stock is 0)
-  const productRows = await query<{ unit_mrp: string }>(
-    `SELECT unit_mrp FROM products WHERE id = $1`,
-    [productId]
-  );
-  if (productRows.length === 0) {
-    throw new Error(`Product not found: ${productId}`);
+  // 1. Fetch product MRP directly from products table if not provided
+  let unitMrp = options?.unitMrp;
+  if (unitMrp === undefined) {
+    const productRows = await query<{ unit_mrp: string }>(
+      `SELECT unit_mrp FROM products WHERE id = $1`,
+      [productId]
+    );
+    if (productRows.length === 0) {
+      throw new Error(`Product not found: ${productId}`);
+    }
+    unitMrp = parseFloat(productRows[0].unit_mrp);
   }
-  const unitMrp = parseFloat(productRows[0].unit_mrp);
 
-  // 2. Lock any expired stock before touching inventory
-  await lockExpiredBatches(asOf, clock);
+  // 2. Lock any expired stock before touching inventory (unless locked at step level)
+  if (!options?.skipLockExpired) {
+    await lockExpiredBatches(asOf, clock);
+  }
 
   // 3. Fetch active batches ordered by earliest expiration timestamp
   const batches = await query<{

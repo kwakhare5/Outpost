@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { db, query } from "./index";
+import { resetTimeClock } from "../engine/clock";
 
 export interface DemandRow {
   store_id: string;
@@ -194,6 +195,26 @@ export async function seedDatabase(): Promise<{
   );
 
   // 6. Batch insert initial inventory batches for morning run
+  const batchesCount = await seedStartingBatches();
+
+  // 7. Seed Operational Clock at 08:00 AM (idempotent)
+  await resetTimeClock({ time: "08:00", date: "2026-10-25", totalHoursAdvanced: 0 });
+
+  return {
+    storesCount: stores.length,
+    routesCount: routes.length,
+    productsCount: products.length,
+    demandRowsCount: demandRows.length,
+    batchesCount,
+  };
+}
+
+/**
+ * Resets and seeds only the morning inventory batches (fast reset for test suites).
+ */
+export async function seedStartingBatches(): Promise<number> {
+  await query(`DELETE FROM batches`);
+
   const initialBatches = [
     // Andheri West: Amul Milk 38 units (stockout risk ~50 mins), Dahi 20 units expiring today
     { store_id: "andheri-west", product_id: "amul-taaza-500", batch_code: "BAT-AND-MILK-01", initial_qty: 50, current_qty: 38, expires_at: "2026-10-27T08:00:00Z" },
@@ -237,20 +258,7 @@ export async function seedDatabase(): Promise<{
      VALUES ${batchPlaceholders}`,
     batchValues
   );
-
-  // 7. Seed Operational Clock at 08:00 AM
-  await query(`
-    INSERT INTO time_clock (id, "current_time", day_date, total_hours_advanced)
-    VALUES (1, '08:00', '2026-10-25', 0)
-  `);
-
-  return {
-    storesCount: stores.length,
-    routesCount: routes.length,
-    productsCount: products.length,
-    demandRowsCount: demandRows.length,
-    batchesCount: initialBatches.length,
-  };
+  return initialBatches.length;
 }
 
 if (require.main === module || process.argv[1]?.endsWith("seed.ts")) {

@@ -44,7 +44,7 @@ export interface DoorstepCountOptions {
   asOfTime?: string | Date;
 }
 
-interface RawVanTransferRow {
+export interface RawVanTransferRow {
   id: string;
   from_store_id: string;
   to_store_id: string;
@@ -67,7 +67,7 @@ interface RawDetailedVanTransferRow extends RawVanTransferRow {
   unit_mrp: string;
 }
 
-function mapTransferRow(row: RawVanTransferRow): VanTransferRecord {
+export function mapTransferRow(row: RawVanTransferRow): VanTransferRecord {
   return {
     id: row.id,
     fromStoreId: row.from_store_id,
@@ -383,6 +383,23 @@ export async function markVanArrived(transferId: string): Promise<VanTransferRec
     return existing;
   }
   return mapTransferRow(rows[0]);
+}
+
+/**
+ * Automatically transitions in-transit vans to 'arrived' if their expected arrival timestamp
+ * has elapsed relative to the target time.
+ */
+export async function updateArrivedTransfers(asOfTime: string | Date): Promise<VanTransferRecord[]> {
+  const timestamp = normalizeDate(asOfTime).toISOString();
+  const rows = await query<RawVanTransferRow>(
+    `UPDATE van_transfers
+     SET status = 'arrived'
+     WHERE status = 'in_transit'
+       AND expected_arrival_at <= $1
+     RETURNING *`,
+    [timestamp]
+  );
+  return rows.map(mapTransferRow);
 }
 
 /**

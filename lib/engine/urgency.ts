@@ -1,5 +1,5 @@
 import { query } from "../db";
-import { getSimulationClock } from "./inventory";
+import { getTimeClock } from "./inventory";
 
 export interface UrgencyItem {
   storeId: string;
@@ -90,7 +90,7 @@ async function resolveClockOptions(options?: { hour?: number; asOfTime?: string 
   hour: number;
   asOfTime: string;
 }> {
-  const clock = await getSimulationClock();
+  const clock = await getTimeClock();
   const hour = options?.hour ?? parseClockHour(clock.currentTime);
   const asOfTime = options?.asOfTime
     ? (options.asOfTime instanceof Date ? options.asOfTime.toISOString() : options.asOfTime)

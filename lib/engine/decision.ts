@@ -1,5 +1,5 @@
 import { query } from "../db";
-import { getSimulationClock } from "./inventory";
+import { getTimeClock } from "./inventory";
 import { parseClockHour } from "./urgency";
 
 export interface DecisionOptions {
@@ -306,7 +306,7 @@ export async function getStoreSurplus(
   productId: string,
   options?: DecisionOptions
 ): Promise<StoreSurplusInfo | null> {
-  const clock = await getSimulationClock();
+  const clock = await getTimeClock();
   const currentHour = options?.hour ?? parseClockHour(clock.currentTime);
   const fromHour = options?.fromHour ?? (currentHour < 11 ? 11 : currentHour);
   const untilHour = options?.untilHour ?? 18;

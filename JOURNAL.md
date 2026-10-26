@@ -259,3 +259,17 @@ A chronological, append-only record of real product work, completed features, an
 - **Change / decision:** Added `batch_expires_at TIMESTAMPTZ` to `van_transfers` table schema and Supabase; updated `lib/engine/transit.ts` to carry over exact source batch expiration timestamps into received batches, block doorstep counting before van arrival ETA or `markVanArrived`, enforce sending store safety cushions before dispatch, and fail fast if transit routes are missing; removed dead code and replaced payload aliasing with strict numbers; updated `app/api/transfers/route.ts` to call `getAllTransfers()`; expanded `tests/transit.test.ts` to 11 comprehensive tests.
 - **Proof:** `.\verify.ps1` completed with exit code 0 in 85.94s; 49/49 tests passing across 7 test suites against live Supabase PostgreSQL with clean production build.
 - **Still broken / unproven:** Task 3.2 (Top-Bar Time Clock controller `/api/clock/advance`) pending implementation.
+
+
+#### Work card 34: Built Top-Bar Time Clock controller and simulation advancement engine (Task 3.2)
+- **Problem / tension:** Operators need a deterministic time clock to advance operations hour by hour, consume real customer orders using Oldest-First batches, advance in-flight vans, lock expiring stock, and recompute Hours Left across dark stores.
+- **Change / decision:** Built `lib/engine/clock.ts` (`advanceClock`, `getTimeClock`, `resetTimeClock`) and route handlers `app/api/clock/route.ts` and `app/api/clock/advance/route.ts`; added `updateArrivedTransfers` in `lib/engine/transit.ts` and `seedStartingBatches` in `lib/db/seed.ts`; optimized batch deductions with parallel processing and step-level expiry locks; wrote 8 comprehensive tests in `tests/clock.test.ts`.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 125.73s; all 57 tests passing across 8 test suites against live Supabase PostgreSQL with clean Next.js production build.
+- **Still broken / unproven:** Task 3.3 (Shadow Run Outcomes calculator `lib/engine/baseline.ts`) pending implementation.
+
+
+#### Work card 35: Fixed code review findings across Standards and Spec (Task 3.2)
+- **Problem / tension:** Code review identified mid-hour expiring food leakage risks, outcomes ledger logging under previous hour timestamps, forbidden `getSimulationClock` jargon, missing Flow 2 contract aliases, raw 24-hr time display format, and an unprompted `POST /api/clock` route.
+- **Change / decision:** Reordered advancement loop in `lib/engine/clock.ts` to lock all mid-hour expiring batches before customer demand deduction; updated ledger timestamps to log under the advancing hour; added 12-hour AM/PM display formatter (`formatClockTime`) and contract aliases (`new_time`, `fires`, `arrived_vans`); purged `getSimulationClock` in favor of canonical `getTimeClock`; removed unprompted `POST /api/clock` route; made `lib/db/seed.ts` idempotent via `resetTimeClock`; expanded `tests/clock.test.ts` to 9 tests with clean domain variable names.
+- **Proof:** `.\verify.ps1` completed with exit code 0 in 126.6s; all 58 tests passing across 8 test suites against live Supabase PostgreSQL with clean Next.js production build.
+- **Still broken / unproven:** Task 3.3 (Shadow Run Outcomes calculator `lib/engine/baseline.ts`) pending implementation.
