@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.env
+.env*.local
+data/external/
+.venv/
+dist/
+coverage/
+*.tsbuildinfo
+*.pyc
+__pycache__/
