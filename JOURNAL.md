@@ -149,3 +149,12 @@ A chronological, append-only record of real product work and verification eviden
 - **Still broken / unproven:** Phase 2 has not started; no app code exists. The copy change is uncommitted.
 - **Metric context:** Copy only; no new metrics.
 - **Engineering references:** `AGENTS.md` §2, §6, §12; `PRD.md` §3, §5; `DESIGN.md` chart section; `CLAIMS.md` C1.
+
+#### Work card 18: the app did not exist
+
+- **Problem / tension:** Phase 2 could not start without a buildable app skeleton, and the owner held Phase 2 until an explicit go.
+- **Change / decision:** Owner said go. Committed the demand-display copy change (`75255b7`), then scaffolded Next.js 16 + React 19 + TypeScript + Tailwind 4 + `pg` + Vitest 5 at the repo root. Review fixes applied: Node `engines` guard, the page shows the locked promise verbatim, `.scratch/` ignored.
+- **Proof:** `npm run build` exit 0 (Next 16.4.6, `/` and `/_not-found` prerendered); `npm test` exit 0, `1 passed` — SSR-renders the page and asserts `<h1`, `Outpost`, `cheapest safe fix`, `including the days it lost`. Independent review: 3 findings, 3 fixed, rerun green.
+- **Still broken / unproven:** No Postgres, no tables, no browser check of `/` yet (task 2.2 next). Scaffold commit not yet made at card time; no deploy.
+- **Metric context:** Scaffold only; no product metrics.
+- **Engineering references:** `package.json`, `app/`, `vitest.config.mts`, `tests/smoke.test.ts`; `TASKS.md` 2.1.

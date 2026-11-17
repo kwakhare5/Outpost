@@ -110,7 +110,7 @@ This is the only implementation plan. Work top to bottom, one task at a time.
 
 ## Phase 2 — Walking skeleton
 
-- [ ] **2.1 Scaffold the app.**
+- [x] **2.1 Scaffold the app.**
   - Next.js, TypeScript, Tailwind, Postgres client, test runner.
   - _Verification:_ `npm run build` exits 0; `npm test` exits 0 with at least one passing test.
 - [ ] **2.2 Connect Postgres.**
