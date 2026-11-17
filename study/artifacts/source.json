@@ -1,0 +1,15 @@
+{
+  "url": "https://huggingface.co/datasets/Dingdong-Inc/FreshRetailNet-50K/resolve/main/data/train.parquet",
+  "file": "study/data/train.parquet",
+  "size_bytes": 106436287,
+  "sha256": "6706832db892bbae4969c19d87e07975d2543d2ba7d7d4756360654785de5a3d",
+  "downloaded_at": "2026-11-17T11:10:06+00:00",
+  "dataset": "FreshRetailNet-50K",
+  "license": "CC BY 4.0",
+  "credit": "Dingdong and the 2025 paper",
+  "note": "Publishes no upstream checksum; the first SHA-256 becomes the reference.",
+  "rows": 4500000,
+  "series": 50000,
+  "stores": 898,
+  "cities": 18
+}

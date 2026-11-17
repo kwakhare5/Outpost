@@ -34,28 +34,44 @@ Four parts:
 Principles:
 
 - One app, one database. No queue, no worker, no separate service.
-- The study never runs in production. It produces two files: the model artifact and the proof results.
+- The study never runs in production. It produces a fixed set of files: the model artifact, the feature spec, the proof results, the split, and the parity fixture.
 - The app never trains on an upload. The artifact is fixed.
 - Everything on screen traces to a saved row.
 - No store, product, city, or category identity enters the model.
+- The data mode is detected, not chosen. The app never claims more than the data supports.
 - No passwords. A signed cookie scopes a visitor's uploads.
 
 ---
 
-## 2. Two modes and the reference day
+## 2. Three data modes, two contexts, and the reference day
 
-**Demo mode**
+The data mode is detected from the data. The delivery context is the demo or an upload. They are different things.
 
-- The primary FreshRetailNet dataset is seeded once.
+**The three data modes**
+
+| Mode | Detected when | Claims allowed |
+|---|---|---|
+| `full` | Dataset range ≥ 28 days; empty flag has ≥ 7 known days, one `yes`, and one `no` | Corrected demand, learned warning, assistant, three real scores, replay when stock, travel time, and price exist |
+| `rule` | Not `full`; stock and delivery time exist | Days-of-cover warning labelled `rule`; fixes with assumptions; demand accuracy only; no catch-rate proof; no replay |
+| `watch` | Sales only | Uncorrected demand estimate and accuracy only; no warning; no fixes; no proof |
+| `no_mode` | History < 28 days | Simple average; `not enough history`; no claims |
+
+The mode is returned by the dataset API, stored on `datasets.mode`, and shown on every screen. A visitor cannot choose a mode. The validation report says why the mode was chosen.
+
+**Demo context**
+
+- The primary FreshRetailNet dataset is seeded once. It is `full` mode.
 - Warnings and the full proof are precomputed by the offline study.
 - The demo is shared. Decisions are shared. A reset clears the decisions and returns to the saved start.
 - The decision day is the last observed day. Warnings target the next day, which exists in the dataset but is hidden from the model at decision time. The warning is scored against the real next day. The fix effect is simulated.
+- The demo uses one of the 3 unseen test cities. The day is a representative day with one clear win and one clear miss, chosen after the study. It is labelled `a representative day, not the proof`.
 
-**Upload mode**
+**Upload context**
 
 - A visitor uploads a dataset. It is validated, stored, and computed at load.
 - The decision day is the last observed day in the upload. Warnings target the next day.
-- The proof is computed on the upload's own held-out days: the last 30 days, or 20% of the history, whichever is smaller, with a minimum of 7 days. Below 28 days of history, only a simple average and a demand watch.
+- The mode is detected from the data. The upload gets the best mode its data supports, never a better one.
+- The proof is computed on the upload's own held-out days: the last 30 days, or 20% of the history, whichever is smaller, with a minimum of 7 days. `full` gets demand and warning scores; `rule` gets demand accuracy only; `watch` gets uncorrected demand accuracy only; `no_mode` gets no proof.
 - Uploads are private to the visitor. They never change the demo.
 
 **Active dataset**
@@ -67,12 +83,12 @@ The app resolves the active dataset from the URL: `/app` means the demo, `/app?d
 ## 3. The runtime flow
 
 1. Middleware reads the signed visitor cookie, or sets one if missing.
-2. The request resolves the active dataset and its quality report.
-3. **Today** reads saved warnings for the demo, or computed warnings for an upload.
+2. The request resolves the active dataset, its detected mode, and its quality report.
+3. **Today** reads saved warnings for the demo, or computed warnings for an upload. In `watch` or `no_mode`, it shows demand only or `not enough history`; there are no warnings.
 4. Opening a warning reads its evidence and its three fixes.
 5. **Ask** calls the assistant with the dataset, the warning, and the question.
 6. **Approve** or **reject** saves one decision in a transaction and applies the simulated outcome.
-7. **Proof** reads saved scores. The assistant check and the replay run on demand.
+7. **Proof** reads saved scores. The assistant check runs on demand. The replay runs on demand only in `full` mode with stock, travel time, and price.
 
 Every write is idempotent. Every read is scoped to the visitor or the demo.
 
@@ -90,7 +106,7 @@ Optional fields: hourly sales, current stock, price, delivery time, travel time,
 3. `POST /api/datasets` sends the files and the mapping as multipart.
 4. The server checks size caps, parses the files as a stream, validates every row, and inserts in batches.
 5. The dataset starts as `loading`. On success it becomes `ready`. On failure every row is deleted; there is no partial dataset.
-6. Features and warnings are computed before the response when the dataset is under the cap. The response returns the dataset id, the quality report, and the active claims.
+6. Features are computed before the response when the dataset is under the cap. `full` and `rule` also compute warnings; `watch` computes demand only; `no_mode` computes the simple average. The response returns the dataset id, the quality report, the detected mode, and the active claims.
 7. The browser goes to `/app?dataset=<id>`.
 
 **Caps (initial, tunable)**
@@ -110,6 +126,15 @@ Optional fields: hourly sales, current stock, price, delivery time, travel time,
 - Unknown zero days: quantity is zero and the empty flag is unknown.
 - Missing optional fields reduce the claims; they never fail the load.
 
+**Mode detection**
+
+Use the dataset's date range and label coverage. A shelf with fewer than 28 days gets `not enough history` and no warning, even in `full`.
+
+1. If the dataset has under 28 days, `no_mode`.
+2. Else if the empty flag has at least 7 known days, one `yes`, and one `no`, `full`.
+3. Else if stock and delivery time exist, `rule`.
+4. Else `watch`.
+
 **Dataset declaration**
 
 The unit scale, day boundary, and currency are stored with the dataset. Normalized sales are never shown as packs or rupees. Every screen shows the declaration.
@@ -122,7 +147,7 @@ Twelve tables.
 
 | Table | Key columns | Purpose |
 |---|---|---|
-| `datasets` | id, visitor_id, name, source, license, unit_label, day_boundary, currency, mode, is_demo, status | One row per dataset. `visitor_id` is null for the demo. |
+| `datasets` | id, visitor_id, name, source, license, unit_label, day_boundary, currency, mode (`full`, `rule`, `watch`, `no_mode`), is_demo, status | One row per dataset. `visitor_id` is null for the demo. The mode is detected, never chosen. |
 | `sales` | dataset_id, store_id, product_id, day, quantity, empty_flag, hourly | One row per shelf per day. `hourly` is optional JSON. |
 | `ops` | dataset_id, store_id, product_id, stock, price, lead_time_hours | Optional inputs for priced fixes. |
 | `routes` | dataset_id, from_store, to_store, hours | Optional travel times. |
@@ -134,6 +159,8 @@ Twelve tables.
 | `assistant_runs` | id, dataset_id, visitor_id, question, answer, facts, sources, tool_calls, latency_ms, cost, provider, model, validation, check_run_id | One row per answer. |
 | `proof_runs` | id, dataset_id, kind, status, progress, scores, losses, split, model_version, policy_version, started_at, finished_at | Primary proof, upload proof, assistant check, or replay. |
 | `model_versions` | id, kind, artifact, feature_spec, trained_cities, test_cities, metrics, created_at | The fixed artifact and its training record. |
+
+Rule-mode warnings set `model_version = rule-v1`; the API returns `kind: rule` from the dataset mode. No extra table is needed. `pending` and `failed` claims are not stored as active claims; they live in `CLAIMS.md`.
 
 **Indexes**
 
@@ -211,6 +238,15 @@ No store, product, city, or category identity is a feature.
 
 **Model card.** The Proof page shows the trained cities, the test cities, the feature list, and the explicit no-identity rule.
 
+**Rule mode warning (no empty-shelf labels)**
+
+- Expected daily demand: same weekday mean over the last 4 weeks, with a 7-day mean fallback when a weekday is missing.
+- Days of cover: `current stock / max(expected daily demand, 1)`.
+- Lead time: the declared delivery time in days.
+- Warning: cover is below `lead time + 1` safety day. Rank by cover ascending. The top 20 are the alert budget; bands are rank-based, same as Full mode.
+- Reasons: the cover in days and the delivery days. No model contributions, because there is no model.
+- Label: `rule`, not learned. No catch-rate claim. No replay.
+
 ---
 
 ## 9. Fix engine
@@ -255,17 +291,28 @@ If two approvals compete for the same stock, the database decides, not the UI.
 
 **Privacy.** Only computed facts go to the provider. Raw rows never leave the app.
 
-**The 40-question check.** 20 facts, 10 refusals, 10 never-seen wordings, instantiated from the loaded dataset's records. Expected facts are computed from records. Pass bars: 18 of 20, 10 of 10, 9 of 10. The check runs in small steps and stores progress. A miss fails the release. An offline run is marked not run.
+**The 40-question check.** 20 facts, 10 refusals, 10 never-seen wordings, instantiated from the loaded dataset's records. Expected facts are computed from records. Pass bars: 18 of 20, 10 of 10, 9 of 10. In `rule`, `watch`, and `no_mode`, questions about unsupported claims are expected refusals; the check reports which bars apply. The check runs in small steps and stores progress. A miss fails the release. An offline run is marked not run.
 
 **Limits.** Rate limit per visitor. Speed and cost are stored per answer. The slowest 1 in 20 and the median cost appear on Proof.
 
 ---
 
-## 11. Proof
+## 11. Proof and the claim register
 
-**Primary dataset.** The offline study produces a proof file with the three real scores, the replay, the losses, the split, and the model card. It is seeded into `proof_runs`. The app reads it. It is never recomputed in production.
+**Claim register.** `CLAIMS.md` is the source of truth. Every claim has one status: `pending`, `proven`, `failed`, `rule`, `watch`, or `simulated`. The app mirrors the register in one code constant. A screen may show a claim only when its status is `proven`, `rule`, `watch`, or `simulated`, and the label is visible. `pending` and `failed` claims are never shown as active.
 
-**Uploaded dataset.** The fixed artifact was never trained on it, so the proof is out-of-sample. The app computes demand and warning scores on the held-out window. The assistant check runs on demand. The replay runs only when stock, travel time, and prices exist.
+**Primary dataset.** The offline study produces a proof file with the demand score, the warning score, the replay, the losses, the split, and the model card. It is seeded into `proof_runs`. The app reads it. It is never recomputed in production. The assistant check is a separate proof run in the app, stored in `proof_runs`.
+
+**Uploaded dataset.** The fixed artifact was never trained on it, so the proof is out-of-sample. Full mode computes demand and warning scores on the held-out window. Rule mode computes demand accuracy only. Watch mode computes uncorrected demand accuracy only. No mode has no proof. The assistant check runs on demand. The replay runs only in Full mode when stock, travel time, and prices exist.
+
+**Mode restrictions**
+
+| Mode | Demand score | Warning score | Assistant check | Replay |
+|---|---|---|---|---|
+| `full` | Yes, corrected and uncorrected | Yes, learned vs rule | Yes | Only with stock, travel, price |
+| `rule` | Yes, uncorrected | No catch-rate claim; rule label | Yes, reduced | No |
+| `watch` | Yes, uncorrected | No | Yes, reduced | No |
+| `no_mode` | No | No | No | No |
 
 **The claims**
 
@@ -317,6 +364,7 @@ All write routes check the origin, the visitor cookie, and the rate limit. All S
 - Upload caps and ZIP-bomb protection.
 - "Remove my data" cascades in one transaction.
 - Only computed facts are sent to the model provider. No raw rows.
+- The mode is server-detected from the stored data. The client cannot request a higher mode.
 - No PII. The primary dataset uses anonymized IDs. The demo never invents names.
 - Secrets live in environment variables. No secret reaches the client.
 - The app never fetches external data at runtime. The dataset is downloaded or uploaded once.
@@ -328,13 +376,16 @@ All write routes check the origin, the visitor cookie, and the rate limit. All S
 | Failure | Behavior |
 |---|---|
 | Required column missing | Refuse with the exact column name. No dataset is created. |
-| Optional column missing | Load in limited mode; show what cannot be claimed. |
+| Optional column missing | Load in the best supported mode; show the mode and what cannot be claimed. |
 | Duplicate shelf-day rows | Refuse with the count. |
 | Negative quantity | Refuse with the count. |
 | Too large | Refuse with the cap. |
-| Under 28 days | No warnings; simple average and a demand watch. |
-| No empty-shelf history | Demand watch only; no empty-shelf claim. |
-| No stock, route, or price | Warnings only; no priced fixes. |
+| Under 28 days | `no_mode`: simple average; no claims. |
+| Shelf under 28 days in `full` | `not enough history`; no warning for that shelf. |
+| No usable empty-shelf history, stock + delivery present | `rule`: days-of-cover warning; no catch-rate claim; no replay. |
+| Sales only | `watch`: uncorrected demand only; no empty-shelf claim. |
+| No stock, route, or price in `full` | Warnings only; no priced fixes. |
+| Visitor requests a higher mode | Refuse; the mode is detected from the data. |
 | No provider key | Offline answers; the 40-question check is not run. |
 | Provider error | Offline answer for that question; the run is marked. |
 | Duplicate approval | Return the same record. No double move. |
@@ -361,12 +412,14 @@ No silent degradation. Every reduced claim is visible.
 
 ## 16. Testing
 
-- **Unit:** parser, validator, feature computation, demand correction, warning score, safe surplus, fix recommendation, idempotency, proof math, answer validator.
-- **Integration:** upload, load, warnings, decision, proof against a real test Postgres. No mocks of the database.
+- **Unit:** parser, validator, mode detection, feature computation, demand correction, warning score, rule warning, safe surplus, fix recommendation, idempotency, proof math, answer validator.
+- **Integration:** upload, load, mode detection, warnings, decision, proof against a real test Postgres. No mocks of the database.
+- **Modes:** four fixtures (`full`, `rule`, `watch`, `no_mode`) return the correct mode and only the allowed claims.
+- **Claim guard:** every visible claim has a status from `CLAIMS.md`; `pending` and `failed` never render as active.
 - **Parity:** Python and TypeScript features on a frozen sample.
 - **Golden:** the saved primary proof reproduces exactly from the saved data and artifact.
-- **Assistant:** the offline provider is a real code path; deterministic. The live provider check is a separate run.
-- **UI:** the local verification skill drives the golden path and the reduced modes.
+- **Assistant:** the offline provider is a real code path; deterministic. The live provider check is a separate run. Reduced modes expect refusals for unsupported claims.
+- **UI:** the local verification skill drives the golden path and every mode.
 - No test hardcodes a success number. The proof numbers come from the run.
 
 ---
@@ -383,17 +436,22 @@ No silent degradation. Every reduced claim is visible.
 
 ## 18. Build order
 
-1. Offline study: download, clean, split, train, score, export the artifact and proof.
-2. Schema, migrations, and the primary dataset seed.
-3. TypeScript features and the parity test.
-4. Demand, warnings, fix engine, Today and One shelf.
-5. Upload, validation, sessions, and Bring data.
-6. Proof engine, Proof page, and upload proof.
-7. Assistant tools, offline provider, and the 40-question check.
-8. The provider plug.
-9. Replay and the losses table.
-10. Landing, Method, and the design pass.
-11. The verification skill and deploy.
+1. Docs, including `AGENTS.md`, `STUDY.md`, `CLAIMS.md`, and `TASKS.md`.
+2. Offline study: download, clean, split, train, score, and apply the gate.
+3. Freeze the model artifact, feature spec, proof file, and parity fixture.
+4. Schema, migrations, and the primary dataset seed.
+5. TypeScript features and the parity test.
+6. Demand, warnings, fix engine, Today, and shelf detail.
+7. Decision transaction and simulated outcome.
+8. Proof page and the claim-register guard.
+9. Upload, validation, mode detection, sessions, and Bring data.
+10. Rule and Watch engines, No mode, and mode copy.
+11. Upload proof.
+12. Assistant tools, offline provider, and the 40-question check.
+13. The provider plug.
+14. Replay and the losses table.
+15. Landing, Method, and the design pass.
+16. The verification skill, deploy, and the final audit.
 
 ---
 
@@ -401,9 +459,9 @@ No silent degradation. Every reduced claim is visible.
 
 - The model provider.
 - The deploy host.
-- The second real public dataset.
 - The exact caps after the first real upload test.
-- The three test cities, chosen before the study is scored.
-- The demo's reference day.
+- The three test cities, chosen randomly with a recorded seed before scoring.
+- The demo's reference day, chosen after the study.
+- The UCI Online Retail II license check; fallback is M5 or Rossmann.
 - The risk band thresholds, set from the alert budget.
 - The final feature list, decided by the study.

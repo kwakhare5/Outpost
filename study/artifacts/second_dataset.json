@@ -1,0 +1,29 @@
+{
+  "dataset": "UCI Online Retail II",
+  "url": "https://archive.ics.uci.edu/dataset/502/online+retail+ii",
+  "citation": "Chen, D. (2012). Online Retail II [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5CG6D.",
+  "license": "CC BY 4.0",
+  "license_checked": "2026-11-17",
+  "instances": 1067371,
+  "file": "online_retail_II.xlsx",
+  "file_size_bytes": 45622278,
+  "columns": [
+    "InvoiceNo",
+    "StockCode",
+    "Description",
+    "Quantity",
+    "InvoiceDate",
+    "UnitPrice",
+    "CustomerID",
+    "Country"
+  ],
+  "cancellation_rule": "Invoices starting with C are cancellations; cancellation and negative-quantity rows are excluded before aggregation.",
+  "aggregation": "Summed to product-day with one constant store and empty = unknown; the no-negative-quantity check applies to the aggregated product-day values.",
+  "decision": "pass",
+  "fallback": "M5 or Rossmann",
+  "notes": [
+    "No store column; one constant store is assumed.",
+    "No stock and no empty-shelf flag; empty = unknown.",
+    "Used for Demand watch mode and the data contract only; never a headline claim."
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "cities": [
+    7,
+    9,
+    16
+  ],
+  "scored_days": {
+    "start": "2024-05-27",
+    "end": "2024-06-24",
+    "count": 29
+  },
+  "scored_rows": 149901,
+  "rows_per_city": {
+    "7": 12876,
+    "9": 5713,
+    "16": 131312
+  },
+  "top_budget": 20,
+  "simple_rule": {
+    "catch_rate": 0.00687,
+    "false_alarm_rate": 0.236207,
+    "alerts": 580,
+    "hits": 443,
+    "empty_shelves": 64480
+  },
+  "lazy_demand": {
+    "avg_miss": 0.439178,
+    "scored_rows": 88002
+  },
+  "definitions": {
+    "catch_rate": "share of shelves empty the next day that were in the top-20 alert set",
+    "false_alarm_rate": "share of top-20 alerts whose shelf was not empty the next day",
+    "rule": "alert when the shelf was empty on the same weekday one or two weeks before the target day; rank by stockout buckets in the last 14 days",
+    "lazy_guess": "observed sales on the same weekday one week earlier"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "claims": {
+    "1_demand_accuracy": {
+      "pass": false,
+      "value": 0.430184,
+      "bar": 0.39526,
+      "lazy_miss": 0.439178
+    },
+    "2_warning_quality": {
+      "pass": false,
+      "catch_rate": 0.006792803970223325,
+      "catch_bar": 0.007557,
+      "false_alarm_rate": 0.24482758620689654,
+      "false_alarm_bar": 0.259828,
+      "rule_catch_rate": 0.00687,
+      "rule_false_alarm_rate": 0.236207
+    },
+    "3_correction_materiality": {
+      "pass": true,
+      "share": 1.0,
+      "bar": 0.05,
+      "changed_days": 29,
+      "scored_days": 29
+    }
+  },
+  "decision": "stop_and_reframe_with_owner"
+}

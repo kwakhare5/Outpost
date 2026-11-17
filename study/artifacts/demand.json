@@ -1,0 +1,17 @@
+{
+  "cities": [
+    7,
+    9,
+    16
+  ],
+  "scored_rows": 88002,
+  "days": 30,
+  "avg_miss_corrected": 0.430184,
+  "avg_miss_lazy": 0.439178,
+  "relative_gain": 0.020479,
+  "definitions": {
+    "scored_rows": "non-empty shelf-days in the 3 test cities' holdout",
+    "avg_miss_corrected": "mean |observed sales - past-only weekday level times trend|",
+    "avg_miss_lazy": "mean |observed sales - same weekday last week|"
+  }
+}

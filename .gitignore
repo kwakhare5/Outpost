@@ -3,6 +3,7 @@ node_modules/
 .env
 .env*.local
 data/external/
+study/data/
 .venv/
 dist/
 coverage/

@@ -1,0 +1,39 @@
+{
+  "version": "0.1.0",
+  "keys": [
+    "store_id",
+    "product_id",
+    "city_id",
+    "dt"
+  ],
+  "features": {
+    "sales_mean_7": "mean sale_amount over lags 1-7",
+    "sales_mean_14": "mean sale_amount over lags 1-14",
+    "sales_mean_28": "mean sale_amount over lags 1-28",
+    "weekday_mean_4w": "mean non-empty sale_amount on the same weekday over lags 7, 14, 21, 28; fallback to the 28-day non-empty mean, then 0 when the shelf has no non-empty day in 28 days",
+    "trend_7v7": "mean non-empty sales lags 1-7 divided by lags 8-14, clipped to [0.5, 2.0], missing becomes 1.0",
+    "empty_days_7": "count of empty_flag yes over lags 1-7",
+    "empty_days_14": "count of empty_flag yes over lags 1-14",
+    "empty_days_28": "count of empty_flag yes over lags 1-28",
+    "empty_rate_14": "empty_days_14 divided by 14",
+    "days_since_empty": "smallest lag in 1-28 whose empty_flag is yes; 28 when none",
+    "corrected_mean_7": "mean corrected demand over lags 1-7",
+    "corrected_mean_14": "mean corrected demand over lags 1-14",
+    "corrected_mean_28": "mean corrected demand over lags 1-28",
+    "fill_share_7": "mean over lags 1-7 of 1 - stock_hour6_22_cnt / 16",
+    "holiday_flag": "decision-day holiday flag",
+    "activity_flag": "decision-day activity flag",
+    "discount": "decision-day discount rate, 1.0 means no discount",
+    "precpt": "decision-day total precipitation",
+    "avg_temperature": "decision-day average temperature",
+    "avg_humidity": "decision-day average humidity",
+    "avg_wind_level": "decision-day average wind force"
+  },
+  "open_buckets": 16,
+  "since_cap": 28,
+  "target": "empty_flag == yes on the next day",
+  "target_column": "target_empty_next",
+  "target_unknown": "target is null when the next day's flag is unknown",
+  "correction": "on empty days the estimate is the largest of observed sales, weekday level times trend, and observed / max(fill share, 0.2)",
+  "demand_estimate": "past-only same-weekday non-empty mean over 4 weeks (fallback 28-day non-empty mean, then 0) times trend clipped to [0.5, 2.0]"
+}
