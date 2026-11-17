@@ -1,0 +1,19 @@
+{
+  "winner": "a",
+  "candidates": {
+    "a": {
+      "avg_miss_train": 0.421171,
+      "rows": 1360161
+    },
+    "b": {
+      "avg_miss_train": 0.425734,
+      "rows": 1360161
+    },
+    "c": {
+      "avg_miss_train": 0.422321,
+      "rows": 1360161
+    }
+  },
+  "chosen_on": "15 training cities, pre-holdout non-empty days",
+  "note": "Frozen before the Round 2 test cities are scored."
+}

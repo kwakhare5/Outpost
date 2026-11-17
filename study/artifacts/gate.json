@@ -2,18 +2,18 @@
   "claims": {
     "1_demand_accuracy": {
       "pass": false,
-      "value": 0.430184,
-      "bar": 0.39526,
-      "lazy_miss": 0.439178
+      "value": 0.423084,
+      "bar": 0.384852,
+      "lazy_miss": 0.427613
     },
     "2_warning_quality": {
-      "pass": false,
-      "catch_rate": 0.006792803970223325,
-      "catch_bar": 0.007557,
-      "false_alarm_rate": 0.24482758620689654,
-      "false_alarm_bar": 0.259828,
-      "rule_catch_rate": 0.00687,
-      "rule_false_alarm_rate": 0.236207
+      "pass": true,
+      "catch_rate": 0.012252122687169843,
+      "catch_bar": 0.011013,
+      "false_alarm_rate": 0.23620689655172414,
+      "false_alarm_bar": 0.413448,
+      "rule_catch_rate": 0.010012,
+      "rule_false_alarm_rate": 0.375862
     },
     "3_correction_materiality": {
       "pass": true,
@@ -23,5 +23,5 @@
       "scored_days": 29
     }
   },
-  "decision": "stop_and_reframe_with_owner"
+  "decision": "learned_warning_simple_demand"
 }

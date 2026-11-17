@@ -1,12 +1,12 @@
 {
   "model_version": "0.1.0",
   "split": {
-    "seed": 726821,
+    "seed": 242921,
     "train_cities": 15,
     "test_cities": [
-      7,
-      9,
-      16
+      1,
+      13,
+      17
     ],
     "holdout_start": "2024-05-27",
     "last_day": "2024-06-25"
@@ -14,18 +14,18 @@
   "claims": {
     "1_demand_accuracy": {
       "pass": false,
-      "value": 0.430184,
-      "bar": 0.39526,
-      "lazy_miss": 0.439178
+      "value": 0.423084,
+      "bar": 0.384852,
+      "lazy_miss": 0.427613
     },
     "2_warning_quality": {
-      "pass": false,
-      "catch_rate": 0.006792803970223325,
-      "catch_bar": 0.007557,
-      "false_alarm_rate": 0.24482758620689654,
-      "false_alarm_bar": 0.259828,
-      "rule_catch_rate": 0.00687,
-      "rule_false_alarm_rate": 0.236207
+      "pass": true,
+      "catch_rate": 0.012252122687169843,
+      "catch_bar": 0.011013,
+      "false_alarm_rate": 0.23620689655172414,
+      "false_alarm_bar": 0.413448,
+      "rule_catch_rate": 0.010012,
+      "rule_false_alarm_rate": 0.375862
     },
     "3_correction_materiality": {
       "pass": true,
@@ -35,84 +35,84 @@
       "scored_days": 29
     }
   },
-  "decision": "stop_and_reframe_with_owner",
+  "decision": "learned_warning_simple_demand",
   "baselines": {
     "simple_rule": {
-      "catch_rate": 0.00687,
-      "false_alarm_rate": 0.236207,
+      "catch_rate": 0.010012,
+      "false_alarm_rate": 0.375862,
       "alerts": 580,
-      "hits": 443,
-      "empty_shelves": 64480
+      "hits": 362,
+      "empty_shelves": 36157
     },
     "lazy_demand": {
-      "avg_miss": 0.439178,
-      "scored_rows": 88002
+      "avg_miss": 0.427613,
+      "scored_rows": 54036
     }
   },
   "sensitivity": {
     "top20": {
       "rule": {
-        "catch_rate": 0.006870347394540943,
+        "catch_rate": 0.010011892579583483,
+        "false_alarm_rate": 0.3758620689655172,
+        "alerts": 580,
+        "hits": 362,
+        "empty_shelves": 36157
+      },
+      "learned": {
+        "catch_rate": 0.012252122687169843,
         "false_alarm_rate": 0.23620689655172414,
         "alerts": 580,
         "hits": 443,
-        "empty_shelves": 64480
-      },
-      "learned": {
-        "catch_rate": 0.006792803970223325,
-        "false_alarm_rate": 0.24482758620689654,
-        "alerts": 580,
-        "hits": 438,
-        "empty_shelves": 64480
+        "empty_shelves": 36157
       }
     },
     "top50": {
       "rule": {
-        "catch_rate": 0.016160049627791565,
-        "false_alarm_rate": 0.2813793103448276,
+        "catch_rate": 0.02431064524158531,
+        "false_alarm_rate": 0.39379310344827584,
         "alerts": 1450,
-        "hits": 1042,
-        "empty_shelves": 64480
+        "hits": 879,
+        "empty_shelves": 36157
       },
       "learned": {
-        "catch_rate": 0.016671836228287842,
-        "false_alarm_rate": 0.25862068965517243,
+        "catch_rate": 0.028459219514893382,
+        "false_alarm_rate": 0.2903448275862069,
         "alerts": 1450,
-        "hits": 1075,
-        "empty_shelves": 64480
+        "hits": 1029,
+        "empty_shelves": 36157
       }
     },
     "top100": {
       "rule": {
-        "catch_rate": 0.031187965260545906,
-        "false_alarm_rate": 0.306551724137931,
+        "catch_rate": 0.047321403877534085,
+        "false_alarm_rate": 0.41,
         "alerts": 2900,
-        "hits": 2011,
-        "empty_shelves": 64480
+        "hits": 1711,
+        "empty_shelves": 36157
       },
       "learned": {
-        "catch_rate": 0.03247518610421836,
-        "false_alarm_rate": 0.27793103448275863,
+        "catch_rate": 0.054125065685759324,
+        "false_alarm_rate": 0.32517241379310347,
         "alerts": 2900,
-        "hits": 2094,
-        "empty_shelves": 64480
+        "hits": 1957,
+        "empty_shelves": 36157
       }
     }
   },
   "two_plus_empty_buckets": {
     "rule": {
-      "catch_rate": 0.0074865396119989745,
-      "false_alarm_rate": 0.24482758620689654,
+      "catch_rate": 0.010704590325765054,
+      "false_alarm_rate": 0.4017241379310345,
       "alerts": 580,
-      "hits": 438,
-      "empty_shelves": 58505
+      "hits": 347,
+      "empty_shelves": 32416
     },
     "learned": {
-      "catch_rate": 0.006922485257670284,
-      "false_alarm_rate": 0.3017241379310345,
+      "catch_rate": 0.011969397828232971,
+      "false_alarm_rate": 0.3310344827586207,
       "alerts": 580,
-      "hits": 405,
-      "empty_shelves": 58505
+      "hits": 388,
+      "empty_shelves": 32416
     }
   },
   "replay": null,

@@ -131,3 +131,12 @@ A chronological, append-only record of real product work and verification eviden
 - **Still broken / unproven:** No app exists. The process audit from the earlier handoff still has not run. Nothing is committed.
 - **Metric context:** Gate evidence in `study/artifacts/gate.json`; the bars did not move after scoring.
 - **Engineering references:** `study/gate.py`, `study/export.py`, `study/export_parity.py`; `study/artifacts/gate.json`, `proof.json`, `checksums.json`, `parity_fixture.json`; `CLAIMS.md` C1–C4.
+
+#### Work card 16: Round 2 — warning passes, demand fails
+
+- **Problem / tension:** Round 1 failed both real claims. Round 2 re-registered with fresh cities (seed 242921, cities 1/13/17), two same-weekday-empty features, and a training-only demand-estimator choice.
+- **Change / decision:** Added `empty_same_weekday_1/2` (lags 6 and 13); `choose_demand.py` picked candidate (a) on the 15 training cities (0.421171 vs 0.422321 and 0.425734); reran baselines, warning, demand, gate, exports.
+- **Proof:** gate exit 0: demand FAIL (0.423084 vs bar 0.384852, +1.06%); warning PASS (catch 1.2252% = 443 of 36,157 vs rule 1.0012% = 362; +22.4%; bar 1.1013%; false alarms 23.62% vs bar 41.34%); materiality PASS (29/29). Decision `learned_warning_simple_demand`. export.py: `SCHEMA: PASS`, `CHECKSUMS: PASS`. Parity fixture: 100 rows, 23 features.
+- **Still broken / unproven:** The demand correction still loses to the lazy guess; the app ships the simple demand and the failed claim. No app code yet. Round 2 is not committed.
+- **Metric context:** All numbers from the runs above; the bars did not move between rounds.
+- **Engineering references:** `study/choose_demand.py`, `study/src/features.py`; `study/artifacts/gate.json`, `warning.json`, `demand.json`, `demand_choice.json`; `TASKS.md` Phase 1R.

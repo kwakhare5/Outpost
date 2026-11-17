@@ -21,10 +21,10 @@ This is the source of truth for every claim Outpost makes. A claim without a sta
 
 | ID | Claim | Data needed | Metric | Bar | Status | Evidence | Screen |
 |---|---|---|---|---|---|---|---|
-| C1 | Corrected demand beats the lazy guess | Full-mode history, non-empty days | Average absolute miss | ≥ 10% relative better than same weekday last week | `failed` | `study/artifacts/gate.json`: 0.430184 vs lazy 0.439178 (+2.05%) | Proof, shelf detail, Method |
-| C2 | Learned warning catches more empty shelves than the simple rule | Full-mode history, 3 unseen cities | Catch rate at top 20 | ≥ 10% relative better | `failed` | `study/artifacts/gate.json`: 0.6793% vs rule 0.6870%; bar 0.7557% | Proof, Method |
-| C3 | Learned warning does not add too many false alarms | Full-mode history, 3 unseen cities | False-alarm rate at top 20 | ≤ 10% relative worse than the rule | `proven` | `study/artifacts/gate.json`: 24.48% vs rule 23.62%; bar 25.98% | Proof, Method |
-| C4 | The correction changes the warning enough to matter | Full-mode history, scored days | Share of days the top-20 set changes | ≥ 5% of scored days | `proven` | `study/artifacts/gate.json`: 29 of 29 days (100%) | Proof, Method |
+| C1 | Corrected demand beats the lazy guess | Full-mode history, non-empty days | Average absolute miss | ≥ 10% relative better than same weekday last week | `failed` | Round 2 `study/artifacts/gate.json`: 0.423084 vs lazy 0.427613 (+1.06%). Round 1 failed at +2.05% | Proof, shelf detail, Method |
+| C2 | Learned warning catches more empty shelves than the simple rule | Full-mode history, 3 unseen cities | Catch rate at top 20 | ≥ 10% relative better | `proven` | Round 2 `study/artifacts/gate.json`: 1.2252% vs rule 1.0012% (+22.4%); bar 1.1013% | Proof, Method |
+| C3 | Learned warning does not add too many false alarms | Full-mode history, 3 unseen cities | False-alarm rate at top 20 | ≤ 10% relative worse than the rule | `proven` | Round 2 `study/artifacts/gate.json`: 23.62% vs rule 37.59%; bar 41.34% | Proof, Method |
+| C4 | The correction changes the warning enough to matter | Full-mode history, scored days | Share of days the top-20 set changes | ≥ 5% of scored days | `proven` | Round 2 `study/artifacts/gate.json`: 29 of 29 days (100%) | Proof, Method |
 | C5 | The assistant answers fact questions correctly | Demo records | Correct answers | ≥ 18 of 20 | `pending` | Assistant check run | Proof |
 | C6 | The assistant refuses what it cannot prove | Demo records | Correct refusals | 10 of 10 | `pending` | Assistant check run | Proof |
 | C7 | The assistant handles unseen wordings | Demo records | Correct answers | ≥ 9 of 10 | `pending` | Assistant check run | Proof |
@@ -74,8 +74,8 @@ A failed claim is written here with its evidence, then shown on Proof as failed.
 
 | ID | Claim | Status | Evidence | What we say |
 |---|---|---|---|---|
-| C1 | Corrected demand beats the lazy guess | `failed` | `gate.json`: average miss 0.430184 vs lazy 0.439178 (+2.05%); bar +10% | "The correction beat last week's same weekday by 2.0%, not 10%. This claim failed." |
-| C2 | Learned warning catches more empty shelves than the simple rule | `failed` | `gate.json`: catch 0.6793% vs rule 0.6870%; bar 0.7557% | "The learned warning caught slightly fewer empty shelves than the simple rule at 20 alerts a day. The simple rule is the fallback." |
+| C1 | Corrected demand beats the lazy guess | `failed` | Round 1 +2.05% and Round 2 +1.06% vs lazy; bar +10%; `round1/gate.json`, `gate.json` | "The correction beat last week's same weekday by about 1–2%, not 10%. This claim failed in both rounds." |
+| C2 | Learned warning catches more empty shelves than the simple rule | `failed` (Round 1 only) | Round 1 `round1/gate.json`: catch 0.6793% vs rule 0.6870%; bar 0.7557% | "In Round 1 the learned warning caught slightly fewer empty shelves than the simple rule. Round 2 fixed it; see the register." |
 
 ---
 
@@ -86,3 +86,5 @@ A failed claim is written here with its evidence, then shown on Proof as failed.
 | 2026-11-17 | All | — | Initial register | Docs created; performance claims are pending the study |
 | 2026-11-17 | C1, C2 | `pending` | `failed` | `study/artifacts/gate.json`; study gate run, decision `stop_and_reframe_with_owner` |
 | 2026-11-17 | C3, C4 | `pending` | `proven` | `study/artifacts/gate.json`; false alarms within bar; materiality 29 of 29 days |
+| 2026-11-17 | C1–C4 | `failed`/`proven` | `pending` | Round 2 re-registered on a fresh split (new seed, new cities); bars unchanged. Round 1 evidence kept under `study/artifacts/round1/` |
+| 2026-11-17 | C1–C4 | `pending` | `failed`/`proven`/`proven`/`proven` | Round 2 gate: warning passes (+22.4% catch, fewer false alarms); demand fails (+1.06%); decision `learned_warning_simple_demand` |

@@ -26,6 +26,8 @@ FEATURE_COLUMNS = [
     "empty_days_28",
     "empty_rate_14",
     "days_since_empty",
+    "empty_same_weekday_1",
+    "empty_same_weekday_2",
     "corrected_mean_7",
     "corrected_mean_14",
     "corrected_mean_28",
@@ -66,6 +68,8 @@ FEATURE_SPEC = {
     "empty_days_28": "count of empty_flag yes over lags 1-28",
     "empty_rate_14": "empty_days_14 divided by 14",
     "days_since_empty": "smallest lag in 1-28 whose empty_flag is yes; 28 when none",
+    "empty_same_weekday_1": "1 when empty_flag was yes on the same weekday one week before the target day, else 0",
+    "empty_same_weekday_2": "1 when empty_flag was yes on the same weekday two weeks before the target day, else 0",
     "corrected_mean_7": "mean corrected demand over lags 1-7",
     "corrected_mean_14": "mean corrected demand over lags 1-14",
     "corrected_mean_28": "mean corrected demand over lags 1-28",
@@ -80,7 +84,9 @@ FEATURE_SPEC = {
 }
 
 
-def build_features(frame: pd.DataFrame) -> pd.DataFrame:
+def build_features(frame: pd.DataFrame, demand_variant: str = "a") -> pd.DataFrame:
+    if demand_variant not in ("a", "b", "c"):
+        raise ValueError(f"unknown demand variant {demand_variant}")
     frame = frame[RAW_COLUMNS].sort_values(KEYS, kind="stable").reset_index(drop=True)
     shelf_keys = [frame["store_id"], frame["product_id"]]
 
@@ -114,10 +120,22 @@ def build_features(frame: pd.DataFrame) -> pd.DataFrame:
     ma7_prev = lagged_mean(observed_nonempty, list(range(8, 15)))
     trend = (ma7 / ma7_prev.replace(0, np.nan)).clip(0.5, 2.0).fillna(1.0)
 
-    weekday_mean = lagged_mean(observed_nonempty, [7, 14, 21, 28])
+    weekday_values = pd.concat(
+        [shifted(observed_nonempty, k) for k in (7, 14, 21, 28)], axis=1
+    )
     fallback = lagged_mean(observed_nonempty, month)
-    weekday_filled = weekday_mean.fillna(fallback).fillna(0.0)
-    level = weekday_filled
+    plain_mean = weekday_values.mean(axis=1, skipna=True)
+    weekday_filled = plain_mean.fillna(fallback).fillna(0.0)
+    if demand_variant == "b":
+        weights = pd.Series([0.4, 0.3, 0.2, 0.1], index=weekday_values.columns)
+        weighted = weekday_values.fillna(0.0) * weights
+        weight_sum = weekday_values.notna().astype(float) * weights
+        level_raw = weighted.sum(axis=1) / weight_sum.sum(axis=1).replace(0, np.nan)
+    elif demand_variant == "c":
+        level_raw = weekday_values.median(axis=1, skipna=True)
+    else:
+        level_raw = plain_mean
+    level = level_raw.fillna(fallback).fillna(0.0)
     estimate = level * trend
     fill_share = 1.0 - frame["stock_hour6_22_cnt"] / OPEN_BUCKETS
     hourly_estimate = sales / fill_share.clip(lower=0.2)
@@ -147,6 +165,8 @@ def build_features(frame: pd.DataFrame) -> pd.DataFrame:
     out["empty_days_28"] = lagged_sum(empty_yes, month)
     out["empty_rate_14"] = empty_days_14 / 14.0
     out["days_since_empty"] = since
+    out["empty_same_weekday_1"] = shifted(empty_yes, 6).fillna(0.0)
+    out["empty_same_weekday_2"] = shifted(empty_yes, 13).fillna(0.0)
     out["corrected_mean_7"] = lagged_mean(corrected, week)
     out["corrected_mean_14"] = lagged_mean(corrected, fortnight)
     out["corrected_mean_28"] = lagged_mean(corrected, month)

@@ -27,8 +27,11 @@ def main():
         .sort_values(KEYS, kind="stable")
         .reset_index(drop=True)
     )
+    choice = json.loads(
+        (ROOT / "study" / "artifacts" / "demand_choice.json").read_text(encoding="utf-8")
+    )
     raw = add_baseline_columns(raw)
-    features = build_features(raw)
+    features = build_features(raw, demand_variant=choice["winner"])
     assert (features["store_id"].to_numpy() == raw["store_id"].to_numpy()).all()
     assert (features["dt"].to_numpy() == raw["dt"].to_numpy()).all()
     features["sale_amount"] = raw["sale_amount"].to_numpy()
@@ -49,6 +52,7 @@ def main():
 
     record = {
         "cities": split["test_cities"],
+        "estimator": choice["winner"],
         "scored_rows": int(len(scored)),
         "days": int(scored["dt"].nunique()),
         "avg_miss_corrected": round(miss_corrected, 6),

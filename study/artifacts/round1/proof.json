@@ -1,0 +1,127 @@
+{
+  "model_version": "0.1.0",
+  "split": {
+    "seed": 726821,
+    "train_cities": 15,
+    "test_cities": [
+      7,
+      9,
+      16
+    ],
+    "holdout_start": "2024-05-27",
+    "last_day": "2024-06-25"
+  },
+  "claims": {
+    "1_demand_accuracy": {
+      "pass": false,
+      "value": 0.430184,
+      "bar": 0.39526,
+      "lazy_miss": 0.439178
+    },
+    "2_warning_quality": {
+      "pass": false,
+      "catch_rate": 0.006792803970223325,
+      "catch_bar": 0.007557,
+      "false_alarm_rate": 0.24482758620689654,
+      "false_alarm_bar": 0.259828,
+      "rule_catch_rate": 0.00687,
+      "rule_false_alarm_rate": 0.236207
+    },
+    "3_correction_materiality": {
+      "pass": true,
+      "share": 1.0,
+      "bar": 0.05,
+      "changed_days": 29,
+      "scored_days": 29
+    }
+  },
+  "decision": "stop_and_reframe_with_owner",
+  "baselines": {
+    "simple_rule": {
+      "catch_rate": 0.00687,
+      "false_alarm_rate": 0.236207,
+      "alerts": 580,
+      "hits": 443,
+      "empty_shelves": 64480
+    },
+    "lazy_demand": {
+      "avg_miss": 0.439178,
+      "scored_rows": 88002
+    }
+  },
+  "sensitivity": {
+    "top20": {
+      "rule": {
+        "catch_rate": 0.006870347394540943,
+        "false_alarm_rate": 0.23620689655172414,
+        "alerts": 580,
+        "hits": 443,
+        "empty_shelves": 64480
+      },
+      "learned": {
+        "catch_rate": 0.006792803970223325,
+        "false_alarm_rate": 0.24482758620689654,
+        "alerts": 580,
+        "hits": 438,
+        "empty_shelves": 64480
+      }
+    },
+    "top50": {
+      "rule": {
+        "catch_rate": 0.016160049627791565,
+        "false_alarm_rate": 0.2813793103448276,
+        "alerts": 1450,
+        "hits": 1042,
+        "empty_shelves": 64480
+      },
+      "learned": {
+        "catch_rate": 0.016671836228287842,
+        "false_alarm_rate": 0.25862068965517243,
+        "alerts": 1450,
+        "hits": 1075,
+        "empty_shelves": 64480
+      }
+    },
+    "top100": {
+      "rule": {
+        "catch_rate": 0.031187965260545906,
+        "false_alarm_rate": 0.306551724137931,
+        "alerts": 2900,
+        "hits": 2011,
+        "empty_shelves": 64480
+      },
+      "learned": {
+        "catch_rate": 0.03247518610421836,
+        "false_alarm_rate": 0.27793103448275863,
+        "alerts": 2900,
+        "hits": 2094,
+        "empty_shelves": 64480
+      }
+    }
+  },
+  "two_plus_empty_buckets": {
+    "rule": {
+      "catch_rate": 0.0074865396119989745,
+      "false_alarm_rate": 0.24482758620689654,
+      "alerts": 580,
+      "hits": 438,
+      "empty_shelves": 58505
+    },
+    "learned": {
+      "catch_rate": 0.006922485257670284,
+      "false_alarm_rate": 0.3017241379310345,
+      "alerts": 580,
+      "hits": 405,
+      "empty_shelves": 58505
+    }
+  },
+  "replay": null,
+  "replay_note": "The simulated replay runs in Phase 8; this proof carries the three real scores only.",
+  "model_card": {
+    "intended_use": "rank shelves by the chance of an empty hour in the next day for a grocery planner in full mode",
+    "not_intended_for": "true demand recovery, causal claims, real-money savings, long-horizon forecasts, automated ordering",
+    "training_data": "15 of 18 FreshRetailNet-50K cities; last 30 days of every city held out; 3 unseen test cities",
+    "features": "identity-free, past-only behavior only",
+    "limitations": "observational data; the correction is an estimate; the replay is simulated; one business"
+  }
+}

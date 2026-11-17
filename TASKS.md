@@ -86,6 +86,28 @@ This is the only implementation plan. Work top to bottom, one task at a time.
 
 ---
 
+## Phase 1R — Round 2 rescore
+
+**Gate:** same bars as Phase 1. Re-registered before scoring; no app code before the Round 2 gate passes.
+
+- [x] **1R.1 Re-register Round 2.**
+  - Add the same-weekday-empty features and the demand-estimator selection rule to `STUDY.md`; file Round 1 artifacts under `round1/`; redraw the test cities with a new recorded seed. Bars unchanged.
+  - _Verification:_ `STUDY.md` sections 4, 5, 8, and 10a describe Round 2; `study/artifacts/round1/` holds the Round 1 evidence; a new `split.json` exists with a new seed and three new cities.
+- [x] **1R.2 Add the two same-weekday-empty features.**
+  - `empty_same_weekday_1` (lag 6) and `empty_same_weekday_2` (lag 13), past-only.
+  - _Verification:_ `python -m pytest study/tests -q` exits 0; the leakage test covers the new columns.
+- [x] **1R.3 Freeze the demand estimator.**
+  - Score candidates (a), (b), (c) on the 15 training cities' pre-holdout non-empty days; freeze the best.
+  - _Verification:_ `python study/choose_demand.py` exits 0; writes `study/artifacts/demand_choice.json` naming the winner and each candidate's training miss.
+- [x] **1R.4 Rerun the study.**
+  - `baselines.py`, `train_warning.py`, `train_demand.py`, `gate.py`, `export.py`, `export_parity.py` in order.
+  - _Verification:_ every command exits 0; `gate.json` prints PASS or FAIL per claim; checksums pass.
+- [x] **1R.5 Record the Round 2 result.**
+  - Update `STUDY.md`, `CLAIMS.md`, and `JOURNAL.md` with the measured numbers and statuses.
+  - _Verification:_ every claim has a status from evidence, not memory.
+
+---
+
 ## Phase 2 — Walking skeleton
 
 - [ ] **2.1 Scaffold the app.**

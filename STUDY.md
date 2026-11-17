@@ -68,6 +68,7 @@ Download once. The publisher provides no checksum. Compute SHA-256 once, record 
 - The model may read a test city's earlier days as input, like a new company's own history. It never trains on them.
 - Do not use the dataset's own train/eval split.
 - Do not redraw the test cities after seeing results.
+- Round 2 redraws the three test cities with a new recorded seed before scoring; cities 7, 9, and 16 from Round 1 return to the pool. The bars do not change.
 
 The demo uses one of the 3 test cities. The demo day is chosen after the study.
 
@@ -85,6 +86,8 @@ Only data up to and including the decision day. Nothing after it. No store, prod
 | Empty-shelf days | 7, 14, 28 days |
 | Days since the last empty shelf | Since the last `yes` |
 | Empty rate | 14 days |
+| Same-weekday empty, 1 week | Lag 6, boolean |
+| Same-weekday empty, 2 weeks | Lag 13, boolean |
 | Corrected demand mean | 7, 14, 28 days |
 | Hourly fill share | When hourly sales and empty hours exist |
 | Holiday | Current day |
@@ -140,6 +143,8 @@ Only data up to and including the decision day. Nothing after it. No store, prod
 **Hourly detail:** when hourly sales and empty hours exist, the fill share is `1 - empty hours / open hours`, where open hours are 06:00–22:00. The observed sales are scaled up to `observed / max(fill share, 0.2)`. On an empty day the estimate is the largest of the observed sales, the weekday level times trend, and that hourly estimate. The 0.2 floor is an assumption and is labelled; a near-empty day cannot explode beyond five times its observed sales.
 
 **Future days:** the normal weekday level plus trend. No future empty flag. No peeking.
+
+**Round 2 selection:** three transparent candidates are declared before scoring: (a) the current four-week same-weekday mean times trend; (b) a recency-weighted same-weekday mean (weights 0.4, 0.3, 0.2, 0.1 for weeks 1–4) times trend; (c) the median of the last four same-weekday non-empty values times trend. The fallbacks and hourly sharpening above apply to all three. The candidate with the lowest average miss on the 15 training cities' pre-holdout non-empty days is frozen before the test cities are scored.
 
 **Score:** average miss on days the shelf was not empty, against the lazy guess. Report with and without the correction. Never report the estimate on empty days as recovered truth.
 
@@ -205,7 +210,7 @@ No silent fallback. Every failed claim is written in `CLAIMS.md` and shown on Pr
 
 ---
 
-## 10a. Study results (2026-11-17)
+## 10a. Round 1 results (2026-11-17)
 
 First run under the pre-registration above. Seed 726821; test cities 7, 9, 16; holdout 2024-05-27 to 2024-06-25.
 
@@ -218,7 +223,28 @@ First run under the pre-registration above. Seed 726821; test cities 7, 9, 16; h
 
 Sensitivity views, reported and not the gate: top-50 learned 1.667% vs rule 1.616%; top-100 learned 3.248% vs rule 3.119%; 2+ empty buckets learned 0.692% vs rule 0.749%. The learned arm beats the rule slightly at top-50 and top-100 and loses at top-20 and on the 2+ target.
 
-Gate decision: `stop_and_reframe_with_owner`. Both real claims failed, so no app code is written. Evidence: `study/artifacts/gate.json` and `proof.json`.
+Gate decision: `stop_and_reframe_with_owner`. Both real claims failed, so no app code is written. Evidence: `study/artifacts/round1/gate.json` and `round1/proof.json`.
+
+### Round 2 (pre-registered 2026-11-17, before scoring)
+
+Round 1 failed both real claims. Round 2 rescores under the same bars:
+
+- Fresh test cities: three drawn with a new recorded seed; 7, 9, and 16 return to the pool.
+- Two added features: empty on the same weekday one week and two weeks before the target day.
+- Demand estimator chosen from the three candidates in section 8 on the 15 training cities, frozen before scoring.
+
+Round 1 evidence is filed under `study/artifacts/round1/`.
+
+Round 2 result (same bars; cities 1, 13, 17; seed 242921; demand candidate (a) won on training cities at 0.421171 vs 0.422321 and 0.425734):
+
+| Check | Measured | Bar | Outcome |
+|---|---|---|---|
+| Demand accuracy (Claim 1) | average miss 0.423084 vs lazy 0.427613 (+1.06%) | +10% relative | **FAIL** |
+| Warning catch (Claim 2) | 443 of 36,157 empty shelves at top 20 (1.2252%); rule 362 (1.0012%) | 1.1013% (+10% relative) | **PASS** |
+| Warning false alarms (C3) | 23.62%; rule 37.59% | 41.34% | PASS |
+| Materiality (Claim 3) | 29 of 29 scored days changed | 5% | PASS |
+
+Gate decision: `learned_warning_simple_demand`. The learned warning ships; the simple demand method stays; Claim 1 is marked failed. Evidence: `study/artifacts/gate.json` and `proof.json`.
 
 ---
 

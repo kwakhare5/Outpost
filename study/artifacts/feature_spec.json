@@ -17,6 +17,8 @@
     "empty_days_28": "count of empty_flag yes over lags 1-28",
     "empty_rate_14": "empty_days_14 divided by 14",
     "days_since_empty": "smallest lag in 1-28 whose empty_flag is yes; 28 when none",
+    "empty_same_weekday_1": "1 when empty_flag was yes on the same weekday one week before the target day, else 0",
+    "empty_same_weekday_2": "1 when empty_flag was yes on the same weekday two weeks before the target day, else 0",
     "corrected_mean_7": "mean corrected demand over lags 1-7",
     "corrected_mean_14": "mean corrected demand over lags 1-14",
     "corrected_mean_28": "mean corrected demand over lags 1-28",

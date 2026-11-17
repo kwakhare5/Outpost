@@ -1,0 +1,31 @@
+{
+  "seed": 726821,
+  "drawn_at": "2026-11-17T11:13:34+00:00",
+  "test_cities": [
+    7,
+    9,
+    16
+  ],
+  "train_cities": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    17
+  ],
+  "holdout_days": 30,
+  "holdout_start": "2024-05-27",
+  "last_day": "2024-06-25",
+  "days_total": 90,
+  "note": "Frozen before scoring. Do not redraw after seeing results."
+}

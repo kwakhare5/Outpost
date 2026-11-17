@@ -115,6 +115,13 @@ def test_corrected_means_never_below_observed_means():
     assert (features["corrected_mean_28"] >= features["sales_mean_28"]).all()
 
 
+def test_all_demand_variants_run_and_stay_honest():
+    for variant in ("a", "b", "c"):
+        features = build_features(make_frame(), demand_variant=variant).dropna()
+        assert (features["corrected_mean_7"] >= features["sales_mean_7"]).all()
+        assert features["demand_estimate"].notna().all()
+
+
 def test_features_finite_after_warmup():
     features = build_features(make_frame())
     warm = features[features["dt"] >= "2024-01-29"]
