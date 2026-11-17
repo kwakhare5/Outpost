@@ -8,7 +8,7 @@ The selected shelf shows the evidence chart, the reasons, and the three fixes.
 
 1. Open `/app`.
 2. Select the first warning.
-3. Check the chart: sold line, wanted line, empty-shelf marks.
+3. Check the chart: sold line, usual-sales line labelled a simple estimate, empty-shelf marks.
 4. Check the three reasons against the saved warning.
 5. Check the three fixes: move, reorder, do nothing.
 6. Check every assumption label.
@@ -16,7 +16,7 @@ The selected shelf shows the evidence chart, the reasons, and the three fixes.
 
 ## Expected
 
-- Full mode: two lines, `What we sold` and `What we think people wanted`.
+- Full mode: two lines, `What we sold` and `About how much it usually sells` (simple estimate; no corrected line).
 - Empty days are shaded and marked.
 - Exactly three reasons, top contribution first.
 - Exactly three fixes, one recommended.
@@ -28,7 +28,7 @@ The selected shelf shows the evidence chart, the reasons, and the three fixes.
 ## Fail signs
 
 - A chart with no empty marks in Full mode.
-- A wanted line without an `estimated` label.
+- A corrected wanted line drawn as demand, or an unlabelled estimate line.
 - A fix without an assumption.
 - A fourth fix.
 - A `learned` label in Rule mode.

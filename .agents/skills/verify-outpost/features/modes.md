@@ -8,7 +8,7 @@ The four data modes and their claim limits.
 
 | Fixture | Expected mode | Expected claims |
 |---|---|---|
-| Full: sales + empty labels, 28+ days | `full` | Learned warning, corrected demand, proof |
+| Full: sales + empty labels, 28+ days | `full` | Learned warning, simple usual-sales estimate, proof |
 | Rule: sales + stock + delivery, no labels | `rule` | Days-of-cover rule; demand accuracy; no catch-rate claim; no replay |
 | Watch: sales only | `watch` | Uncorrected demand only; no warning; no fixes |
 | No mode: under 28 days | `no_mode` | Simple average; no claims |

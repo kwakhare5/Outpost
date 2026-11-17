@@ -28,7 +28,7 @@ Use these exact values. No hardcoded colours outside this table.
 | `border` | `#E3DFD6` | 1px borders and separators |
 | `accent` | `#2F5BEA` | Primary action, sold line, focus ring |
 | `accent-ink` | `#FFFFFF` | Text on accent |
-| `warning` | `#B54708` | Warning band, wanted line, amber badge |
+| `warning` | `#B54708` | Warning band, usual-sales line, amber badge |
 | `danger` | `#B42318` | Losses, failed claims, destructive action |
 | `good` | `#067647` | Proven claims, safe state |
 | `unknown` | `#8A857C` | Unknown flag, not enough data |
@@ -101,11 +101,11 @@ Use `font-variant-numeric: tabular-nums` for all numbers.
 
 ### Evidence chart
 
-- Two lines: `What we sold` in `accent` solid; `What we think people wanted` in `warning` dashed.
+- Two lines: `What we sold` in `accent` solid; `About how much it usually sells` in `warning` dashed, labelled a simple estimate from the same day last week. The corrected estimate's accuracy claim failed, so no corrected line is drawn.
 - Empty-shelf days: `empty-band` vertical shading.
 - Axis: days on x, units on y. Label both.
 - Tooltip: exact numbers, date, and `observed` or `estimated`.
-- Rule mode: stock cover line and a delivery marker. No wanted line.
+- Rule mode: stock cover line and a delivery marker. No usual-sales line.
 - Watch mode: demand line only.
 - No 3D, no gradients, no decorative sparklines, no pie charts.
 - A text summary sits under the chart for screen readers.
@@ -246,7 +246,7 @@ No confetti. No victory banner. The losses are visible without scrolling past a 
 - One idea per line.
 - Numbers with units: `3 days`, `12 units`, `20 shelves`.
 - Say `chance this shelf runs out`, not `probability`.
-- Say `what people wanted vs what we sold`, not `latent demand`.
+- Say `what we sold vs about how much it usually sells`, not `latent demand`.
 - Say `compared with doing nothing`, not `counterfactual`.
 - Say `slowest 1 in 20 answers`, not `p95 latency`.
 - Say `our estimate`, not `true demand`.

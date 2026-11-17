@@ -6,13 +6,13 @@
 
 When a shelf is empty, the sales number is low. Not because people stopped wanting the product, but because they could not buy it. A model trained on sales alone learns to under-order exactly where shelves go empty.
 
-Outpost estimates what people wanted, not only what they sold. It shows both lines, warns the planner, and measures whether the warning and the fix were right.
+Outpost warns the planner before a shelf runs out, using a corrected demand estimate inside the warning. It shows what was sold, about how much each shelf usually sells, and measures whether the warning and the fix were right.
 
 ## What it does
 
 1. Bring data: sales and an empty-shelf flag are required; stock, price, travel, and delivery time are optional.
 2. See warnings: the shelves most likely to go empty, ranked, with the top three reasons.
-3. Open one shelf: what we sold vs what we think people wanted, and the three fixes.
+3. Open one shelf: what we sold vs about how much it usually sells, and the three fixes.
 4. Approve or reject: the decision is saved and the fix runs in a simulation.
 5. See proof: three real scores, one simulated replay, and the losses.
 
@@ -24,7 +24,7 @@ The data decides what the app can claim.
 
 | Mode | Data | What it can claim |
 |---|---|---|
-| Full | Sales + usable empty-shelf history | Corrected demand, learned warning, full proof |
+| Full | Sales + usable empty-shelf history | Learned warning, simple usual-sales estimate, full proof |
 | Rule | Sales + stock + delivery time | A days-of-cover rule, labelled; no catch-rate claim |
 | Demand watch | Sales only | Demand estimate and accuracy only |
 | No mode | Under 28 days | Simple average; no claims |

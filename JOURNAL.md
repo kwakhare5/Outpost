@@ -140,3 +140,12 @@ A chronological, append-only record of real product work and verification eviden
 - **Still broken / unproven:** The demand correction still loses to the lazy guess; the app ships the simple demand and the failed claim. No app code yet. Round 2 is not committed.
 - **Metric context:** All numbers from the runs above; the bars did not move between rounds.
 - **Engineering references:** `study/choose_demand.py`, `study/src/features.py`; `study/artifacts/gate.json`, `warning.json`, `demand.json`, `demand_choice.json`; `TASKS.md` Phase 1R.
+
+#### Work card 17: the app promised a line its claim could not back
+
+- **Problem / tension:** Every screen spec promised a "what people wanted" demand line; Claim 1 failed in both rounds, and the claim register forbids showing a failed claim as active.
+- **Change / decision:** Owner picked option A. The shelf detail shows "What we sold" and "About how much it usually sells" (a simple same-day-last-week estimate), labelled. The failed correction stays on the Method page as a tested loss. Updated `AGENTS.md`, `PRD.md`, `README.md`, `GLOSSARY.md`, `DESIGN.md`, `ARCHITECTURE.md`, `TASKS.md`, and the verification skill so no doc promises the wanted line.
+- **Proof:** Doc sweep: `grep -i "corrected demand"` leaves only the Method/study/register mentions; the mode tables now read "simple usual-sales estimate".
+- **Still broken / unproven:** Phase 2 has not started; no app code exists. The copy change is uncommitted.
+- **Metric context:** Copy only; no new metrics.
+- **Engineering references:** `AGENTS.md` §2, §6, §12; `PRD.md` §3, §5; `DESIGN.md` chart section; `CLAIMS.md` C1.

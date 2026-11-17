@@ -30,9 +30,7 @@ One project, one version. No v1/v2 split. Work on `main`. The old demo is delete
 
 An empty shelf hides demand. A model trained on sales alone learns to under-order exactly where shelves go empty.
 
-Outpost estimates what people wanted, not only what they sold. It shows both lines. The correction must change the warning and the fix, or it is reported as not material.
-
-The corrected number is an estimate. Never call it true demand.
+Outpost builds a corrected demand estimate and uses it inside the warning: the correction changed the top-20 warning set on every scored day. It did not beat the simple same-weekday guess on accuracy, so the app shows a simple "about how much it usually sells" line, and the failed claim is stated on the Method page. Never call any estimate true demand.
 
 ## 3. Working contract
 
@@ -97,7 +95,7 @@ The mode is detected from the data. The visitor cannot choose it. Every screen s
 
 | Mode | Detected when | Allowed claims |
 |---|---|---|
-| `full` | Dataset range ≥ 28 days; empty flag has ≥ 7 known days, one `yes`, and one `no` | Corrected demand, learned warning, assistant, three real scores, replay only with stock, travel, price |
+| `full` | Dataset range ≥ 28 days; empty flag has ≥ 7 known days, one `yes`, and one `no` | Learned warning, simple usual-sales estimate, assistant, three real scores (demand score marked failed), replay only with stock, travel, price |
 | `rule` | Not `full`; stock and delivery time exist | Days-of-cover warning labelled `rule`; fixes with assumptions; demand accuracy only; no catch-rate proof; no replay |
 | `watch` | Sales only | Uncorrected demand estimate and accuracy only; no warning; no fixes; no proof |
 | `no_mode` | History < 28 days | Simple average and `not enough history`; no claims |
@@ -184,12 +182,12 @@ Six read-only tools: shelf history, demand estimate, warning reasons, safe surpl
 
 - `/` landing: promise, proof strip, how it works, real vs assumed, the miss, bring data. One call to action: `Open the demo`.
 - `/app` control room: Today and Proof, plus the mode banner.
-- Today: shelf list, selected shelf, sold-vs-wanted chart, empty marks, three reasons, three fixes, ask box, approve/reject. Rule mode shows cover and delivery. Watch mode shows demand only.
+- Today: shelf list, selected shelf, sold-vs-usual chart, empty marks, three reasons, three fixes, ask box, approve/reject. Rule mode shows cover and delivery. Watch mode shows demand only.
 - Proof: three real scores, simulated replay when allowed, model card, losses, assistant check, data credit.
 - Bring data: upload, mapping, validation report, mode, active claims.
 - `/method`: contract, baselines, 15/3 split, study gate, assistant check, limits, data credit.
 
-Copy rules: everyday words, no jargon, no acronyms. Say "chance this shelf runs out," not "probability." Say "what people wanted vs what we sold," not "latent demand." Say "compared with doing nothing," not "counterfactual." Say "slowest 1 in 20 answers," not "p95 latency."
+Copy rules: everyday words, no jargon, no acronyms. Say "chance this shelf runs out," not "probability." Say "what we sold vs about how much it usually sells," not "latent demand." Say "compared with doing nothing," not "counterfactual." Say "slowest 1 in 20 answers," not "p95 latency."
 
 ## 13. Build order
 

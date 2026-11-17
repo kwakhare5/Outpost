@@ -140,7 +140,7 @@ This is the only implementation plan. Work top to bottom, one task at a time.
   - List on the left, selected shelf on the right; mode banner and claim labels.
   - _Verification:_ browser check on `/app`; selection loads the shelf; zero console errors.
 - [ ] **3.3 Build the shelf detail.**
-  - Sold-vs-wanted chart, empty-shelf marks, reasons, three fixes, assumptions.
+  - Sold-vs-usual chart, empty-shelf marks, reasons, three fixes, assumptions.
   - _Verification:_ browser check; chart uses saved rows; every fix shows its assumption; no invented number.
 - [ ] **3.4 Build the decision transaction.**
   - Approve or reject; lock the sender; recompute surplus; insert once; subtract once; save the simulated outcome.

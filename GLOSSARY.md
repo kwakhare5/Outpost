@@ -15,7 +15,7 @@ Read this at the start of every session. Use these words in code, tests, and UI.
 | **Empty-shelf flag** | The daily record: `yes`, `no`, or `unknown`. | Null, missing, zero |
 | **Hidden demand** | What people wanted but could not buy because the shelf was empty. | Lost sales, phantom demand |
 | **Corrected demand** | An estimate of observed sales plus hidden demand. | True demand, real demand |
-| **Sold vs wanted** | The two lines on the evidence chart: what we sold, and what we think people wanted. | Actual vs forecast |
+| **Sold vs usual** | The two lines on the evidence chart: what we sold, and about how much the shelf usually sells on the same day of the week. | Actual vs forecast |
 | **Warning** | A daily alert that one shelf is likely to have an empty hour in the next 24 hours. | Prediction, alert, risk score |
 | **Alert budget** | The top 20 warnings per day that are scored and shown. | Threshold, quota |
 | **Warning band** | `high`, `medium`, or `low`, based on rank, not a claimed probability. | Risk level, confidence |
@@ -152,7 +152,7 @@ Read this at the start of every session. Use these words in code, tests, and UI.
 ## Key Workflows
 
 1. **Bring data:** drop files → read headers → map columns → declare unit, day, currency → validate → detect mode → load all or nothing → show the report and active claims.
-2. **Morning loop:** open Today → see the ranked warnings → open one shelf → read the sold-vs-wanted chart, reasons, and fixes → ask a question → approve or reject.
+2. **Morning loop:** open Today → see the ranked warnings → open one shelf → read the sold-vs-usual chart, reasons, and fixes → ask a question → approve or reject.
 3. **Approve:** lock the sender → recompute safe surplus → verify the fix → save one decision → subtract once → save the simulated outcome.
 4. **Proof:** open Proof → read the three real scores → read the simulated replay → read the losses → check the model card and data credit.
 5. **Assistant:** ask → the assistant calls read-only tools → every number is checked → answer with sources, or refuse.
@@ -189,7 +189,7 @@ Read this at the start of every session. Use these words in code, tests, and UI.
 | JSON artifacts | snake_case | `model.json`, `feature_spec.json`, `proof.json` |
 | UI: shelf | "shelf" | "This shelf may run out" |
 | UI: product | "product" | "Milk" |
-| UI: demand | "what people wanted" | "What we sold vs what people wanted" |
+| UI: demand | "about how much it usually sells" | "What we sold vs about how much it usually sells" |
 | UI: correction | "our estimate" | "Our estimate, not true demand" |
 | UI: warning | "chance this shelf runs out" | "High chance" |
 | Code: stockout | `stockout` is allowed internally | `empty_flag`, `stockout_hour` |

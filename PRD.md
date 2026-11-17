@@ -24,7 +24,7 @@ It answers one question: which shelf is at risk, what can we do, and did it work
 
 When a shelf is empty, the sales number is low. Not because people stopped wanting the product, but because they could not buy it. A model trained on those numbers learns to under-order exactly where shelves go empty. That makes more empty shelves.
 
-Outpost corrects for this. It estimates what people wanted, not only what was sold, and shows both lines: what we sold, and what we think people wanted. The correction changes the warning and the fix. It is the reason this project exists.
+Outpost builds a corrected estimate of what people wanted, not only what was sold, and uses it inside the warning: it changed the top-20 warning set on every scored day. The estimate did not beat the simple same-weekday guess on accuracy, so the app shows a simple "about how much it usually sells" line and states the failed claim on the Method page.
 
 **Honest ceiling:** the corrected number is an estimate. The app never claims it recovered the true demand. It measures what can be measured: demand accuracy on days the shelf was not empty, warning quality, and whether the correction changes the ranking and the decision.
 
@@ -70,7 +70,7 @@ The data decides the mode. The visitor does not choose one to make the screen lo
 
 | Mode | Data you bring | What Outpost can claim |
 |---|---|---|
-| **Full** | Sales + usable empty-shelf history | Corrected demand, the learned warning, the assistant, the three real scores, and the replay when stock, travel time, and price exist |
+| **Full** | Sales + usable empty-shelf history | The learned warning, a simple usual-sales estimate, the assistant, the three real scores (demand marked failed), and the replay when stock, travel time, and price exist |
 | **Rule** | Sales + current stock + delivery time, no usable empty-shelf history | A days-of-cover warning, labelled as a rule; priced fixes with assumptions; demand accuracy only; no catch-rate proof; no replay |
 | **Demand watch** | Sales only | An uncorrected demand estimate and its accuracy only; no empty-shelf warning; no fixes; no proof |
 | **No mode** | Under 28 days of history | A simple average and a `not enough history` label; no claims |
@@ -130,7 +130,7 @@ Nothing moves without a click. Repeating an approval does nothing. A move never 
 
 **Control room:** two tabs, plus the mode banner.
 
-- **Today:** the list of shelves to watch on the left; the selected shelf on the right. The right side shows the evidence chart with empty-shelf days marked and two lines, "What we sold" and "What we think people wanted." Then why this shelf, the three fixes, the ask box, and approve or reject. In Rule mode the chart shows stock cover and the delivery day. In Demand watch it shows demand only.
+- **Today:** the list of shelves to watch on the left; the selected shelf on the right. The right side shows the evidence chart with empty-shelf days marked and two lines: "What we sold" and "About how much it usually sells" (a simple estimate from the same day last week; the corrected estimate's accuracy claim failed, so it is not drawn). Then why this shelf, the three fixes, the ask box, and approve or reject. In Rule mode the chart shows stock cover and the delivery day. In Demand watch it shows demand only.
 - **Proof:** the three real scores, the one simulated replay when Full mode has the inputs, where we were wrong, and what we could not use.
 
 **Bring data:** the upload page in Section 5.
@@ -246,7 +246,7 @@ The dataset is downloaded once. The app does not fetch data from the internet at
 **The three-minute story**
 
 1. Proof first: the dataset, versions, date, active claims, and the mode.
-2. One warning: the evidence, what we sold vs what we think people wanted, and the three reasons.
+2. One warning: the evidence, what we sold vs about how much it usually sells, and the three reasons.
 3. The three fixes, two questions (why this fix, what if it arrives late), and one refusal.
 4. Approve. The record saves and the simulation runs.
 5. The same system on a different company's data, with the detected mode and only its claims shown.
@@ -259,7 +259,7 @@ The dataset is downloaded once. The app does not fetch data from the internet at
 - "Outpost reads real grocery sales, warns you about the shelves most likely to go empty, and shows the safest fix. Then it proves how often it was right, and where it was wrong."
 - Buttons: "Open the demo" and "See how it works."
 
-**Forbidden in user-facing copy:** jargon, acronyms, and tech words. Use "chance this shelf runs out," "what people wanted vs what we sold," "compared with doing nothing," and "slowest 1 in 20 answers."
+**Forbidden in user-facing copy:** jargon, acronyms, and tech words. Use "chance this shelf runs out," "what we sold vs about how much it usually sells," "compared with doing nothing," and "slowest 1 in 20 answers."
 
 ---
 

@@ -51,7 +51,7 @@ The data mode is detected from the data. The delivery context is the demo or an 
 
 | Mode | Detected when | Claims allowed |
 |---|---|---|
-| `full` | Dataset range ≥ 28 days; empty flag has ≥ 7 known days, one `yes`, and one `no` | Corrected demand, learned warning, assistant, three real scores, replay when stock, travel time, and price exist |
+| `full` | Dataset range ≥ 28 days; empty flag has ≥ 7 known days, one `yes`, and one `no` | Learned warning, simple usual-sales estimate, assistant, three real scores, replay when stock, travel time, and price exist |
 | `rule` | Not `full`; stock and delivery time exist | Days-of-cover warning labelled `rule`; fixes with assumptions; demand accuracy only; no catch-rate proof; no replay |
 | `watch` | Sales only | Uncorrected demand estimate and accuracy only; no warning; no fixes; no proof |
 | `no_mode` | History < 28 days | Simple average; `not enough history`; no claims |
@@ -278,7 +278,7 @@ If two approvals compete for the same stock, the database decides, not the UI.
 
 **Six read-only tools**
 
-1. Shelf history: sales, empty days, corrected demand.
+1. Shelf history: sales, empty days, the simple usual-sales estimate.
 2. Demand estimate: the estimate, the lazy guess, the correction.
 3. Warning: score, band, reasons, rank.
 4. Safe surplus: another store's surplus and its committed moves.
