@@ -116,7 +116,7 @@ This is the only implementation plan. Work top to bottom, one task at a time.
 - [x] **2.2 Connect Postgres.**
   - Local Docker database, migrations, env example.
   - _Verification:_ `npm run db:ping` prints `ok`; `npm run db:migrate` exits 0 on a fresh database.
-- [ ] **2.3 Create the 12 tables and indexes.**
+- [x] **2.3 Create the 12 tables and indexes.**
   - Match `ARCHITECTURE.md` section 5.
   - _Verification:_ migration test creates the 12 tables plus the `schema_migrations` ledger; named indexes exist; unique constraints reject duplicates.
 - [ ] **2.4 Seed the frozen demo.**

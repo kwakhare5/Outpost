@@ -167,3 +167,12 @@ A chronological, append-only record of real product work and verification eviden
 - **Still broken / unproven:** The repo `.env` still holds the old `DATABASE_URL` (pointing at `outpost_dev`); plain `npm run db:migrate` would read it. Needs owner approval to update `.env`. No tables yet (2.3); the app does not connect yet (2.4+).
 - **Metric context:** Database plumbing only; no product metrics.
 - **Engineering references:** `scripts/db-ping.mjs`, `scripts/db-migrate.mjs`, `.env.example`, `migrations/`; `TASKS.md` 2.2, 2.3.
+
+#### Work card 20: the database had no tables
+
+- **Problem / tension:** Task 2.3 needs the twelve-table schema from `ARCHITECTURE.md` §5 with the named indexes, and the migration test had to run against real Postgres without touching the owner's stale `outpost_dev`/`outpost_test` data.
+- **Change / decision:** Wrote `migrations/0001_schema.sql` (12 tables, cascade deletes from `datasets`, CHECK enums for mode/empty flag/fix kind/action/proof kind, the `coalesce(visitor_id,'demo')` unique decision index, `model_versions` text key) and `tests/schema.test.ts`, which builds a throwaway `outpost_test_scratch` database, runs `db:migrate`, asserts, and drops it. Review fixes: exercised every cascade path (10 tables), duplicate-warning rejection, both visitor branches, index definitions not just names, and a `model_versions` insert.
+- **Proof:** `npm test` → 9 passed (8 schema + 1 smoke); `npm run build` exit 0; `npm run db:migrate` on the real `outpost` database → `applied 0001_schema.sql`; dev database now has 13 public tables (12 + ledger).
+- **Still broken / unproven:** `decisions.fix_id` can cite a fix from another warning — the schema does not prevent it; the approval transaction (3.4) must enforce it. A real visitor id must never be the literal `'demo'` or it collides with the demo's unique-key row. No app queries yet (2.4+).
+- **Metric context:** Schema only; no product metrics.
+- **Engineering references:** `migrations/0001_schema.sql`, `tests/schema.test.ts`; `ARCHITECTURE.md` §5; `TASKS.md` 2.3.
