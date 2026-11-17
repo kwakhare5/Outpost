@@ -113,12 +113,12 @@ This is the only implementation plan. Work top to bottom, one task at a time.
 - [x] **2.1 Scaffold the app.**
   - Next.js, TypeScript, Tailwind, Postgres client, test runner.
   - _Verification:_ `npm run build` exits 0; `npm test` exits 0 with at least one passing test.
-- [ ] **2.2 Connect Postgres.**
+- [x] **2.2 Connect Postgres.**
   - Local Docker database, migrations, env example.
   - _Verification:_ `npm run db:ping` prints `ok`; `npm run db:migrate` exits 0 on a fresh database.
 - [ ] **2.3 Create the 12 tables and indexes.**
   - Match `ARCHITECTURE.md` section 5.
-  - _Verification:_ migration test creates 12 tables; named indexes exist; unique constraints reject duplicates.
+  - _Verification:_ migration test creates the 12 tables plus the `schema_migrations` ledger; named indexes exist; unique constraints reject duplicates.
 - [ ] **2.4 Seed the frozen demo.**
   - One unseen test city, the saved reference day, warnings, fixes, proof.
   - _Verification:_ `npm run seed:demo` exits 0; row counts match `proof.json`; reset returns to the saved start.

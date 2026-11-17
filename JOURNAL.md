@@ -158,3 +158,12 @@ A chronological, append-only record of real product work and verification eviden
 - **Still broken / unproven:** No Postgres, no tables, no browser check of `/` yet (task 2.2 next). Scaffold commit not yet made at card time; no deploy.
 - **Metric context:** Scaffold only; no product metrics.
 - **Engineering references:** `package.json`, `app/`, `vitest.config.mts`, `tests/smoke.test.ts`; `TASKS.md` 2.1.
+
+#### Work card 19: the app had no database
+
+- **Problem / tension:** The app needs one Postgres, and the only one running (`outpost-db`, postgres:17) still held the old project's `outpost_dev` data, so connecting to it would mix stale tables into the new build.
+- **Change / decision:** Reused the running container, created a fresh empty `outpost` database, left `outpost_dev`/`outpost_test` untouched. Added `scripts/db-ping.mjs`, `scripts/db-migrate.mjs` (zero-padded names enforced, one transaction per file, ledger `schema_migrations`), `migrations/`, `.env.example` with a `POSTGRES_PASSWORD` placeholder, and the two npm scripts. Review fixes: `--env-file-if-exists=.env`, rollback-failure reporting, name guard, no commands that print the dev password.
+- **Proof:** `npm run db:ping` → `ok`. Runner tested live on a throwaway `outpost_probe` database: applied `0000_probe.sql`, table created, ledger row written; second run → `nothing to apply`; probe then deleted. On fresh `outpost`: `npm run db:migrate` exit 0, `nothing to apply` (no SQL files yet). Bad name `1_bad.sql` → `migration names must look like 0001_name.sql: 1_bad.sql`, exit 1. Independent review: 4 findings, all fixed, rerun green.
+- **Still broken / unproven:** The repo `.env` still holds the old `DATABASE_URL` (pointing at `outpost_dev`); plain `npm run db:migrate` would read it. Needs owner approval to update `.env`. No tables yet (2.3); the app does not connect yet (2.4+).
+- **Metric context:** Database plumbing only; no product metrics.
+- **Engineering references:** `scripts/db-ping.mjs`, `scripts/db-migrate.mjs`, `.env.example`, `migrations/`; `TASKS.md` 2.2, 2.3.

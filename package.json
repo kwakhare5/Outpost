@@ -8,7 +8,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:ping": "node --env-file-if-exists=.env scripts/db-ping.mjs",
+    "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.mjs"
   },
   "dependencies": {
     "next": "^16.4.6",
